@@ -2,15 +2,16 @@ cmake_minimum_required(VERSION 3.20)
 project(recvx_pc C CXX)
 
 # ----------------------------------------------------------------------------
-# Toolchain sanity
+# Toolchain
 # ----------------------------------------------------------------------------
-# We target MSVC x86 (32-bit) so that the EE's 32-bit pointer assumptions
-# baked into the decomp source remain valid without a global audit.
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
+# We target MSVC x64. PS2 EE uses 32-bit pointers so file-backed structs
+# with pointer fields need reformatters post-load, and (int)/(u32) casts
+# on pointers must be audited. These are handled case-by-case rather than
+# globally by pointer width.
+if(NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
     message(WARNING
-        "RECVX PC port expects a 32-bit build (sizeof(void*)==4). "
-        "Configure with: cmake -A Win32 (Visual Studio) "
-        "or use a 32-bit toolchain. Current sizeof(void*)=${CMAKE_SIZEOF_VOID_P}.")
+        "RECVX PC port expects a 64-bit build. "
+        "Configure with: cmake -A x64  (or use an x64 toolchain).")
 endif()
 
 set(CMAKE_C_STANDARD 11)

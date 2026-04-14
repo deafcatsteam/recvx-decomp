@@ -1,0 +1,9 @@
+{
+  "name": "recvx-pc-port",
+  "version-string": "0.0.1",
+  "description": "Resident Evil: Code Veronica X PC port",
+  "dependencies": [
+    "sdl2",
+    "opengl"
+  ]
+}
