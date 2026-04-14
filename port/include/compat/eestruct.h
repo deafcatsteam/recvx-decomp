@@ -9,5 +9,9 @@ typedef struct { unsigned long long _raw; } sceGsTex1;
 typedef struct { unsigned long long _raw; } sceGsTex2;
 typedef struct { unsigned long long _raw; } sceGsTexa;
 typedef struct { unsigned long long _raw; } sceGsTest;
+typedef struct { int _pad; }               sceGsDBuffDc;
+typedef struct { int _pad; }               sceGsZBuffDc;
+typedef struct { int _pad; }               sceGsDrawEnv1;
+typedef struct { int _pad; }               sceGsDrawEnv2;
 
 #endif
