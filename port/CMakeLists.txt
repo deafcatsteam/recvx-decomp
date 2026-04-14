@@ -145,24 +145,37 @@ set_target_properties(recvx_pc PROPERTIES
 #   3. Start with src/ps2/veronica/prog/main.c only, expand file-by-file
 #      as each missing symbol is shimmed or brought in.
 # ----------------------------------------------------------------------------
-option(RECVX_BUILD_GAME "Compile decomp game source (phase 2+)" OFF)
+option(RECVX_BUILD_GAME "Compile decomp game source (phase 2+)" ON)
 
 if(RECVX_BUILD_GAME)
-    file(GLOB RECVX_GAME_SOURCES
-        "${RECVX_SRC}/ps2/veronica/prog/main.c"
+    set(RECVX_GAME_SOURCES
+        ${RECVX_SRC}/ps2/veronica/prog/main.c
         # Expand this list incrementally as each file compiles.
     )
 
     add_library(recvx_game STATIC ${RECVX_GAME_SOURCES})
+    # compat/ MUST come before the real PS2 SDK / MWCC include dirs so our
+    # MSVC-safe shadows for PREFIX_PS2*.h / eetypes.h / libcdvd.h / etc.
+    # win the include-path race. KATANA ninja headers stay real.
     target_include_directories(recvx_game
         PUBLIC
             ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${CMAKE_CURRENT_SOURCE_DIR}/include/compat
             ${RECVX_GAME_INC}
             ${RECVX_KATANA_INC}
-            ${RECVX_PS2SDK_INC}
-            ${RECVX_PS2COMMON}
             ${RECVX_CRI_INC}
     )
+    target_compile_definitions(recvx_game PRIVATE
+        # Ninja headers key off these; set them so we don't cascade into
+        # MWCC-specific paths inside ninja.h.
+        _NJ_PS2_ _SCE_EE_
+    )
+    if(MSVC)
+        # MSVC doesn't understand GCC's `__attribute__((aligned(N)))` syntax
+        # on globals, and the decomp has a few. Give it a benign alias.
+        target_compile_options(recvx_game PRIVATE /wd4005 /wd4244 /wd4267
+            /wd4305 /wd4133 /wd4101 /wd4018)
+    endif()
     # Force-include the prelude that masks KATANA's CRT shadow headers.
     if(MSVC)
         target_compile_options(recvx_game PRIVATE
