@@ -69,14 +69,14 @@ set(PORT_STUB_SOURCES
 )
 
 add_library(recvx_port_stubs STATIC ${PORT_STUB_SOURCES})
+# Port stubs intentionally do NOT pull in KATANA / PS2 SDK / CRI headers.
+# Those headers ship their own stddef.h / size_t typedefs that clash with
+# MSVC's CRT, so we keep them off the stub include path. Game source
+# (added in phase 1) will get them via the game-source target instead,
+# isolated behind a wrapper header that masks the offending typedefs.
 target_include_directories(recvx_port_stubs
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}/include
-        ${RECVX_GAME_INC}
-        ${RECVX_KATANA_INC}
-        ${RECVX_PS2SDK_INC}
-        ${RECVX_PS2COMMON}
-        ${RECVX_CRI_INC}
 )
 
 # ----------------------------------------------------------------------------
