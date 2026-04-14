@@ -63,13 +63,15 @@ int main(int argc, char** argv) {
     }
     RX_LOG("boot", "backend: %s", backend->name);
 
-    /* Phase 0: empty frame loop. Phase 1 replaces this with njUserMain(). */
-    int frames = 0;
+    /* Phase 1: real frame loop. ESC or window close exits.
+     *
+     * Phase 2 replaces the body with njUserInit() once / njUserMain() per
+     * frame / njUserExit() at shutdown, against the compat wrapper layer
+     * that masks KATANA's stddef.h and friends. */
     while (backend->pump_events()) {
         backend->begin_frame();
-        /* TODO(phase1): njUserMain(); */
+        /* TODO(phase2): njUserMain(); */
         backend->end_frame();
-        if (++frames >= 600) break; /* safety stop until input wired */
     }
 
     backend->shutdown();

@@ -134,4 +134,49 @@ set_target_properties(recvx_pc PROPERTIES
     VS_DEBUGGER_WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 )
 
-message(STATUS "RECVX PC port skeleton configured (phase 0).")
+# ----------------------------------------------------------------------------
+# Game source library (phase 2 — currently opt-in via -DRECVX_BUILD_GAME=ON)
+#
+# Wiring strategy once enabled:
+#   1. Force-include recvx_game_prelude.h on every game .c (MSVC /FI,
+#      GCC/Clang -include) so KATANA's stdlib headers are masked.
+#   2. Add KATANA/PS2-SDK/CRI header dirs to THIS target only, keeping
+#      them off port stubs (which already compiled clean without them).
+#   3. Start with src/ps2/veronica/prog/main.c only, expand file-by-file
+#      as each missing symbol is shimmed or brought in.
+# ----------------------------------------------------------------------------
+option(RECVX_BUILD_GAME "Compile decomp game source (phase 2+)" OFF)
+
+if(RECVX_BUILD_GAME)
+    file(GLOB RECVX_GAME_SOURCES
+        "${RECVX_SRC}/ps2/veronica/prog/main.c"
+        # Expand this list incrementally as each file compiles.
+    )
+
+    add_library(recvx_game STATIC ${RECVX_GAME_SOURCES})
+    target_include_directories(recvx_game
+        PUBLIC
+            ${CMAKE_CURRENT_SOURCE_DIR}/include
+            ${RECVX_GAME_INC}
+            ${RECVX_KATANA_INC}
+            ${RECVX_PS2SDK_INC}
+            ${RECVX_PS2COMMON}
+            ${RECVX_CRI_INC}
+    )
+    # Force-include the prelude that masks KATANA's CRT shadow headers.
+    if(MSVC)
+        target_compile_options(recvx_game PRIVATE
+            /FI${CMAKE_CURRENT_SOURCE_DIR}/include/recvx_game_prelude.h)
+    else()
+        target_compile_options(recvx_game PRIVATE
+            -include ${CMAKE_CURRENT_SOURCE_DIR}/include/recvx_game_prelude.h)
+    endif()
+    target_link_libraries(recvx_game PUBLIC recvx_port_stubs)
+
+    target_link_libraries(recvx_pc PRIVATE recvx_game)
+    message(STATUS "RECVX PC port: game source ENABLED (phase 2+)")
+else()
+    message(STATUS "RECVX PC port: game source DISABLED (pass -DRECVX_BUILD_GAME=ON to enable)")
+endif()
+
+message(STATUS "RECVX PC port configured.")

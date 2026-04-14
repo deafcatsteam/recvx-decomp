@@ -55,7 +55,9 @@ static void gl_shutdown(void) {
 }
 
 static void gl_begin(void) {
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    /* Dark blue while the Ninja shim isn't drawing anything yet — gives
+     * a visible sanity signal that the GL context is live. */
+    glClearColor(0.05f, 0.08f, 0.15f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
