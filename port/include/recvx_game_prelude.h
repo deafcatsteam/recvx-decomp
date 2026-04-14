@@ -61,7 +61,10 @@ typedef unsigned int Uint32;
 #if defined(_MSC_VER)
 # define __attribute__(x) /* swallow GCC attribute syntax */
 # define __restrict__ __restrict
-# define asm __asm
+  /* MSVC x64 doesn't support inline asm at all. The decomp has a few
+   * `asm("nop")` placeholders that exist only for instruction-scheduling
+   * parity with MWCC output — safe to drop on PC. */
+# define asm(x) ((void)0)
 #endif
 
 /* --- 5. Port build flag --------------------------------------------- */
