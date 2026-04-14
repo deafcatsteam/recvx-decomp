@@ -150,6 +150,7 @@ option(RECVX_BUILD_GAME "Compile decomp game source (phase 2+)" ON)
 if(RECVX_BUILD_GAME)
     set(RECVX_GAME_SOURCES
         ${RECVX_SRC}/ps2/veronica/prog/main.c
+        ${RECVX_SRC}/ps2/veronica/prog/system.c
         # Expand this list incrementally as each file compiles.
     )
 
