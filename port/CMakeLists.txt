@@ -157,8 +157,10 @@ if(RECVX_BUILD_GAME)
     # compat/ MUST come before the real PS2 SDK / MWCC include dirs so our
     # MSVC-safe shadows for PREFIX_PS2*.h / eetypes.h / libcdvd.h / etc.
     # win the include-path race. KATANA ninja headers stay real.
+    # PRIVATE: these header dirs (KATANA especially) must NOT leak to
+    # consumers like recvx_pc — KATANA's stddef.h clashes with MSVC CRT.
     target_include_directories(recvx_game
-        PUBLIC
+        PRIVATE
             ${CMAKE_CURRENT_SOURCE_DIR}/include
             ${CMAKE_CURRENT_SOURCE_DIR}/include/compat
             ${RECVX_GAME_INC}
