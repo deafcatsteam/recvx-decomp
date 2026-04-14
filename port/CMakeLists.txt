@@ -169,7 +169,20 @@ if(RECVX_BUILD_GAME)
         # Ninja headers key off these; set them so we don't cascade into
         # MWCC-specific paths inside ninja.h.
         _NJ_PS2_ _SCE_EE_
+        # Pre-set KATANA's CRT shadow-header guards so any <stddef.h> /
+        # <stdio.h> / etc. that resolves to KATANA/Include/ becomes a no-op
+        # and we fall through to the real MSVC CRT types.
+        _STDDEF_SHC _STDIO_SHC _STDLIB_SHC _STRING_SHC
+        _MATH_SHC _FLOAT_SHC _LIMITS_SHC
     )
+    # Put the MSVC CRT include dir AHEAD of our own so <stddef.h> / <stdio.h>
+    # resolve to MSVC's real headers before the KATANA dir gets a chance to
+    # shadow them. CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES is auto-populated
+    # from the compiler at configure time.
+    if(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES)
+        target_include_directories(recvx_game BEFORE PRIVATE
+            ${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES})
+    endif()
     if(MSVC)
         # MSVC doesn't understand GCC's `__attribute__((aligned(N)))` syntax
         # on globals, and the decomp has a few. Give it a benign alias.

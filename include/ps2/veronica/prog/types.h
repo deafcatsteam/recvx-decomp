@@ -27,9 +27,12 @@
 #include <sifrpc.h>
 #include <sdrcmd.h>
 #include <sdmacro.h>
-#include <../../../recvx-decomp-cri/cri/mwlib/include/cri_adxf.h>
+/* PC port (pc-port branch): simplified include so port/include/compat/
+ * shadows can intercept these headers — the original relative-path form
+ * bypassed /I-based overrides. */
+#include <cri_adxf.h>
 #include "../../../cri/mwlib/ee/lib/libadxe/override_adxt.h"
-#include <../../../recvx-decomp-cri/cri/mwlib/include/cri_adxt.h>
+#include <cri_adxt.h>
 
 typedef struct O_WORK
 {
