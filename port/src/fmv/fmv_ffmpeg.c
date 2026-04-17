@@ -19,7 +19,10 @@
 #include <libavformat/avformat.h>
 #include <libavcodec/avcodec.h>
 #include <libswscale/swscale.h>
+#include <libswresample/swresample.h>
 #include <libavutil/imgutils.h>
+#include <libavutil/channel_layout.h>
+#include <libavutil/opt.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -38,6 +41,18 @@ struct recvx_fmv {
     AVCodecContext*    vdec;
     int                video_idx;
     struct SwsContext* sws;
+
+    AVCodecContext*    adec;
+    int                audio_idx;
+    struct SwrContext* swr;
+    int                audio_rate;        /* output PCM rate (from source) */
+    uint8_t*           pcm_buf;           /* interleaved S16 stereo scratch */
+    int                pcm_cap;           /* bytes */
+
+    AVFrame*           adec_frame;
+
+    recvx_fmv_audio_sink audio_sink;
+    void*                audio_sink_op;
 
     AVPacket*          pkt;
     AVFrame*           dec_frame;
@@ -138,10 +153,14 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
         return NULL;
     }
 
+    f->audio_idx = -1;
     for (unsigned i = 0; i < f->fmt->nb_streams; ++i) {
         AVCodecParameters* par = f->fmt->streams[i]->codecpar;
         if (par->codec_type == AVMEDIA_TYPE_VIDEO && f->video_idx < 0) {
             f->video_idx = (int)i;
+        }
+        if (par->codec_type == AVMEDIA_TYPE_AUDIO && f->audio_idx < 0) {
+            f->audio_idx = (int)i;
         }
         RX_LOG("fmv", "  stream %u: type=%d codec=%s",
                i, par->codec_type, avcodec_get_name(par->codec_id));
@@ -173,13 +192,55 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
     av_image_alloc(f->rgba_frame->data, f->rgba_frame->linesize,
                    f->width, f->height, AV_PIX_FMT_RGBA, 16);
 
+    /* Audio — optional. Skip silently if open/init fails so the video
+     * still plays muted rather than breaking the whole FMV path. */
+    if (f->audio_idx >= 0) {
+        AVCodecParameters* apar = f->fmt->streams[f->audio_idx]->codecpar;
+        const AVCodec* adec = avcodec_find_decoder(apar->codec_id);
+        if (adec) {
+            f->adec = avcodec_alloc_context3(adec);
+            avcodec_parameters_to_context(f->adec, apar);
+            if (avcodec_open2(f->adec, adec, NULL) == 0) {
+                f->audio_rate = f->adec->sample_rate;
+                AVChannelLayout out_layout = AV_CHANNEL_LAYOUT_STEREO;
+                AVChannelLayout in_layout  = f->adec->ch_layout;
+                swr_alloc_set_opts2(&f->swr,
+                    &out_layout, AV_SAMPLE_FMT_S16, f->audio_rate,
+                    &in_layout,  f->adec->sample_fmt, f->adec->sample_rate,
+                    0, NULL);
+                if (swr_init(f->swr) < 0) {
+                    RX_LOG("fmv", "swr_init failed");
+                    swr_free(&f->swr);
+                    avcodec_free_context(&f->adec);
+                } else {
+                    f->adec_frame = av_frame_alloc();
+                    RX_LOG("fmv", "audio: %d Hz %d ch codec=%s",
+                           f->audio_rate, f->adec->ch_layout.nb_channels,
+                           avcodec_get_name(apar->codec_id));
+                }
+            } else {
+                avcodec_free_context(&f->adec);
+            }
+        }
+    }
+
     RX_LOG("fmv", "opened %s: %dx%d codec=%s",
            iso_path, f->width, f->height, avcodec_get_name(vpar->codec_id));
     return f;
 }
 
+void recvx_fmv_set_audio_sink(recvx_fmv_t* f, recvx_fmv_audio_sink sink, void* opaque) {
+    if (!f) return;
+    f->audio_sink    = sink;
+    f->audio_sink_op = opaque;
+}
+
 void recvx_fmv_close(recvx_fmv_t* f) {
     if (!f) return;
+    if (f->pcm_buf)   { free(f->pcm_buf); f->pcm_buf = NULL; }
+    if (f->adec_frame) av_frame_free(&f->adec_frame);
+    if (f->swr)        swr_free(&f->swr);
+    if (f->adec)       avcodec_free_context(&f->adec);
     if (f->rgba_frame) {
         if (f->rgba_frame->data[0]) av_freep(&f->rgba_frame->data[0]);
         av_frame_free(&f->rgba_frame);
@@ -203,11 +264,43 @@ int    recvx_fmv_width (const recvx_fmv_t* f) { return f ? f->width  : 0; }
 int    recvx_fmv_height(const recvx_fmv_t* f) { return f ? f->height : 0; }
 double recvx_fmv_pts_s (const recvx_fmv_t* f) { return f ? f->cur_pts_s : 0.0; }
 
+static void drain_audio(recvx_fmv_t* f) {
+    if (!f->adec) return;
+    while (1) {
+        int got = avcodec_receive_frame(f->adec, f->adec_frame);
+        if (got != 0) break;
+        int in_samples = f->adec_frame->nb_samples;
+        /* worst-case output samples if rate changes (we don't); + slack */
+        int out_cap = swr_get_out_samples(f->swr, in_samples);
+        if (out_cap < in_samples) out_cap = in_samples;
+        int want_bytes = out_cap * 2 /*ch*/ * 2 /*s16*/;
+        if (want_bytes > f->pcm_cap) {
+            f->pcm_buf = (uint8_t*)realloc(f->pcm_buf, want_bytes);
+            f->pcm_cap = want_bytes;
+        }
+        uint8_t* out[1] = { f->pcm_buf };
+        int got_samples = swr_convert(f->swr, out, out_cap,
+                                      (const uint8_t**)f->adec_frame->extended_data,
+                                      in_samples);
+        if (got_samples > 0 && f->audio_sink) {
+            f->audio_sink(f->audio_sink_op, f->audio_rate,
+                          f->pcm_buf, got_samples * 4);
+        }
+    }
+}
+
 bool recvx_fmv_advance(recvx_fmv_t* f) {
     if (!f || f->eof) return false;
     while (1) {
         int r = av_read_frame(f->fmt, f->pkt);
         if (r < 0) { f->eof = 1; return false; }
+        if (f->pkt->stream_index == f->audio_idx && f->adec) {
+            if (avcodec_send_packet(f->adec, f->pkt) == 0) {
+                drain_audio(f);
+            }
+            av_packet_unref(f->pkt);
+            continue;
+        }
         if (f->pkt->stream_index != f->video_idx) {
             av_packet_unref(f->pkt);
             continue;

@@ -40,6 +40,12 @@ typedef struct recvx_backend {
      * Called between begin_frame and end_frame. The backend stretches
      * the source image to the window. */
     void (*draw_rgba)(const void* pixels, int w, int h);
+    /* Phase 4: PCM audio sink. audio_init lazily opens the SDL device.
+     * audio_queue appends interleaved S16 stereo samples at `rate` Hz.
+     * Rate is fixed for the lifetime of the open device; a second
+     * audio_init with a different rate closes and reopens. */
+    void (*audio_init)(int sample_rate);
+    void (*audio_queue)(const void* samples, int byte_count);
 } recvx_backend;
 
 const recvx_backend* recvx_backend_gl(void);
@@ -78,6 +84,14 @@ const void*  recvx_fmv_pixels(const recvx_fmv_t* fmv);
 int          recvx_fmv_width (const recvx_fmv_t* fmv);
 int          recvx_fmv_height(const recvx_fmv_t* fmv);
 double       recvx_fmv_pts_s (const recvx_fmv_t* fmv); /* current frame PTS */
+
+/* Audio: the FMV decodes any muxed audio stream alongside video. The
+ * caller registers a sink that gets invoked with interleaved S16 stereo
+ * at `sample_rate` Hz each time a chunk lands during advance(). */
+typedef void (*recvx_fmv_audio_sink)(void* opaque, int sample_rate,
+                                     const void* s16_stereo, int byte_count);
+void recvx_fmv_set_audio_sink(recvx_fmv_t* fmv,
+                              recvx_fmv_audio_sink sink, void* opaque);
 
 #ifdef __cplusplus
 }

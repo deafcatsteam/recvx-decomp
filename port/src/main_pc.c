@@ -20,6 +20,15 @@ static uint32_t now_ms(void) {
     return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
 }
 
+/* FMV → backend audio bridge. Lazy audio_init on the first chunk so we
+ * don't open an SDL device for FMVs without audio. */
+static void audio_sink_to_backend(void* opaque, int rate,
+                                  const void* pcm, int bytes) {
+    const recvx_backend* b = (const recvx_backend*)opaque;
+    if (b->audio_init)  b->audio_init(rate);
+    if (b->audio_queue) b->audio_queue(pcm, bytes);
+}
+
 static const char* g_iso_path = NULL;
 
 static void parse_args(int argc, char** argv) {
@@ -93,14 +102,16 @@ int main(int argc, char** argv) {
     if (iso) {
         fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
         if (fmv) {
-            /* Prime the first frame before starting the clock so PTS 0
-             * aligns with the first drawn frame, not the open() return. */
-            if (!recvx_fmv_advance(fmv)) {
-                recvx_fmv_close(fmv);
-                fmv = NULL;
-            } else {
-                fmv_start_ms = now_ms();
-            }
+            recvx_fmv_set_audio_sink(fmv, audio_sink_to_backend,
+                                     (void*)backend);
+        }
+        /* Prime the first frame before starting the clock so PTS 0
+         * aligns with the first drawn frame, not the open() return. */
+        if (fmv && !recvx_fmv_advance(fmv)) {
+            recvx_fmv_close(fmv);
+            fmv = NULL;
+        } else if (fmv) {
+            fmv_start_ms = now_ms();
         }
     }
 

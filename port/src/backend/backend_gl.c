@@ -24,8 +24,11 @@ static GLuint         g_fmv_tex;
 static int            g_fmv_w, g_fmv_h;
 static bool           g_fmv_valid;
 
+static SDL_AudioDeviceID g_audio_dev;
+static int               g_audio_rate;
+
 static int gl_init(const recvx_backend_config* cfg) {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
         RX_LOG("backend_gl", "SDL_Init: %s", SDL_GetError());
         return -1;
     }
@@ -54,6 +57,7 @@ static int gl_init(const recvx_backend_config* cfg) {
 }
 
 static void gl_shutdown(void) {
+    if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
     if (g_fmv_tex) { glDeleteTextures(1, &g_fmv_tex); g_fmv_tex = 0; }
     if (g_glctx)   { SDL_GL_DeleteContext(g_glctx); g_glctx = NULL; }
     if (g_window)  { SDL_DestroyWindow(g_window); g_window = NULL; }
@@ -122,6 +126,28 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
     glDisable(GL_TEXTURE_2D);
 }
 
+static void gl_audio_init(int sample_rate) {
+    if (g_audio_dev && g_audio_rate == sample_rate) return;
+    if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
+    SDL_AudioSpec want = {0}, have = {0};
+    want.freq     = sample_rate;
+    want.format   = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples  = 1024;
+    g_audio_dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!g_audio_dev) {
+        RX_LOG("backend_gl", "SDL_OpenAudioDevice: %s", SDL_GetError());
+        return;
+    }
+    g_audio_rate = have.freq;
+    SDL_PauseAudioDevice(g_audio_dev, 0);
+}
+
+static void gl_audio_queue(const void* samples, int byte_count) {
+    if (!g_audio_dev || !samples || byte_count <= 0) return;
+    SDL_QueueAudio(g_audio_dev, samples, (Uint32)byte_count);
+}
+
 static const recvx_backend g_gl = {
     .name        = "sdl2_gl_compat",
     .init        = gl_init,
@@ -130,6 +156,8 @@ static const recvx_backend g_gl = {
     .end_frame   = gl_end,
     .pump_events = gl_pump,
     .draw_rgba   = gl_draw_rgba,
+    .audio_init  = gl_audio_init,
+    .audio_queue = gl_audio_queue,
 };
 
 const recvx_backend* recvx_backend_gl(void) { return &g_gl; }
