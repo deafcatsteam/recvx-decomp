@@ -68,6 +68,15 @@ struct recvx_fmv {
     int64_t            aud_bytes_emitted; /* running total of PCM bytes sent */
     int                aud_diag_done;     /* one-shot rate-check log */
 
+    /* Sofdec LPCM is stored PLANAR in blocks: N samples of L followed by
+     * N samples of R, repeating. SDL wants interleaved LRLR, so we
+     * accumulate whole L+R block-pairs and de-interleave before emitting.
+     * `aud_block_bytes` is (samples_per_channel × 2 bytes × 2 channels). */
+    int                aud_block_bytes;
+    uint8_t*           aud_inter_buf;   /* scratch for one L+R block-pair */
+    int                aud_inter_used;  /* bytes accumulated in inter_buf */
+    int                aud_ssbd_seen;   /* SSbd chunk header consumed yet */
+
     AVPacket*          pkt;
     AVFrame*           dec_frame;
     AVFrame*           rgba_frame;
@@ -265,6 +274,7 @@ void recvx_fmv_set_audio_sink(recvx_fmv_t* f, recvx_fmv_audio_sink sink, void* o
 
 void recvx_fmv_close(recvx_fmv_t* f) {
     if (!f) return;
+    if (f->aud_inter_buf) { free(f->aud_inter_buf); f->aud_inter_buf = NULL; }
     if (f->aud_buf)   { free(f->aud_buf); f->aud_buf = NULL; }
     if (f->pcm_buf)   { free(f->pcm_buf); f->pcm_buf = NULL; }
     if (f->adec_frame) av_frame_free(&f->adec_frame);
@@ -376,48 +386,84 @@ static void pump_pss_audio(recvx_fmv_t* f) {
             /* First 0xBD packet carries an `SShd` header with fmt info. */
             if (!f->aud_header_seen && payload_size >= 24 &&
                 p[0] == 'S' && p[1] == 'S' && p[2] == 'h' && p[3] == 'd') {
-                /* Dump the full 48-byte window we can safely reach so we
-                 * can verify the SShd layout — rate and channel offsets
-                 * have varied between Sofdec revisions. */
-                int dump = payload_size > 48 ? 48 : payload_size;
-                char hex[8 * 48] = {0};
-                char* q = hex;
-                for (int j = 0; j < dump; ++j) {
-                    q += sprintf(q, "%02X ", p[j]);
-                }
-                RX_LOG("fmv", "SShd raw: %s", hex);
-
                 f->aud_rate = (int)(p[12] | (p[13] << 8) |
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
+                /* Samples-per-channel per planar block lives at offset 20
+                 * of SShd. 512 samples × 2 bytes × 2 channels = 2048-byte
+                 * block-pair that we de-interleave before emitting. */
+                int block_samples = (int)(p[20] | (p[21] << 8) |
+                                          (p[22] << 16) | (p[23] << 24));
+                if (block_samples <= 0) block_samples = 512;
+                f->aud_block_bytes = block_samples * 2 * f->aud_ch;
+                f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
+                f->aud_inter_used  = 0;
+                f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
-                RX_LOG("fmv", "PSS audio: %d Hz %d ch (LE S16 PCM)",
-                       f->aud_rate, f->aud_ch);
+                RX_LOG("fmv", "PSS audio: %d Hz %d ch, planar %d-sample blocks",
+                       f->aud_rate, f->aud_ch, block_samples);
                 p += 24; payload_size -= 24;
             }
 
-            if (f->aud_header_seen && payload_size > 0) {
-                f->audio_sink(f->audio_sink_op, f->aud_rate,
-                              p, payload_size);
-                f->aud_bytes_emitted += payload_size;
+            /* First payload also carries an SSbd chunk header (+ optional
+             * padding between SShd and SSbd). Skip bytes up to and
+             * including the 8-byte SSbd header so audio samples start
+             * clean. */
+            if (f->aud_header_seen && !f->aud_ssbd_seen) {
+                int j = 0;
+                while (j + 4 <= payload_size) {
+                    if (p[j]=='S' && p[j+1]=='S' && p[j+2]=='b' && p[j+3]=='d') {
+                        j += 8;  /* skip magic + size */
+                        p += j;
+                        payload_size -= j;
+                        f->aud_ssbd_seen = 1;
+                        break;
+                    }
+                    j++;
+                }
+                if (!f->aud_ssbd_seen) {
+                    /* SSbd not in this packet — consume nothing, try next */
+                    payload_size = 0;
+                }
+            }
 
-                /* One-shot diagnostic: when ~5 seconds of video has
-                 * played, report the implied source byte rate. If the
-                 * data is actually 48 kHz stereo S16 that's 192000 B/s;
-                 * mono or half-rate would show here as a clear anomaly. */
-                if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
-                    double implied = f->aud_bytes_emitted /
-                                     (f->cur_pts_s + 1.0); /* 1s lookahead */
-                    RX_LOG("fmv",
-                           "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
-                           (long long)f->aud_bytes_emitted,
-                           f->cur_pts_s, implied);
-                    RX_LOG("fmv", "  192000 B/s (48k stereo S16) ratio %.2fx",
-                           implied / 192000.0);
-                    RX_LOG("fmv", "   96000 B/s (48k mono  S16) ratio %.2fx",
-                           implied /  96000.0);
-                    f->aud_diag_done = 1;
+            /* De-interleave planar block-pairs, emit as interleaved stereo. */
+            while (f->aud_header_seen && f->aud_ssbd_seen &&
+                   payload_size > 0 && f->aud_inter_buf) {
+                int space = f->aud_block_bytes - f->aud_inter_used;
+                int take  = payload_size < space ? payload_size : space;
+                memcpy(f->aud_inter_buf + f->aud_inter_used, p, take);
+                f->aud_inter_used += take;
+                p                 += take;
+                payload_size      -= take;
+
+                if (f->aud_inter_used == f->aud_block_bytes) {
+                    int samples_per_ch = f->aud_block_bytes / (2 * f->aud_ch);
+                    int16_t* Lsrc = (int16_t*)(f->aud_inter_buf);
+                    int16_t* Rsrc = (int16_t*)(f->aud_inter_buf + samples_per_ch * 2);
+                    /* Emit interleaved into a small heap buffer so we can
+                     * pass ownership to the sink without aliasing issues. */
+                    int16_t* out = (int16_t*)malloc(f->aud_block_bytes);
+                    for (int k = 0; k < samples_per_ch; ++k) {
+                        out[k*2]   = Lsrc[k];
+                        out[k*2+1] = Rsrc[k];
+                    }
+                    f->audio_sink(f->audio_sink_op, f->aud_rate,
+                                  out, f->aud_block_bytes);
+                    free(out);
+                    f->aud_bytes_emitted += f->aud_block_bytes;
+                    f->aud_inter_used = 0;
+
+                    if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
+                        double implied = f->aud_bytes_emitted /
+                                         (f->cur_pts_s + 1.0);
+                        RX_LOG("fmv",
+                               "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
+                               (long long)f->aud_bytes_emitted,
+                               f->cur_pts_s, implied);
+                        f->aud_diag_done = 1;
+                    }
                 }
             }
         }
