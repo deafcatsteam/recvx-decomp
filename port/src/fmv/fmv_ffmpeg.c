@@ -195,6 +195,12 @@ void recvx_fmv_close(recvx_fmv_t* f) {
     free(f);
 }
 
+const void* recvx_fmv_pixels(const recvx_fmv_t* f) {
+    return (f && f->have_frame) ? f->rgba_frame->data[0] : NULL;
+}
+int recvx_fmv_width (const recvx_fmv_t* f) { return f ? f->width  : 0; }
+int recvx_fmv_height(const recvx_fmv_t* f) { return f ? f->height : 0; }
+
 bool recvx_fmv_advance(recvx_fmv_t* f) {
     if (!f || f->eof) return false;
     while (1) {

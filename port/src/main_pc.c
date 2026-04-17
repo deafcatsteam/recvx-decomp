@@ -77,25 +77,29 @@ int main(int argc, char** argv) {
     }
     RX_LOG("boot", "backend: %s", backend->name);
 
-    /* Phase 4a smoke test: open the first FMV and decode a few frames
-     * to confirm the ISO-backed AVIOContext + MPEG-PS demux + MPEG2 /
-     * ADPCM decode pipeline holds together. Frames go into RAM only;
-     * GL blit wiring comes in phase 4b. */
+    /* Phase 4b: play the logo intro into the window. One decoded frame
+     * per pump_events tick — vsync does the pacing, which is wrong for
+     * FMV framerate but gives us a visible pipeline to iterate on. */
+    recvx_fmv_t* fmv = NULL;
     if (iso) {
-        recvx_fmv_t* fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
-        if (fmv) {
-            int decoded = 0;
-            while (decoded < 5 && recvx_fmv_advance(fmv)) ++decoded;
-            RX_LOG("fmv", "smoke test: decoded %d frames", decoded);
-            recvx_fmv_close(fmv);
-        }
+        fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
     }
 
     while (backend->pump_events()) {
         backend->begin_frame();
-        /* TODO(phase4b): draw current FMV frame as fullscreen quad. */
+        if (fmv) {
+            if (!recvx_fmv_advance(fmv)) {
+                recvx_fmv_close(fmv);
+                fmv = NULL;
+            } else if (backend->draw_rgba) {
+                backend->draw_rgba(recvx_fmv_pixels(fmv),
+                                   recvx_fmv_width(fmv),
+                                   recvx_fmv_height(fmv));
+            }
+        }
         backend->end_frame();
     }
+    if (fmv) recvx_fmv_close(fmv);
 
     backend->shutdown();
     if (iso) recvx_iso_close(iso);

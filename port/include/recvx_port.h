@@ -36,6 +36,10 @@ typedef struct recvx_backend {
     void (*begin_frame)(void);
     void (*end_frame)(void);
     bool (*pump_events)(void); /* false → quit requested */
+    /* Phase 4: upload + draw an RGBA frame as a fullscreen textured quad.
+     * Called between begin_frame and end_frame. The backend stretches
+     * the source image to the window. */
+    void (*draw_rgba)(const void* pixels, int w, int h);
 } recvx_backend;
 
 const recvx_backend* recvx_backend_gl(void);
@@ -68,6 +72,11 @@ typedef struct recvx_fmv recvx_fmv_t;
 recvx_fmv_t* recvx_fmv_open(const char* iso_path);
 void         recvx_fmv_close(recvx_fmv_t* fmv);
 bool         recvx_fmv_advance(recvx_fmv_t* fmv); /* false when finished */
+/* Pointer to the current RGBA frame + its dimensions. Valid after a
+ * successful advance(); NULL before the first decoded frame. */
+const void*  recvx_fmv_pixels(const recvx_fmv_t* fmv);
+int          recvx_fmv_width (const recvx_fmv_t* fmv);
+int          recvx_fmv_height(const recvx_fmv_t* fmv);
 
 #ifdef __cplusplus
 }
