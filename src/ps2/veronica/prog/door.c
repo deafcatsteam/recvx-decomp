@@ -1,6 +1,12 @@
 #include "../../../ps2/veronica/prog/door.h"
+#include "../../../ps2/veronica/prog/main.h"
+#include "../../../ps2/veronica/prog/njplus.h"
+#include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/ps2_NinjaCnk.h"
+#include "../../../ps2/veronica/prog/sdfunc.h"
 
 _door_wrk DoorWrk;
+
 const _proc_wrk FadeProcTbl[2] = 
 { 
 	NULL, (void*)FadeProc1 
@@ -23,33 +29,26 @@ const _proc_wrk PuruProcTbl[2] =
 };
 const int PruSndTbl[1] = { 10 };
 
-// 
-// Start address: 0x2aec30
+// 100% matching!
 void bhInitDoor()
 {
-	//_anon12 amb_ini;
-	//_anon12 vct_ini;
-	// Line 158, Address: 0x2aec30, Func Offset: 0
-	// Line 177, Address: 0x2aec34, Func Offset: 0x4
-	// Line 158, Address: 0x2aec40, Func Offset: 0x10
-	// Line 177, Address: 0x2aec44, Func Offset: 0x14
-	// Line 180, Address: 0x2aec4c, Func Offset: 0x1c
-	// Line 183, Address: 0x2aec54, Func Offset: 0x24
-	// Line 180, Address: 0x2aec5c, Func Offset: 0x2c
-	// Line 183, Address: 0x2aec70, Func Offset: 0x40
-	// Line 195, Address: 0x2aec8c, Func Offset: 0x5c
-	// Line 188, Address: 0x2aec90, Func Offset: 0x60
-	// Line 195, Address: 0x2aec94, Func Offset: 0x64
-	// Line 188, Address: 0x2aec98, Func Offset: 0x68
-	// Line 195, Address: 0x2aec9c, Func Offset: 0x6c
-	// Line 196, Address: 0x2aecb0, Func Offset: 0x80
-	// Line 195, Address: 0x2aecb4, Func Offset: 0x84
-	// Line 196, Address: 0x2aecb8, Func Offset: 0x88
-	// Line 195, Address: 0x2aecbc, Func Offset: 0x8c
-	// Line 196, Address: 0x2aecc4, Func Offset: 0x94
-	// Line 203, Address: 0x2aece4, Func Offset: 0xb4
-	// Func End, Address: 0x2aecf0, Func Offset: 0xc0
-	scePrintf("bhInitDoor - UNIMPLEMENTED!\n");
+    _door_wrk* dwP; // not from DWARF        
+    static const NJS_POINT3 amb_ini = { 0 }; 
+    static const NJS_POINT3 vct_ini = { 1.0f, 1.0f, 1.0f }; 
+
+    dwP = &DoorWrk;
+    
+    npSetMemory((unsigned char*)dwP, sizeof(_door_wrk), 0);
+    
+    dwP->dmo_bufP = sys->doordp;
+    
+    AnalyzeDoor(dwP, sys->door.dor_tp, sys->door.flg);
+    
+    dwP->spd_mde = DMO_SPD_1;
+    dwP->spd_mde = DMO_SPD_1;
+    
+    dwP->lgt_pnt_rte = vct_ini;
+    dwP->lgt_amb_off = amb_ini;
 }
 
 // 
@@ -192,23 +191,30 @@ void bhSetDoor()
 	scePrintf("bhSetDoor - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x2af2a0
+// 100% matching!
 void bhExitDoor()
 {
-	//_door_wrk* dwP;
-	// Line 523, Address: 0x2af2a0, Func Offset: 0
-	// Line 524, Address: 0x2af2ac, Func Offset: 0xc
-	// Line 527, Address: 0x2af2b4, Func Offset: 0x14
-	// Line 528, Address: 0x2af2d0, Func Offset: 0x30
-	// Line 531, Address: 0x2af2e4, Func Offset: 0x44
-	// Line 532, Address: 0x2af2f4, Func Offset: 0x54
-	// Line 534, Address: 0x2af2fc, Func Offset: 0x5c
-	// Line 537, Address: 0x2af308, Func Offset: 0x68
-	// Line 539, Address: 0x2af310, Func Offset: 0x70
-	// Line 547, Address: 0x2af340, Func Offset: 0xa0
-	// Func End, Address: 0x2af350, Func Offset: 0xb0
-	scePrintf("bhExitDoor - UNIMPLEMENTED!\n");
+	_door_wrk* dwP;
+
+	dwP = &DoorWrk;
+
+	njClipZ(-2.0f, -20000.0f);
+
+    njSetAspect(BHD_ASPECT_X, BHD_ASPECT_Y);
+
+    if (dwP->dor_mdl.texP != NULL) 
+	{
+        njReleaseTexture(dwP->dor_mdl.texP);
+		
+        bhGarbageTexture(NULL, 0);
+
+        Ps2ClearOT();
+
+        if (sys->fade_an > 0) 
+		{
+            bhDrawScreenFade();
+        }
+    }
 }
 
 // 100% matching!
@@ -293,43 +299,43 @@ int bhControlDoor()
 	scePrintf("bhControlDoor - UNIMPLEMENTED!\n");
 }
 
-/*// 
-// Start address: 0x2af750
-void ControlSoundTiming(_door_wrk* dwP)
+// 100% matching!
+static void ControlSoundTiming(_door_wrk* dwP) 
 {
-	int sts;
-	int cmd_no;
-	// Line 754, Address: 0x2af750, Func Offset: 0
-	// Line 758, Address: 0x2af764, Func Offset: 0x14
-	// Line 760, Address: 0x2af76c, Func Offset: 0x1c
-	// Line 761, Address: 0x2af774, Func Offset: 0x24
-	// Line 762, Address: 0x2af780, Func Offset: 0x30
-	// Line 763, Address: 0x2af788, Func Offset: 0x38
-	// Line 764, Address: 0x2af78c, Func Offset: 0x3c
-	// Line 763, Address: 0x2af790, Func Offset: 0x40
-	// Line 765, Address: 0x2af794, Func Offset: 0x44
-	// Line 777, Address: 0x2af7a8, Func Offset: 0x58
-	// Func End, Address: 0x2af7c0, Func Offset: 0x70
+    int cmd_no;
+    int sts;
+    int* bsP; // not from DWARF
+    
+    sts = dwP->status;
+    
+    bsP = dwP->BgmSet;
+    
+    for (cmd_no = 0; *bsP != -1; bsP++, cmd_no++) 
+    {
+        if ((sts & *bsP)) 
+        {
+            SendSoundCommand(cmd_no);
+            
+            *bsP = 0;
+        }
+    }
 }
 
-// 
-// Start address: 0x2af7c0
-void SetSoundTiming(_door_wrk* dwP)
+// 100% matching!
+static void SetSoundTiming(_door_wrk* dwP)
 {
-	int* bsP;
-	int* sfP;
 	int i;
-	int SetFlag[11];
-	// Line 804, Address: 0x2af7c0, Func Offset: 0
-	// Line 803, Address: 0x2af7c4, Func Offset: 0x4
-	// Line 806, Address: 0x2af7cc, Func Offset: 0xc
-	// Line 807, Address: 0x2af7d0, Func Offset: 0x10
-	// Line 808, Address: 0x2af7d4, Func Offset: 0x14
-	// Line 807, Address: 0x2af7d8, Func Offset: 0x18
-	// Line 808, Address: 0x2af7dc, Func Offset: 0x1c
-	// Line 810, Address: 0x2af7ec, Func Offset: 0x2c
-	// Func End, Address: 0x2af7f4, Func Offset: 0x34
-}*/
+	int* sfP, *bsP;
+	static const int SetFlag[11] = { 0, 0, 0, 0, 0, 0x1000000, 0x2000000, 0x4000000, 0x10, 0x20, -1 };
+
+    bsP = dwP->BgmSet;
+    sfP = SetFlag;
+
+	for (i = 11; i > 0; i--) 
+	{
+    	*bsP++ = *sfP++;
+	}
+}
 
 // 
 // Start address: 0x2af800
@@ -1036,45 +1042,57 @@ void DoorProc7(_door_wrk* dwP)
 	// Func End, Address: 0x2b16f4, Func Offset: 0x3e4
 }*/
 
-// 
-// Start address: 0x2b1700
-void LightProc1(_door_wrk* dwP)
+// 100% matching!
+static void LightProc1(_door_wrk* dwP) 
 {
-	int lgt_no;
-	//_anon46* lpP;
-	// Line 1969, Address: 0x2b1700, Func Offset: 0
-	// Line 1972, Address: 0x2b1718, Func Offset: 0x18
-	// Line 1970, Address: 0x2b171c, Func Offset: 0x1c
-	// Line 1972, Address: 0x2b1720, Func Offset: 0x20
-	// Line 1978, Address: 0x2b173c, Func Offset: 0x3c
-	// Line 1980, Address: 0x2b1748, Func Offset: 0x48
-	// Line 1987, Address: 0x2b1754, Func Offset: 0x54
-	// Line 1988, Address: 0x2b1760, Func Offset: 0x60
-	// Line 1989, Address: 0x2b1778, Func Offset: 0x78
-	// Line 1994, Address: 0x2b1790, Func Offset: 0x90
-	// Func End, Address: 0x2b17ac, Func Offset: 0xac
-	scePrintf("LightProc1 - UNIMPLEMENTED!\n");
+    LIGHTPROC_WORK* lpP; 
+    int lgt_no;        
+    
+    lpP = dwP->lpP;
+    
+    switch (dwP->lgt_mode) 
+    {                            
+    case 0:
+        LightSubAmb(dwP, (NJS_POINT3*)&lpP->amb_r, &dwP->lgt_amb_off);
+        
+        dwP->lgt_mode++;
+    case 1:
+        for (lgt_no = 0; lgt_no < lpP->lgt_num; lgt_no++) 
+        {
+            LightSubPnt(dwP, lgt_no, &lpP->lgt_dat[lgt_no], &dwP->lgt_pnt_rte);
+        }
+        
+        break;
+    }
 }
 
-// 
-// Start address: 0x2b17b0
-void LightProc2(_door_wrk* dwP)
+// 100% matching!
+static void LightProc2(_door_wrk* dwP)
 {
-	int lgt_no;
-	//_anon49* lpP;
-	// Line 2004, Address: 0x2b17b0, Func Offset: 0
-	// Line 2007, Address: 0x2b17c8, Func Offset: 0x18
-	// Line 2005, Address: 0x2b17cc, Func Offset: 0x1c
-	// Line 2007, Address: 0x2b17d0, Func Offset: 0x20
-	// Line 2009, Address: 0x2b17e0, Func Offset: 0x30
-	// Line 2015, Address: 0x2b1800, Func Offset: 0x50
-	// Line 2017, Address: 0x2b1810, Func Offset: 0x60
-	// Line 2023, Address: 0x2b181c, Func Offset: 0x6c
-	// Line 2024, Address: 0x2b1828, Func Offset: 0x78
-	// Line 2025, Address: 0x2b1840, Func Offset: 0x90
-	// Line 2030, Address: 0x2b1858, Func Offset: 0xa8
-	// Func End, Address: 0x2b1874, Func Offset: 0xc4
-	scePrintf("LightProc2 - UNIMPLEMENTED!\n");
+	LIGHTPROC_WORK* lpP; 
+    int lgt_no;        
+    
+    lpP = dwP->lpP;
+
+	if ((dwP->status & 0x4000)) 
+	{
+		lpP++;	
+	}
+    
+    switch (dwP->lgt_mode) 
+    {                            
+    case 0:
+        LightSubAmb(dwP, (NJS_POINT3*)&lpP->amb_r, &dwP->lgt_amb_off);
+        
+        dwP->lgt_mode++;
+    case 1:
+        for (lgt_no = 0; lgt_no < lpP->lgt_num; lgt_no++) 
+        {
+            LightSubPnt(dwP, lgt_no, &lpP->lgt_dat[lgt_no], &dwP->lgt_pnt_rte);
+        }
+        
+        break;
+    }
 }
 
 // 100% matching!
@@ -1176,42 +1194,57 @@ void VectorMove(_anon12* posP, int yaw, int pitch, float speed)
 	// Line 2091, Address: 0x2b1a3c, Func Offset: 0x8c
 	// Line 2092, Address: 0x2b1a5c, Func Offset: 0xac
 	// Func End, Address: 0x2b1a78, Func Offset: 0xc8
-}
+}*/
 
-// 
-// Start address: 0x2b1a80
-void LightSubAmb(_anon12* ambP, _anon12* offP)
+// 100% matching!
+static void LightSubAmb(_door_wrk* dwP, NJS_POINT3* ambP, NJS_POINT3* offP) // first parameter is not present on DWARF
 {
-	_anon12 amb;
-	// Line 2098, Address: 0x2b1a80, Func Offset: 0
-	// Line 2101, Address: 0x2b1a88, Func Offset: 0x8
-	// Line 2103, Address: 0x2b1aa0, Func Offset: 0x20
-	// Line 2104, Address: 0x2b1aa8, Func Offset: 0x28
-	// Line 2105, Address: 0x2b1ab0, Func Offset: 0x30
-	// Line 2106, Address: 0x2b1ad8, Func Offset: 0x58
-	// Line 2107, Address: 0x2b1b04, Func Offset: 0x84
-	// Line 2110, Address: 0x2b1b30, Func Offset: 0xb0
-	// Line 2111, Address: 0x2b1b40, Func Offset: 0xc0
-	// Func End, Address: 0x2b1b4c, Func Offset: 0xcc
+    NJS_POINT3 amb;
+
+    amb = *ambP;
+    
+    if (offP != NULL) 
+    {
+        njAddVector(&amb, offP);
+        
+        if (amb.x > 0.4f) 
+        {
+            amb.x = 0.4f;
+        }
+        
+        if (amb.y > 0.4f) 
+        {
+            amb.y = 0.4f; 
+        }
+        
+        if (amb.z > 0.4f) 
+        {
+            amb.z = 0.4f;
+        }
+    }
+    
+    njCnkSetEasyMultiAmbient(amb.x, amb.y, amb.z);
 }
 
-// 
-// Start address: 0x2b1b50
-void LightSubPnt(_door_wrk* dwP, int lgt_no, _anon35* ldP, _anon12* rteP)
+// 100% matching!
+static void LightSubPnt(_door_wrk* dwP, int lgt_no, LGT_WRK* ldP, NJS_POINT3* rteP)
 {
-	_anon12 vct;
-	// Line 2117, Address: 0x2b1b50, Func Offset: 0
-	// Line 2126, Address: 0x2b1b64, Func Offset: 0x14
-	// Line 2128, Address: 0x2b1b8c, Func Offset: 0x3c
-	// Line 2129, Address: 0x2b1ba0, Func Offset: 0x50
-	// Line 2133, Address: 0x2b1bb4, Func Offset: 0x64
-	// Line 2134, Address: 0x2b1be0, Func Offset: 0x90
-	// Line 2135, Address: 0x2b1bf0, Func Offset: 0xa0
-	// Line 2137, Address: 0x2b1bfc, Func Offset: 0xac
-	// Func End, Address: 0x2b1c14, Func Offset: 0xc4
+    NJS_VECTOR vct;
+
+    vct = ldP->pos;
+    
+    if (ldP->lgt_mod != 0) 
+    {
+        njAddVector(&vct, &dwP->vew_pos);
+    }
+    
+    njCnkSetEasyMultiLightPoint(lgt_no + 2, vct.x, vct.y, vct.z);
+    njCnkSetEasyMultiLightColor(lgt_no + 2, ldP->col_r * rteP->x, ldP->col_g * rteP->y, ldP->col_b * rteP->z);
+    njCnkSetEasyMultiLightRange(lgt_no + 2, ldP->n_rang, ldP->f_rang);
+    njCnkSetEasyMultiLightSwitch(lgt_no + 2, 1);
 }
 
-// 
+/*// 
 // Start address: 0x2b1c20
 void ryExcuteFade(float pri, int col, float rate)
 {
@@ -1240,56 +1273,86 @@ void ryExcuteFade(float pri, int col, float rate)
 	// Func End, Address: 0x2b1d14, Func Offset: 0xf4
 }*/
 
-// 
-// Start address: 0x2b1d20
-void PuruProc1(_door_wrk* dwP)
+// 100% matching!
+static void PuruProc1(_door_wrk* dwP) 
 {
-	//_anon43* ppP;
-	// Line 2189, Address: 0x2b1d20, Func Offset: 0
-	// Line 2190, Address: 0x2b1d30, Func Offset: 0x10
-	// Line 2192, Address: 0x2b1d38, Func Offset: 0x18
-	// Line 2195, Address: 0x2b1d64, Func Offset: 0x44
-	// Line 2196, Address: 0x2b1d6c, Func Offset: 0x4c
-	// Line 2197, Address: 0x2b1d74, Func Offset: 0x54
-	// Line 2201, Address: 0x2b1d80, Func Offset: 0x60
-	// Line 2203, Address: 0x2b1d9c, Func Offset: 0x7c
-	// Line 2204, Address: 0x2b1da0, Func Offset: 0x80
-	// Line 2209, Address: 0x2b1da8, Func Offset: 0x88
-	// Line 2210, Address: 0x2b1db4, Func Offset: 0x94
-	// Line 2212, Address: 0x2b1dbc, Func Offset: 0x9c
-	// Line 2213, Address: 0x2b1dc8, Func Offset: 0xa8
-	// Line 2215, Address: 0x2b1dcc, Func Offset: 0xac
-	// Line 2213, Address: 0x2b1dd4, Func Offset: 0xb4
-	// Line 2215, Address: 0x2b1dd8, Func Offset: 0xb8
-	// Line 2216, Address: 0x2b1df0, Func Offset: 0xd0
-	// Line 2217, Address: 0x2b1dfc, Func Offset: 0xdc
-	// Line 2218, Address: 0x2b1e04, Func Offset: 0xe4
-	// Line 2220, Address: 0x2b1e0c, Func Offset: 0xec
-	// Line 2224, Address: 0x2b1e28, Func Offset: 0x108
-	// Func End, Address: 0x2b1e3c, Func Offset: 0x11c
-	scePrintf("PuruProc1 - UNIMPLEMENTED!\n");
+    PURUPROC_WORK* ppP; 
+    
+    ppP = dwP->ppP;
+    
+    switch (dwP->pru_mode) 
+    {                           
+    case 0:
+        dwP->pru_reg = ppP->wait_time;
+        dwP->pru_tim = ppP->loop_time;
+        
+        dwP->pru_mode++;
+    case 1:
+        if (dwP->pru_reg == 0) 
+        {
+            dwP->pru_mode++;
+        }
+        else 
+        {
+            dwP->pru_reg--;
+            break;
+        }
+    case 2:
+        if (dwP->pru_tim != 0)
+        {
+            dwP->pru_tim--;
+            
+            if (dwP->pru_reg == 0) 
+            {
+                dwP->pru_reg = ppP->pru_wait;
+                
+                CallSystemSe(0, PruSndTbl[ppP->snd_no]);
+                
+                StartVibrationEx(2, ppP->pru_no);
+            } 
+            else 
+            {
+                dwP->pru_reg--;
+            }
+            
+            if (dwP->pru_reg == ppP->pru_wait) 
+            {
+                StartVibrationEx(2, ppP->pru_no);
+            }
+        }
+        
+        break;
+    }
 }
 
-/*// 
-// Start address: 0x2b1e40
-void DokiProcLgt(_door_wrk* dwP)
+// 100% matching!
+static void DokiProcLgt(_door_wrk* dwP) 
 {
-	int ang;
-	_anon12* offP;
-	_anon12* rteP;
-	// Line 2232, Address: 0x2b1e40, Func Offset: 0
-	// Line 2234, Address: 0x2b1e4c, Func Offset: 0xc
-	// Line 2237, Address: 0x2b1e6c, Func Offset: 0x2c
-	// Line 2243, Address: 0x2b1e74, Func Offset: 0x34
-	// Line 2241, Address: 0x2b1e78, Func Offset: 0x38
-	// Line 2242, Address: 0x2b1e7c, Func Offset: 0x3c
-	// Line 2243, Address: 0x2b1e80, Func Offset: 0x40
-	// Line 2245, Address: 0x2b1e84, Func Offset: 0x44
-	// Line 2247, Address: 0x2b1e98, Func Offset: 0x58
-	// Line 2248, Address: 0x2b1ea0, Func Offset: 0x60
-	// Line 2251, Address: 0x2b1ea4, Func Offset: 0x64
-	// Line 2252, Address: 0x2b1ed0, Func Offset: 0x90
-	// Line 2253, Address: 0x2b1ed8, Func Offset: 0x98
-	// Line 2257, Address: 0x2b1edc, Func Offset: 0x9c
-	// Func End, Address: 0x2b1eec, Func Offset: 0xac
-}*/
+    NJS_POINT3* rteP, *offP; 
+    int ang;        
+    
+    switch (dwP->dki_mode) 
+    {                         
+    case 0:
+        dwP->dki_mode++;
+    case 1:
+        ang = dwP->time * 1024;
+        
+        rteP = &dwP->lgt_pnt_rte;
+        offP = &dwP->lgt_amb_off; 
+        
+        if ((ang & 0x8000)) 
+        {
+            ang = ~ang + 1;
+        }
+        
+        offP->x = 0.5f;
+        offP->y = 0.5f;
+        offP->z = 0.5f;
+        
+        rteP->x = 0.5 + njSin(ang); // very likely a mistake
+        rteP->y = 0.5f;
+        rteP->z = 0.5f;
+        break;
+    }
+}

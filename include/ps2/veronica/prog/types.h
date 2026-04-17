@@ -429,6 +429,18 @@ typedef struct LGT_WORK
 	NJS_LIGHT_PTR* light; // offset 0xDC, size 0x4
 } LGT_WORK;
 
+typedef struct LGT_WRK
+{
+	// total size: 0x24
+	unsigned int lgt_mod; // offset 0x0, size 0x4
+	float col_r;          // offset 0x4, size 0x4
+	float col_g;          // offset 0x8, size 0x4
+	float col_b;          // offset 0xC, size 0x4
+	NJS_POINT3 pos;       // offset 0x10, size 0xC
+	float n_rang;         // offset 0x1C, size 0x4
+	float f_rang;         // offset 0x20, size 0x4
+} LGT_WRK; 
+
 typedef struct LPTB
 {
     // total size: 0x20
@@ -2186,6 +2198,28 @@ typedef struct BP_WORK
     float srt_spd[5];   // offset 0x18, size 0x14
     int srt_dir[5];     // offset 0x2C, size 0x14
 } BP_WORK;
+
+typedef struct GA_WORK 
+{
+    // total size: 0x44
+    float px;            // offset 0x0, size 0x4
+    float py;            // offset 0x4, size 0x4
+    float pz;            // offset 0x8, size 0x4
+    float vx;            // offset 0xC, size 0x4
+    float vy;            // offset 0x10, size 0x4
+    float vz;            // offset 0x14, size 0x4
+    float gx;            // offset 0x18, size 0x4
+    float gy;            // offset 0x1C, size 0x4
+    float gz;            // offset 0x20, size 0x4
+    unsigned int at_flg; // offset 0x24, size 0x4
+    int wpn_no;          // offset 0x28, size 0x4
+    float r;             // offset 0x2C, size 0x4
+    float l;             // offset 0x30, size 0x4
+    float rn;            // offset 0x34, size 0x4
+    float rmax;          // offset 0x38, size 0x4
+    int ax;              // offset 0x3C, size 0x4
+    int ay;              // offset 0x40, size 0x4
+} GA_WORK;
 
 // constant definition for ClutType, ImageType in picture header
 enum TIM2_gattr_type {

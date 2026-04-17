@@ -1,13 +1,51 @@
 #include "../../../ps2/veronica/prog/weapon.h"
 #include "../../../ps2/veronica/prog/MdlPut.h"
 #include "../../../ps2/veronica/prog/effect.h"
+#include "../../../ps2/veronica/prog/effsub3.h"
+#include "../../../ps2/veronica/prog/hitchk.h"
+#include "../../../ps2/veronica/prog/njplus.h"
+#include "../../../ps2/veronica/prog/player.h"
 #include "../../../ps2/veronica/prog/ps2_NaMath.h"
 #include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/sdfunc.h"
 #include "../../../ps2/veronica/prog/sub1.h"
 #include "../../../ps2/veronica/prog/main.h"
 
-/*short EneDamNear[22][31];
-short EneDamMid[22][31];
+const short EneDamNear[31][22] = 
+{
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,  10,  18,  18,  15, 250,  25,   4,  20,  12,  70,   8,  80,  50, 120, 180,  30, 999, 150, 999,   0 },
+    {    0,   0,   4,  13,  13,  13, 150,  10,   1,  12,  12,  60,   4,  40,  10,  50,  80,  30, 999,  80, 999,   0 },
+    {    0,   0,  10,  13,  13,  13, 250,  13,   3,  15,  12,  50,   4,  70,  40, 120,  70,  30, 999, 100, 999,   0 },
+    {    0,   0,   8,  20,  20,  20, 250,  25,   5,  25,  12,  80,   8,  80,  40,  80, 140,  30, 999, 150, 999,   0 },
+    {    0,   0,  10,  13,  13,  13, 250,  15,   3,  10,  12,  60,   4,  70,  50, 140, 100,  30, 999,  80, 999,   0 },
+    {    0,   0,  10,  13,  13,  13, 250,  15,   5,   8,  12,  40,   4,  70,  40, 140, 120,  30, 999, 120, 999,   0 },
+    {    0,   0,  10,  13,  15,  15, 250,  15,   5,   8,  12,  60,   8,  80,  40, 140, 120,  30, 999, 150, 999,   0 },
+    {    0,   0,   8,  13,  10,  10,  80,  10,   2,   8,  12,  30,   4,  80,  40,  40,  80,  30, 999, 150, 999,   0 },
+    {    0,   0,  10,  13,  13,  13, 250,  13,   3,  16,  12,  60,   8,  80,  50,  80, 140,  30, 999,  80, 999,   0 },
+    {    0,   0,   8,  13,  15,  15, 250,  15,   3,   8,  12,  60,   8,  80,  40, 140,  80,  30, 999, 150, 999,   0 },
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,   6,  16,  16,  16,  80,  16,   3,   4,   6,  40,   4,  50,  25,  25,  15,  10, 999,  30, 999,   0 },
+    {    0,   0,   6,  16,  16,  16, 150,  16,   3,  15,   6,  60,   4,  80,  25,  15,  30,  10, 999,  30, 999,   0 },
+    {    0,   0,   3,  14,  14,  14,  80,  14,   2,  17,  12,  50,   3,  60,  15,  70,  30,  10, 999,  30, 999,   0 },
+    {    0,   0,   3,   4,   4,   2,  30,   2,   1,   2,   3,  16,   1,  40,  12,  24,  12,   2, 999,  20, 999,   0 },
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,  10,  20,  20,  20,  60,  20,   4,   8,  20,  60,   8,  20,  60,  60,  60,  10, 999,  60, 999,   0 },
+    {    0,   0,   6,   8,   8,   8, 100,   8,   3,   8,   6,  40,   4,  80,  25,  15,  40,  10, 999,  25, 999,   0 },
+    {    0,   0,  16,  14,  14,  10, 100,  14,   4,  10,   7,  40,   6,  80,  15,  40,  20,  20, 999,  30, 999,   0 },
+    {    0,   0,   5,  15,  15,  15, 150,  15,   5,   8,  12,  60,   8,  80,  40,  40,  80,  30, 999,  60, 999,   0 },
+    {    0,   0,   4,  15,  15,  15, 150,  15,   3,  13,  12,  60,   8,  80,  40, 120,  80,  30, 999,  60, 999,   0 },
+    {    0,   0,   5,  13,  13,  13, 100,  13,   3,   8,   7,  30,   5,  60,  40,  40,  80,   5, 999,  20, 999,   0 },
+    {    0,   0,   5,  15,  15,  15, 150,  15,   3,  15,  12,  50,   8,  70,  25, 100,  50,  10, 999,  50, 999,   0 },
+    {    0,   0,   5,  15,  15,  15, 250,  15,   3,  15,  12,  60,   8,  80,  40,  40,  80,  30, 999,  40, 999,   0 },
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,   5,  15,  15,  13, 250,  15,   3,  20,   8,  50,   8,  80,  40, 120,  80,  30, 999,  80, 999,   0 },
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0 },
+    {    0,   0,   5,  15,  15,  15, 150,  15,   3,  10,  12,  60,   8,  80,  25,  40,  60,   5, 999, 120, 999,   0 },
+    {    0,   0,   5,  15,  15,  15, 180,  15,   3,  10,  12,  60,   8,  80,  25,  25,  25,   5, 999, 120, 999,   0 }
+};
+/*short EneDamMid[22][31];
 short EneDamFar[22][31];*/
 const int WpnAngTab[21][3] = 
 {
@@ -800,136 +838,155 @@ int bhCheckGunAtari(_anon21* gap)
 	// Line 860, Address: 0x28c270, Func Offset: 0x14e0
 	// Line 862, Address: 0x28c28c, Func Offset: 0x14fc
 	// Func End, Address: 0x28c2d8, Func Offset: 0x1548
-}
+}*/
 
-// 
-// Start address: 0x28c2e0
-void bhCheckKnifeAtari(_anon21* gap)
+// 100% matching!
+void bhCheckKnifeAtari(GA_WORK* gap) 
 {
-	BH_PWORK* pp;
-	int kno;
-	int j;
-	int i;
-	float len;
-	float ll;
-	float knr;
-	_anon1 wps;
-	_anon1 ps;
-	_anon1 sca;
-	_anon34 cap;
-	_anon43 gline;
-	// Line 870, Address: 0x28c2e0, Func Offset: 0
-	// Line 885, Address: 0x28c304, Func Offset: 0x24
-	// Line 914, Address: 0x28c308, Func Offset: 0x28
-	// Line 885, Address: 0x28c310, Func Offset: 0x30
-	// Line 886, Address: 0x28c314, Func Offset: 0x34
-	// Line 887, Address: 0x28c31c, Func Offset: 0x3c
-	// Line 888, Address: 0x28c324, Func Offset: 0x44
-	// Line 889, Address: 0x28c32c, Func Offset: 0x4c
-	// Line 890, Address: 0x28c334, Func Offset: 0x54
-	// Line 891, Address: 0x28c33c, Func Offset: 0x5c
-	// Line 907, Address: 0x28c344, Func Offset: 0x64
-	// Line 908, Address: 0x28c34c, Func Offset: 0x6c
-	// Line 909, Address: 0x28c354, Func Offset: 0x74
-	// Line 910, Address: 0x28c35c, Func Offset: 0x7c
-	// Line 911, Address: 0x28c364, Func Offset: 0x84
-	// Line 912, Address: 0x28c36c, Func Offset: 0x8c
-	// Line 914, Address: 0x28c374, Func Offset: 0x94
-	// Line 915, Address: 0x28c384, Func Offset: 0xa4
-	// Line 934, Address: 0x28c398, Func Offset: 0xb8
-	// Line 935, Address: 0x28c3a4, Func Offset: 0xc4
-	// Line 939, Address: 0x28c3a8, Func Offset: 0xc8
-	// Line 934, Address: 0x28c3ac, Func Offset: 0xcc
-	// Line 935, Address: 0x28c3b8, Func Offset: 0xd8
-	// Line 936, Address: 0x28c3cc, Func Offset: 0xec
-	// Line 937, Address: 0x28c3e0, Func Offset: 0x100
-	// Line 938, Address: 0x28c3f4, Func Offset: 0x114
-	// Line 939, Address: 0x28c408, Func Offset: 0x128
-	// Line 940, Address: 0x28c41c, Func Offset: 0x13c
-	// Line 941, Address: 0x28c430, Func Offset: 0x150
-	// Line 942, Address: 0x28c440, Func Offset: 0x160
-	// Line 943, Address: 0x28c488, Func Offset: 0x1a8
-	// Line 946, Address: 0x28c4ac, Func Offset: 0x1cc
-	// Line 943, Address: 0x28c4b0, Func Offset: 0x1d0
-	// Line 946, Address: 0x28c4c4, Func Offset: 0x1e4
-	// Line 943, Address: 0x28c4cc, Func Offset: 0x1ec
-	// Line 944, Address: 0x28c4e0, Func Offset: 0x200
-	// Line 945, Address: 0x28c4f8, Func Offset: 0x218
-	// Line 946, Address: 0x28c514, Func Offset: 0x234
-	// Line 947, Address: 0x28c52c, Func Offset: 0x24c
-	// Line 948, Address: 0x28c534, Func Offset: 0x254
-	// Line 951, Address: 0x28c53c, Func Offset: 0x25c
-	// Line 947, Address: 0x28c544, Func Offset: 0x264
-	// Line 948, Address: 0x28c550, Func Offset: 0x270
-	// Line 951, Address: 0x28c558, Func Offset: 0x278
-	// Line 948, Address: 0x28c55c, Func Offset: 0x27c
-	// Line 949, Address: 0x28c568, Func Offset: 0x288
-	// Line 950, Address: 0x28c57c, Func Offset: 0x29c
-	// Line 951, Address: 0x28c590, Func Offset: 0x2b0
-	// Line 956, Address: 0x28c5a8, Func Offset: 0x2c8
-	// Line 957, Address: 0x28c5c0, Func Offset: 0x2e0
-	// Line 961, Address: 0x28c5e4, Func Offset: 0x304
-	// Line 957, Address: 0x28c5ec, Func Offset: 0x30c
-	// Line 961, Address: 0x28c5f8, Func Offset: 0x318
-	// Line 962, Address: 0x28c608, Func Offset: 0x328
-	// Line 963, Address: 0x28c610, Func Offset: 0x330
-	// Line 964, Address: 0x28c614, Func Offset: 0x334
-	// Line 965, Address: 0x28c618, Func Offset: 0x338
-	// Line 962, Address: 0x28c61c, Func Offset: 0x33c
-	// Line 963, Address: 0x28c624, Func Offset: 0x344
-	// Line 964, Address: 0x28c630, Func Offset: 0x350
-	// Line 965, Address: 0x28c638, Func Offset: 0x358
-	// Line 967, Address: 0x28c640, Func Offset: 0x360
-	// Line 970, Address: 0x28c688, Func Offset: 0x3a8
-	// Line 972, Address: 0x28c698, Func Offset: 0x3b8
-	// Line 974, Address: 0x28c6a4, Func Offset: 0x3c4
-	// Line 972, Address: 0x28c6a8, Func Offset: 0x3c8
-	// Line 973, Address: 0x28c6ac, Func Offset: 0x3cc
-	// Line 974, Address: 0x28c6b8, Func Offset: 0x3d8
-	// Line 975, Address: 0x28c6c4, Func Offset: 0x3e4
-	// Line 976, Address: 0x28c6cc, Func Offset: 0x3ec
-	// Line 980, Address: 0x28c6d4, Func Offset: 0x3f4
-	// Line 981, Address: 0x28c6dc, Func Offset: 0x3fc
-	// Line 982, Address: 0x28c6e4, Func Offset: 0x404
-	// Line 989, Address: 0x28c720, Func Offset: 0x440
-	// Line 994, Address: 0x28c74c, Func Offset: 0x46c
-	// Line 1005, Address: 0x28c760, Func Offset: 0x480
-	// Line 1007, Address: 0x28c780, Func Offset: 0x4a0
-	// Line 1023, Address: 0x28c784, Func Offset: 0x4a4
-	// Line 1024, Address: 0x28c788, Func Offset: 0x4a8
-	// Line 1007, Address: 0x28c790, Func Offset: 0x4b0
-	// Line 1009, Address: 0x28c798, Func Offset: 0x4b8
-	// Line 1022, Address: 0x28c79c, Func Offset: 0x4bc
-	// Line 1009, Address: 0x28c7a0, Func Offset: 0x4c0
-	// Line 1010, Address: 0x28c7a4, Func Offset: 0x4c4
-	// Line 1011, Address: 0x28c7ac, Func Offset: 0x4cc
-	// Line 1013, Address: 0x28c7b4, Func Offset: 0x4d4
-	// Line 1014, Address: 0x28c7bc, Func Offset: 0x4dc
-	// Line 1015, Address: 0x28c7c4, Func Offset: 0x4e4
-	// Line 1017, Address: 0x28c7cc, Func Offset: 0x4ec
-	// Line 1018, Address: 0x28c7d4, Func Offset: 0x4f4
-	// Line 1020, Address: 0x28c7dc, Func Offset: 0x4fc
-	// Line 1024, Address: 0x28c7e0, Func Offset: 0x500
-	// Line 1025, Address: 0x28c7e8, Func Offset: 0x508
-	// Line 1028, Address: 0x28c7f8, Func Offset: 0x518
-	// Line 1025, Address: 0x28c7fc, Func Offset: 0x51c
-	// Line 1026, Address: 0x28c804, Func Offset: 0x524
-	// Line 1027, Address: 0x28c820, Func Offset: 0x540
-	// Line 1028, Address: 0x28c838, Func Offset: 0x558
-	// Line 1029, Address: 0x28c840, Func Offset: 0x560
-	// Line 1031, Address: 0x28c868, Func Offset: 0x588
-	// Line 1030, Address: 0x28c86c, Func Offset: 0x58c
-	// Line 1031, Address: 0x28c870, Func Offset: 0x590
-	// Line 1033, Address: 0x28c874, Func Offset: 0x594
-	// Line 1035, Address: 0x28c88c, Func Offset: 0x5ac
-	// Line 1037, Address: 0x28c890, Func Offset: 0x5b0
-	// Line 1038, Address: 0x28c8d8, Func Offset: 0x5f8
-	// Line 1041, Address: 0x28c8e4, Func Offset: 0x604
-	// Line 1045, Address: 0x28c910, Func Offset: 0x630
-	// Func End, Address: 0x28c938, Func Offset: 0x658
+    NJS_LINE gline;  
+    NJS_CAPSULE cap; 
+    NJS_POINT3 sca;  
+    NJS_POINT3 ps, wps;   
+    float knr;       
+    float ll;        
+    float len;       
+    int i, j;           
+    int kno;         
+    BH_PWORK* pp;    
+
+    cap.c1.x = gap->px;
+    cap.c1.y = gap->py;
+    cap.c1.z = gap->pz;
+    
+    cap.c2.x = gap->gx;
+    cap.c2.y = gap->gy;
+    cap.c2.z = gap->gz;
+    
+    cap.r = gap->r;
+    
+    gline.px = gap->gx;
+    gline.py = gap->gy;
+    gline.pz = gap->gz;
+    
+    gline.vx = gap->vx;
+    gline.vy = gap->vy;
+    gline.vz = gap->vz;
+    
+    if ((sys->st_flg & 0x40)) 
+    {
+        if (bhCheckL2Water(&gline, &ps) != NULL)
+        {
+            sys->ef.id = 11;
+            
+            sys->ef.flg = 1;
+            
+            sys->ef.mdlver = 0;
+            
+            sys->ef.type = 1;
+            
+            sys->ef.flr_no = 0;
+            
+            sys->ef.sx = 2.0f;
+            sys->ef.sy = 2.0f;
+            sys->ef.sz = 2.0f;
+            
+            sys->ef.px = ps.x + ((-rand() / -2.1474836E9f) - 0.5f);
+            sys->ef.pz = ps.z + ((-rand() / -2.1474836E9f) - 0.5f);
+            sys->ef.py = ps.y;
+            
+            sys->ef.ay = gap->ay - 16384;
+            
+            bhSetEffectTb(&sys->ef, NULL, NULL, 1);
+            
+            sys->ef.type = 0;
+            
+            sys->ef.sx = 1.2f;
+            sys->ef.sy = 1.2f;
+            sys->ef.sz = 1.2f;
+            
+            bhSetEffectTb(&sys->ef, NULL, NULL, 1);
+        }
+    }
+    
+    if (bhCheckL2Wall(&gline, 0x400, &len) != 0) 
+    {
+        wps = sys->apos; 
+        
+        if (bhCheckWallAttrB89(sys->ahtp) != 0) 
+        {
+            ps.x = gap->gx - wps.x;
+            ps.y = gap->gy - wps.y;
+            ps.z = gap->gz - wps.z;
+            
+            njUnitVector(&ps);
+            
+            bhSetEffGunSpark(&wps, &ps, 0xFFF8F8A0, 0x4CE04010, WpnTab[gap->wpn_no].hiteff - 4);
+        }
+        
+        CallPlayerWeaponSeEx(&wps, 277, 1);
+        
+        plp->mode0 = 1;
+        plp->mode1 = 1;
+        plp->mode2 = 72;
+        plp->mode3 = 0;
+    }
+    else 
+    {
+        pp = ene;
+        
+        for (i = 0; i < sys->ewk_n; i++, pp++)
+        {
+            if ((((pp->flg & 0x1)) && ((pp->flg & 0x20)) && (!(pp->flg & 0x2)) && (!(pp->stflg & 0x1000000)) && ((!(pp->flg & 0x80)) || (!(((BH_PWORK*)pp->lkwkp)->stflg & 0x1000000))) && (!(pp->flg & 0x4))) && (npCollisionCheckCC(&cap, &pp->watr) != 0))
+            {
+                if (pp->id != 0)
+                {
+                    CallPlayerWeaponSeEx((NJS_POINT3*)&gap->gx, 275, 1);
+                }
+                
+                pp->flg |= 0x4;
+
+                knr = 0;
+                kno = 0;
+                
+                pp->dpx = gap->px;
+                pp->dpy = gap->py;
+                pp->dpz = gap->pz;
+                
+                pp->dvx = gap->vx;
+                pp->dvy = gap->vy;
+                pp->dvz = gap->vz;
+                
+                pp->dax = gap->ax;
+                pp->day = gap->ay;
+                
+                pp->wpnr_no = gap->wpn_no;
+                
+                for (j = 1; j < (int)pp->mlwP->obj_num; j++)
+                {
+                    sca.x = gap->px - pp->mlwP->owP[j].mtx[12];
+                    sca.y = gap->py - pp->mlwP->owP[j].mtx[13];
+                    sca.z = gap->pz - pp->mlwP->owP[j].mtx[14];
+                    
+                    ll = njScalor(&sca);
+                    
+                    if ((knr == 0) || (knr > ll)) 
+                    {
+                        knr = ll;
+                        kno = j;
+                    }
+                }
+                
+                pp->djnt_no = kno;
+                
+                pp->dam[kno] += EneDamNear[pp->id][gap->wpn_no];
+                
+                pp->comb_flg |= 0x10; 
+            }
+        }
+    }
 }
 
-// 
+/*// 
 // Start address: 0x28c940
 int bhCheckFlyAtari(_anon21* gap, int eidx)
 {
