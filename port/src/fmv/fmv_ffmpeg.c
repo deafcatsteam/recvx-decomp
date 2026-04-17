@@ -67,6 +67,7 @@ struct recvx_fmv {
     int                aud_header_seen;
     int64_t            aud_bytes_emitted; /* running total of PCM bytes sent */
     int                aud_diag_done;     /* one-shot rate-check log */
+    int                aud_pkt_diag_left; /* remaining per-packet dumps */
 
     /* Sofdec LPCM is stored PLANAR in blocks: N samples of L followed by
      * N samples of R, repeating. SDL wants interleaved LRLR, so we
@@ -403,6 +404,7 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                 f->aud_inter_used  = 0;
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
+                f->aud_pkt_diag_left = 4;  /* dump first 4 packets' boundaries */
                 RX_LOG("fmv",
                        "PSS audio: %d Hz %d ch, planar %d-sample blocks",
                        f->aud_rate, f->aud_ch, block_samples);
@@ -430,6 +432,25 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                     payload_size = 0;
                 }
 
+            }
+
+            /* Per-packet boundary diagnostic — dump first 16 and last 16
+             * bytes of the first few audio packets' payload so we can see
+             * whether data is continuous across packets (smooth waveform)
+             * or has packet-local framing (marker/jump at the boundary). */
+            if (f->aud_pkt_diag_left > 0 && f->aud_header_seen &&
+                f->aud_ssbd_seen && payload_size >= 32) {
+                char hex[200] = {0};
+                char* q = hex;
+                for (int j2 = 0; j2 < 16; ++j2)
+                    q += sprintf(q, "%02X ", p[j2]);
+                RX_LOG("fmv", "pkt boundary  HEAD (size=%d): %s",
+                       payload_size, hex);
+                q = hex;
+                for (int j2 = payload_size - 16; j2 < payload_size; ++j2)
+                    q += sprintf(q, "%02X ", p[j2]);
+                RX_LOG("fmv", "pkt boundary  TAIL:            %s", hex);
+                f->aud_pkt_diag_left--;
             }
 
             /* De-interleave planar 1024-sample blocks cross-packet,
