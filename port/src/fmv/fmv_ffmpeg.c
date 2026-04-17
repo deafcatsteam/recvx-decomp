@@ -54,6 +54,19 @@ struct recvx_fmv {
     recvx_fmv_audio_sink audio_sink;
     void*                audio_sink_op;
 
+    /* Parallel MPEG-PS audio walker — extracts Sofdec-framed 16-bit LE PCM
+     * from 0xBD private_stream_1 PES packets that FFmpeg silently drops.
+     * Runs with its own file cursor independent of avformat's reader. */
+    int64_t            aud_cursor;
+    uint8_t*           aud_buf;
+    int                aud_cap;
+    int                aud_used;
+    int                aud_done;
+    int                aud_rate;
+    int                aud_ch;
+    int                aud_header_seen;
+    int64_t            aud_bytes_emitted; /* running total of PCM bytes sent */
+
     AVPacket*          pkt;
     AVFrame*           dec_frame;
     AVFrame*           rgba_frame;
@@ -136,68 +149,11 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
                                      iso_read_packet, NULL, iso_seek);
     if (!f->avio) { recvx_fmv_close(f); return NULL; }
 
-    /* Diagnostic: walk the MPEG-PS packet structure manually (not
-     * byte-scan, since that trips on start codes embedded in video ES)
-     * and dump the first bytes of each audio PES payload. This tells us
-     * what codec is actually in there — MP2 starts with 0xFF 0xFx, AC3
-     * starts with 0x0B 0x77, CRI ADX starts with 0x80 0x00, LPCM is
-     * typically 0xA0-0xAF substream IDs under 0xBD. */
-    {
-        const int scan_bytes = 4 * 1024 * 1024;
-        uint8_t* big = (uint8_t*)malloc(scan_bytes);
-        int read_total = 0;
-        if (big) {
-            f->file_cursor = 0;
-            while (read_total < scan_bytes) {
-                int n = iso_read_packet(f, big + read_total,
-                                        scan_bytes - read_total);
-                if (n <= 0) break;
-                read_total += n;
-            }
-            int reports = 0;
-            int i = 0;
-            while (i + 16 < read_total && reports < 8) {
-                if (!(big[i]==0 && big[i+1]==0 && big[i+2]==1)) {
-                    i++; continue;
-                }
-                uint8_t sid = big[i+3];
-                if (sid == 0xBA) {
-                    /* MPEG-2 pack header: 14 bytes + stuffing (low 3 bits
-                     * of byte 13 give stuffing byte count). */
-                    int stuffing = (i + 13 < read_total) ? (big[i+13] & 7) : 0;
-                    i += 14 + stuffing;
-                    continue;
-                }
-                if (sid == 0xBB || sid == 0xBE /*padding*/) {
-                    int sh_len = (big[i+4] << 8) | big[i+5];
-                    i += 6 + sh_len;
-                    continue;
-                }
-                /* PES packet with explicit length. */
-                int pes_len = (big[i+4] << 8) | big[i+5];
-                int is_audio = (sid == 0xBD) || (sid >= 0xC0 && sid <= 0xDF);
-                if (is_audio) {
-                    int hdr_data_len = (i + 8 < read_total) ? big[i+8] : 0;
-                    int payload_off  = i + 9 + hdr_data_len;
-                    char hex[100] = {0};
-                    int dump = 24;
-                    if (payload_off + dump <= read_total) {
-                        char* q = hex;
-                        for (int j = 0; j < dump; ++j) {
-                            q += sprintf(q, "%02X ", big[payload_off + j]);
-                        }
-                        RX_LOG("fmv", "audio PES id=0x%02X len=%d hdr=%d",
-                               sid, pes_len, hdr_data_len);
-                        RX_LOG("fmv", "  payload: %s", hex);
-                        reports++;
-                    }
-                }
-                i += 6 + pes_len;
-            }
-            free(big);
-        }
-        f->file_cursor = 0;
-    }
+    /* Allocate the parallel-audio walker buffer. ~512 KB holds roughly
+     * 2-3 seconds of 48 kHz stereo S16 audio plus the MPEG-PS framing
+     * overhead, which is plenty of headroom for SDL_QueueAudio pacing. */
+    f->aud_cap = 512 * 1024;
+    f->aud_buf = (uint8_t*)malloc(f->aud_cap);
 
     f->fmt = avformat_alloc_context();
     f->fmt->pb = f->avio;
@@ -308,6 +264,7 @@ void recvx_fmv_set_audio_sink(recvx_fmv_t* f, recvx_fmv_audio_sink sink, void* o
 
 void recvx_fmv_close(recvx_fmv_t* f) {
     if (!f) return;
+    if (f->aud_buf)   { free(f->aud_buf); f->aud_buf = NULL; }
     if (f->pcm_buf)   { free(f->pcm_buf); f->pcm_buf = NULL; }
     if (f->adec_frame) av_frame_free(&f->adec_frame);
     if (f->swr)        swr_free(&f->swr);
@@ -334,6 +291,118 @@ const void* recvx_fmv_pixels(const recvx_fmv_t* f) {
 int    recvx_fmv_width (const recvx_fmv_t* f) { return f ? f->width  : 0; }
 int    recvx_fmv_height(const recvx_fmv_t* f) { return f ? f->height : 0; }
 double recvx_fmv_pts_s (const recvx_fmv_t* f) { return f ? f->cur_pts_s : 0.0; }
+
+/* Parallel audio walker — reads sectors with its own cursor, parses the
+ * MPEG-PS structure, extracts 0xBD private_stream_1 PES payloads, strips
+ * the 4-byte `FF A0 00 00` Sofdec per-packet prefix, parses the one-time
+ * `SShd` header for sample rate + channels, and emits the rest as raw
+ * S16 LE PCM through the caller's audio sink.
+ *
+ * Called from advance() so audio delivery is naturally paced by the
+ * video loop; SDL_QueueAudio absorbs any temporary bursts. */
+static void pump_pss_audio(recvx_fmv_t* f) {
+    if (!f->audio_sink || !f->aud_buf || f->aud_done) return;
+
+    /* Keep audio at most ~1s ahead of video so SDL_QueueAudio doesn't
+     * accumulate the entire movie on the first few advance() calls. */
+    if (f->aud_header_seen && f->aud_rate > 0) {
+        double audio_time = (double)f->aud_bytes_emitted /
+                            (double)(f->aud_rate * f->aud_ch * 2);
+        if (audio_time > f->cur_pts_s + 1.0) return;
+    }
+
+    /* Refill the scan buffer from the audio cursor. Keeps our reads
+     * independent of avformat's cursor because iso_read is stateless
+     * when we restore f->file_cursor afterwards. */
+    while (f->aud_used < f->aud_cap) {
+        int64_t remaining = (int64_t)f->file_size - f->aud_cursor;
+        if (remaining <= 0) { f->aud_done = 1; break; }
+        int want = f->aud_cap - f->aud_used;
+        if (want > remaining) want = (int)remaining;
+
+        int64_t save_cursor = f->file_cursor;
+        f->file_cursor = f->aud_cursor;
+        int r = iso_read_packet(f, f->aud_buf + f->aud_used, want);
+        f->aud_cursor  = f->file_cursor;
+        f->file_cursor = save_cursor;
+        if (r <= 0) { f->aud_done = 1; break; }
+        f->aud_used += r;
+        /* One refill per call is enough — more and we'd starve video. */
+        break;
+    }
+
+    int i = 0;
+    while (i + 16 <= f->aud_used) {
+        if (!(f->aud_buf[i] == 0 && f->aud_buf[i+1] == 0 && f->aud_buf[i+2] == 1)) {
+            i++; continue;
+        }
+        uint8_t sid = f->aud_buf[i+3];
+
+        if (sid == 0xBA) {
+            /* MPEG-2 pack header: fixed 14 bytes + stuffing_length in the
+             * low 3 bits of byte 13. */
+            if (i + 14 > f->aud_used) break;
+            int stuffing = f->aud_buf[i+13] & 7;
+            if (i + 14 + stuffing > f->aud_used) break;
+            i += 14 + stuffing;
+            continue;
+        }
+        if (sid == 0xBB || sid == 0xBE) {
+            if (i + 6 > f->aud_used) break;
+            int sh_len = (f->aud_buf[i+4] << 8) | f->aud_buf[i+5];
+            if (i + 6 + sh_len > f->aud_used) break;
+            i += 6 + sh_len;
+            continue;
+        }
+
+        /* Generic PES packet. */
+        if (i + 6 > f->aud_used) break;
+        int pes_len = (f->aud_buf[i+4] << 8) | f->aud_buf[i+5];
+        if (i + 6 + pes_len > f->aud_used) break;  /* incomplete — wait */
+
+        if (sid == 0xBD) {
+            int hdr_data_len = f->aud_buf[i+8];
+            int payload_off  = i + 9 + hdr_data_len;
+            int payload_end  = i + 6 + pes_len;
+            int payload_size = payload_end - payload_off;
+            uint8_t* p       = f->aud_buf + payload_off;
+
+            /* Skip the per-packet Sofdec marker. */
+            if (payload_size >= 4 && p[0] == 0xFF && p[1] == 0xA0) {
+                p += 4; payload_size -= 4;
+            }
+
+            /* First 0xBD packet carries an `SShd` header with fmt info. */
+            if (!f->aud_header_seen && payload_size >= 24 &&
+                p[0] == 'S' && p[1] == 'S' && p[2] == 'h' && p[3] == 'd') {
+                f->aud_rate = (int)(p[12] | (p[13] << 8) |
+                                    (p[14] << 16) | (p[15] << 24));
+                f->aud_ch   = (int)(p[16] | (p[17] << 8) |
+                                    (p[18] << 16) | (p[19] << 24));
+                f->aud_header_seen = 1;
+                RX_LOG("fmv", "PSS audio: %d Hz %d ch (LE S16 PCM)",
+                       f->aud_rate, f->aud_ch);
+                p += 24; payload_size -= 24;
+            }
+
+            if (f->aud_header_seen && payload_size > 0) {
+                f->audio_sink(f->audio_sink_op, f->aud_rate,
+                              p, payload_size);
+                f->aud_bytes_emitted += payload_size;
+            }
+        }
+        i += 6 + pes_len;
+    }
+
+    if (i > 0) {
+        memmove(f->aud_buf, f->aud_buf + i, f->aud_used - i);
+        f->aud_used -= i;
+    } else if (f->aud_used == f->aud_cap) {
+        /* Pathological: giant unparseable packet. Reset to recover. */
+        RX_LOG("fmv", "audio walker stuck, flushing buffer");
+        f->aud_used = 0;
+    }
+}
 
 static void drain_audio(recvx_fmv_t* f) {
     if (!f->adec) return;
@@ -362,6 +431,11 @@ static void drain_audio(recvx_fmv_t* f) {
 
 bool recvx_fmv_advance(recvx_fmv_t* f) {
     if (!f || f->eof) return false;
+    /* Pump the PSS audio walker first so SDL has data queued before the
+     * video frame even lands. If avformat discovered a standard audio
+     * stream (MP2/AC3/etc.), the walker is a no-op — aud_buf is still
+     * allocated but `audio_sink` drives the choice of path. */
+    if (f->audio_idx < 0) pump_pss_audio(f);
     while (1) {
         int r = av_read_frame(f->fmt, f->pkt);
         if (r < 0) { f->eof = 1; return false; }
