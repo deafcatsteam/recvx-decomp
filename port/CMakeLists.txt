@@ -116,9 +116,10 @@ add_library(recvx_iso STATIC
 )
 target_include_directories(recvx_iso PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-set(FMV_SOURCES src/fmv/fmv_null.c)
 if(FFMPEG_FOUND)
-    list(APPEND FMV_SOURCES src/fmv/fmv_ffmpeg.c)
+    set(FMV_SOURCES src/fmv/fmv_ffmpeg.c)
+else()
+    set(FMV_SOURCES src/fmv/fmv_null.c)
 endif()
 add_library(recvx_fmv STATIC ${FMV_SOURCES})
 target_include_directories(recvx_fmv PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)

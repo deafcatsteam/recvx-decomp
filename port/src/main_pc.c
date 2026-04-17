@@ -77,14 +77,23 @@ int main(int argc, char** argv) {
     }
     RX_LOG("boot", "backend: %s", backend->name);
 
-    /* Phase 1: real frame loop. ESC or window close exits.
-     *
-     * Phase 2 replaces the body with njUserInit() once / njUserMain() per
-     * frame / njUserExit() at shutdown, against the compat wrapper layer
-     * that masks KATANA's stddef.h and friends. */
+    /* Phase 4a smoke test: open the first FMV and decode a few frames
+     * to confirm the ISO-backed AVIOContext + MPEG-PS demux + MPEG2 /
+     * ADPCM decode pipeline holds together. Frames go into RAM only;
+     * GL blit wiring comes in phase 4b. */
+    if (iso) {
+        recvx_fmv_t* fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
+        if (fmv) {
+            int decoded = 0;
+            while (decoded < 5 && recvx_fmv_advance(fmv)) ++decoded;
+            RX_LOG("fmv", "smoke test: decoded %d frames", decoded);
+            recvx_fmv_close(fmv);
+        }
+    }
+
     while (backend->pump_events()) {
         backend->begin_frame();
-        /* TODO(phase2): njUserMain(); */
+        /* TODO(phase4b): draw current FMV frame as fullscreen quad. */
         backend->end_frame();
     }
 
