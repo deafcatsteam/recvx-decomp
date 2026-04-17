@@ -45,7 +45,8 @@ int main(int argc, char** argv) {
         /* Sanity probe — RECVX always ships SYSTEM.CNF at root and a
          * MOVIE directory. Prove the directory walk resolves both. */
         const char* probes[] = {
-            "\\SYSTEM.CNF;1", "\\SLUS_201.84;1", "\\MOVIE\\OP.SFD;1"
+            "\\SYSTEM.CNF;1", "\\SLUS_201.84;1",
+            "\\SYSTEM.AFS;1", "\\MOVIE\\MV_000.PSS;1"
         };
         for (int i = 0; i < (int)(sizeof(probes)/sizeof(probes[0])); ++i) {
             uint32_t lba = 0, sz = 0;
@@ -55,8 +56,6 @@ int main(int argc, char** argv) {
                 RX_LOG("iso", "probe %s NOT FOUND", probes[i]);
             }
         }
-        recvx_iso_debug_listdir(iso, "");
-        recvx_iso_debug_listdir(iso, "\\MOVIE");
     }
 
     const recvx_backend* backend = recvx_backend_gl();
