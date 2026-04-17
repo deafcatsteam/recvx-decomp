@@ -426,6 +426,25 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                     /* SSbd not in this packet — consume nothing, try next */
                     payload_size = 0;
                 }
+
+                /* Once we know where audio starts, dump the bytes around
+                 * where a 1024-byte-per-channel block boundary would land
+                 * so we can see if there's a marker between L and R
+                 * blocks we're not stripping. Indices 1020..1036 straddle
+                 * the 512-sample L→R boundary. */
+                if (f->aud_ssbd_seen && payload_size >= 1040) {
+                    char hex[512] = {0};
+                    char* q = hex;
+                    for (int j2 = 1020; j2 < 1040; ++j2) {
+                        q += sprintf(q, "%02X ", p[j2]);
+                    }
+                    RX_LOG("fmv", "bytes[1020..1039] (L/R 512-sample boundary): %s", hex);
+                    q = hex;
+                    for (int j2 = 2044; j2 < 2064 && j2 < payload_size; ++j2) {
+                        q += sprintf(q, "%02X ", p[j2]);
+                    }
+                    RX_LOG("fmv", "bytes[2044..2063] (512-sample block-pair boundary): %s", hex);
+                }
             }
 
             /* De-interleave planar block-pairs, emit as interleaved stereo. */
