@@ -390,23 +390,16 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* Block-size iteration. Offset 20 reports 512, byte-dumps
-                 * showed smooth PCM at offsets 1024 and 2048 (ruling out
-                 * 512-sample blocks) and 1024-sample blocks reduced but
-                 * didn't eliminate the fan artifact. Try 2048. */
-                int frame_samples = (int)(p[20] | (p[21] << 8) |
-                                          (p[22] << 16) | (p[23] << 24));
-                if (frame_samples <= 0) frame_samples = 512;
-                int block_samples = frame_samples * 4;   /* 512 × 4 = 2048 */
-                f->aud_block_bytes = block_samples * 2 * f->aud_ch;
-                f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
-                f->aud_inter_used  = 0;
+                /* 2048-sample blocks sounded worse than 1024, so we're
+                 * not looking for a larger cross-packet block — each PES
+                 * packet IS one self-contained Sofdec audio frame, and
+                 * the planar L+R split is at the packet's own midpoint.
+                 * Per-packet de-interleave, no cross-packet buffer. */
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
                 RX_LOG("fmv",
-                       "PSS audio: %d Hz %d ch, frame=%d samples → block=%d samples/ch (%d B/pair)",
-                       f->aud_rate, f->aud_ch,
-                       frame_samples, block_samples, f->aud_block_bytes);
+                       "PSS audio: %d Hz %d ch, per-packet planar frames",
+                       f->aud_rate, f->aud_ch);
                 p += 24; payload_size -= 24;
             }
 
@@ -452,42 +445,34 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                 }
             }
 
-            /* De-interleave planar block-pairs, emit as interleaved stereo. */
-            while (f->aud_header_seen && f->aud_ssbd_seen &&
-                   payload_size > 0 && f->aud_inter_buf) {
-                int space = f->aud_block_bytes - f->aud_inter_used;
-                int take  = payload_size < space ? payload_size : space;
-                memcpy(f->aud_inter_buf + f->aud_inter_used, p, take);
-                f->aud_inter_used += take;
-                p                 += take;
-                payload_size      -= take;
+            /* Per-packet de-interleave. Each PES packet is one Sofdec
+             * audio frame: first half of the (even-aligned) payload is
+             * L samples, second half is R. Split, interleave, emit.
+             * Using the packet itself as the block avoids cross-packet
+             * drift that produces the ~47 Hz fan artifact. */
+            if (f->aud_header_seen && f->aud_ssbd_seen && payload_size > 0) {
+                int usable = payload_size & ~3;   /* multiple of 4 bytes (stereo S16 frame) */
+                int half   = usable / 2;
+                int samples_per_ch = half / 2;
+                int16_t* Lsrc = (int16_t*)p;
+                int16_t* Rsrc = (int16_t*)(p + half);
+                int16_t* out  = (int16_t*)malloc(usable);
+                for (int k = 0; k < samples_per_ch; ++k) {
+                    out[k*2]   = Lsrc[k];
+                    out[k*2+1] = Rsrc[k];
+                }
+                f->audio_sink(f->audio_sink_op, f->aud_rate, out, usable);
+                free(out);
+                f->aud_bytes_emitted += usable;
 
-                if (f->aud_inter_used == f->aud_block_bytes) {
-                    int samples_per_ch = f->aud_block_bytes / (2 * f->aud_ch);
-                    int16_t* Lsrc = (int16_t*)(f->aud_inter_buf);
-                    int16_t* Rsrc = (int16_t*)(f->aud_inter_buf + samples_per_ch * 2);
-                    /* Emit interleaved into a small heap buffer so we can
-                     * pass ownership to the sink without aliasing issues. */
-                    int16_t* out = (int16_t*)malloc(f->aud_block_bytes);
-                    for (int k = 0; k < samples_per_ch; ++k) {
-                        out[k*2]   = Lsrc[k];
-                        out[k*2+1] = Rsrc[k];
-                    }
-                    f->audio_sink(f->audio_sink_op, f->aud_rate,
-                                  out, f->aud_block_bytes);
-                    free(out);
-                    f->aud_bytes_emitted += f->aud_block_bytes;
-                    f->aud_inter_used = 0;
-
-                    if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
-                        double implied = f->aud_bytes_emitted /
-                                         (f->cur_pts_s + 1.0);
-                        RX_LOG("fmv",
-                               "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
-                               (long long)f->aud_bytes_emitted,
-                               f->cur_pts_s, implied);
-                        f->aud_diag_done = 1;
-                    }
+                if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
+                    double implied = f->aud_bytes_emitted /
+                                     (f->cur_pts_s + 1.0);
+                    RX_LOG("fmv",
+                           "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
+                           (long long)f->aud_bytes_emitted,
+                           f->cur_pts_s, implied);
+                    f->aud_diag_done = 1;
                 }
             }
         }
