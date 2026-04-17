@@ -27,3 +27,7 @@ config/undefined_syms_auto.txt
 
 // exceptions
 !iso/.gitkeep
+!port/src/iso/
+!port/src/iso/**
+!port/include/compat/
+!port/include/compat/**
