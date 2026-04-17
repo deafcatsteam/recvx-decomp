@@ -429,15 +429,17 @@ static void pump_pss_audio(recvx_fmv_t* f) {
 
             }
 
-            /* Emit raw interleaved bytes, no de-interleave, no trailer
-             * strip. Samples are continuous LRLR across packets; our job
-             * is just to keep the byte stream coherent end-to-end. Round
-             * down to a multiple of 4 (stereo S16 frame size) so SDL
-             * never sees a partial frame. */
+            /* Emit every single audio byte — no rounding, no trimming.
+             * SDL_QueueAudio buffers leftover odd bytes internally and
+             * glues them onto the next packet's data, so frame alignment
+             * is preserved across packet boundaries without our help.
+             * Dropping bytes via `& ~3` was the actual bug: 1 byte per
+             * packet lost shifts SDL's frame interpretation by 1 byte
+             * each packet = full-scale sample scrambling after 4
+             * packets = continuous choppy static. */
             if (f->aud_header_seen && f->aud_ssbd_seen && payload_size > 0) {
-                int usable = payload_size & ~3;
-                f->audio_sink(f->audio_sink_op, f->aud_rate, p, usable);
-                f->aud_bytes_emitted += usable;
+                f->audio_sink(f->audio_sink_op, f->aud_rate, p, payload_size);
+                f->aud_bytes_emitted += payload_size;
 
                 if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
                     double implied = f->aud_bytes_emitted /

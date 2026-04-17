@@ -27,6 +27,8 @@ static bool           g_fmv_valid;
 static SDL_AudioDeviceID g_audio_dev;
 static int               g_audio_rate;        /* source rate we were asked to play */
 static int               g_device_rate;       /* rate SDL actually opened */
+static uint8_t           g_audio_carry[4];    /* 0..3 leftover bytes between calls */
+static int               g_audio_carry_len;
 
 static int gl_init(const recvx_backend_config* cfg) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
@@ -176,25 +178,40 @@ static void gl_audio_queue(const void* samples, int byte_count) {
         SDL_QueueAudio(g_audio_dev, samples, (Uint32)byte_count);
         return;
     }
-    /* Manual zero-order-hold upsample. Each source stereo S16 frame
-     * (4 bytes) is duplicated `ratio` times. Works for any integer
-     * ratio (48→96 = 2, 48→192 = 4). Bass/aliasing artifacts from ZOH
-     * are inaudible at these small ratios. */
     int ratio = g_device_rate / g_audio_rate;
     if (ratio < 1) ratio = 1;
-    int frames = byte_count / 4;
-    int out_bytes = byte_count * ratio;
-    uint8_t* out = (uint8_t*)SDL_malloc((size_t)out_bytes);
-    if (!out) return;
-    const uint32_t* src = (const uint32_t*)samples;
-    uint32_t* dst = (uint32_t*)out;
-    for (int i = 0; i < frames; ++i) {
-        for (int k = 0; k < ratio; ++k) {
-            dst[i * ratio + k] = src[i];
+
+    /* Byte counts coming in can be odd (PSS packets emit 4033 / 4073
+     * bytes). Accumulate leftover bytes across calls so we always
+     * process complete 4-byte stereo frames without dropping or
+     * duplicating any source byte. */
+    int combined_len = g_audio_carry_len + byte_count;
+    uint8_t* combined = (uint8_t*)SDL_malloc((size_t)combined_len);
+    if (!combined) return;
+    memcpy(combined, g_audio_carry, (size_t)g_audio_carry_len);
+    memcpy(combined + g_audio_carry_len, samples, (size_t)byte_count);
+
+    int process_bytes = combined_len & ~3;
+    int leftover      = combined_len - process_bytes;
+    if (process_bytes > 0) {
+        int frames = process_bytes / 4;
+        int out_bytes = process_bytes * ratio;
+        uint8_t* out = (uint8_t*)SDL_malloc((size_t)out_bytes);
+        if (out) {
+            const uint32_t* src = (const uint32_t*)combined;
+            uint32_t* dst = (uint32_t*)out;
+            for (int i = 0; i < frames; ++i) {
+                for (int k = 0; k < ratio; ++k) {
+                    dst[i * ratio + k] = src[i];
+                }
+            }
+            SDL_QueueAudio(g_audio_dev, out, (Uint32)out_bytes);
+            SDL_free(out);
         }
     }
-    SDL_QueueAudio(g_audio_dev, out, (Uint32)out_bytes);
-    SDL_free(out);
+    memcpy(g_audio_carry, combined + process_bytes, (size_t)leftover);
+    g_audio_carry_len = leftover;
+    SDL_free(combined);
 }
 
 static const recvx_backend g_gl = {
