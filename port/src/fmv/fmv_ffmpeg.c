@@ -66,6 +66,7 @@ struct recvx_fmv {
     int                aud_ch;
     int                aud_header_seen;
     int64_t            aud_bytes_emitted; /* running total of PCM bytes sent */
+    int                aud_diag_done;     /* one-shot rate-check log */
 
     AVPacket*          pkt;
     AVFrame*           dec_frame;
@@ -400,6 +401,24 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                 f->audio_sink(f->audio_sink_op, f->aud_rate,
                               p, payload_size);
                 f->aud_bytes_emitted += payload_size;
+
+                /* One-shot diagnostic: when ~5 seconds of video has
+                 * played, report the implied source byte rate. If the
+                 * data is actually 48 kHz stereo S16 that's 192000 B/s;
+                 * mono or half-rate would show here as a clear anomaly. */
+                if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
+                    double implied = f->aud_bytes_emitted /
+                                     (f->cur_pts_s + 1.0); /* 1s lookahead */
+                    RX_LOG("fmv",
+                           "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
+                           (long long)f->aud_bytes_emitted,
+                           f->cur_pts_s, implied);
+                    RX_LOG("fmv", "  192000 B/s (48k stereo S16) ratio %.2fx",
+                           implied / 192000.0);
+                    RX_LOG("fmv", "   96000 B/s (48k mono  S16) ratio %.2fx",
+                           implied /  96000.0);
+                    f->aud_diag_done = 1;
+                }
             }
         }
         i += 6 + pes_len;
