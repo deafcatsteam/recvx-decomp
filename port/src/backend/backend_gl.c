@@ -140,6 +140,10 @@ static void gl_audio_init(int sample_rate) {
         return;
     }
     g_audio_rate = have.freq;
+    RX_LOG("backend_gl",
+           "SDL audio opened: freq=%d ch=%d fmt=0x%04x silence=%d samples=%d (wanted freq=%d ch=%d)",
+           have.freq, have.channels, have.format, have.silence,
+           have.samples, want.freq, want.channels);
     SDL_PauseAudioDevice(g_audio_dev, 0);
 }
 

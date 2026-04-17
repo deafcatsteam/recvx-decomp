@@ -375,6 +375,17 @@ static void pump_pss_audio(recvx_fmv_t* f) {
             /* First 0xBD packet carries an `SShd` header with fmt info. */
             if (!f->aud_header_seen && payload_size >= 24 &&
                 p[0] == 'S' && p[1] == 'S' && p[2] == 'h' && p[3] == 'd') {
+                /* Dump the full 48-byte window we can safely reach so we
+                 * can verify the SShd layout — rate and channel offsets
+                 * have varied between Sofdec revisions. */
+                int dump = payload_size > 48 ? 48 : payload_size;
+                char hex[8 * 48] = {0};
+                char* q = hex;
+                for (int j = 0; j < dump; ++j) {
+                    q += sprintf(q, "%02X ", p[j]);
+                }
+                RX_LOG("fmv", "SShd raw: %s", hex);
+
                 f->aud_rate = (int)(p[12] | (p[13] << 8) |
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
