@@ -29,6 +29,12 @@ static int               g_audio_rate;        /* source rate we were asked to pl
 static int               g_device_rate;       /* rate SDL actually opened */
 static uint8_t           g_audio_carry[4];    /* 0..3 leftover bytes between calls */
 static int               g_audio_carry_len;
+/* Last L/R sample values from previous call, for cross-call linear
+ * interpolation at the buffer boundary. Prevents clicks where ZOH
+ * would've had a small amplitude step. */
+static int16_t           g_audio_last_L;
+static int16_t           g_audio_last_R;
+static bool              g_audio_has_last;
 
 static int gl_init(const recvx_backend_config* cfg) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
@@ -194,15 +200,44 @@ static void gl_audio_queue(const void* samples, int byte_count) {
     int process_bytes = combined_len & ~3;
     int leftover      = combined_len - process_bytes;
     if (process_bytes > 0) {
-        int frames = process_bytes / 4;
+        int frames    = process_bytes / 4;
         int out_bytes = process_bytes * ratio;
-        uint8_t* out = (uint8_t*)SDL_malloc((size_t)out_bytes);
+        int16_t* out  = (int16_t*)SDL_malloc((size_t)out_bytes);
         if (out) {
-            const uint32_t* src = (const uint32_t*)combined;
-            uint32_t* dst = (uint32_t*)out;
-            for (int i = 0; i < frames; ++i) {
-                for (int k = 0; k < ratio; ++k) {
-                    dst[i * ratio + k] = src[i];
+            const int16_t* src = (const int16_t*)combined;
+            /* Linear interpolation upsample for ratio=2 (48→96): each
+             * output pair is (src[i], mean(src[i], src[i+1])). This
+             * produces the "in-between" sample as an average instead of
+             * a duplicate, halving the ZOH imaging artifact. For other
+             * ratios, fall back to ZOH (rare; device usually runs at 2×
+             * source). */
+            if (ratio == 2) {
+                for (int i = 0; i < frames; ++i) {
+                    int16_t L  = src[i*2];
+                    int16_t R  = src[i*2+1];
+                    int16_t Ln = (i + 1 < frames) ? src[(i+1)*2]
+                               : (g_audio_has_last ? g_audio_last_L : L);
+                    int16_t Rn = (i + 1 < frames) ? src[(i+1)*2+1]
+                               : (g_audio_has_last ? g_audio_last_R : R);
+                    int16_t Lm = (int16_t)(((int32_t)L + (int32_t)Ln) / 2);
+                    int16_t Rm = (int16_t)(((int32_t)R + (int32_t)Rn) / 2);
+                    out[i*4]   = L;
+                    out[i*4+1] = R;
+                    out[i*4+2] = Lm;
+                    out[i*4+3] = Rm;
+                }
+                /* Remember the last frame so the next call's first
+                 * interpolation point isn't a click. */
+                g_audio_last_L  = src[(frames-1)*2];
+                g_audio_last_R  = src[(frames-1)*2+1];
+                g_audio_has_last = true;
+            } else {
+                uint32_t* dst  = (uint32_t*)out;
+                const uint32_t* src32 = (const uint32_t*)combined;
+                for (int i = 0; i < frames; ++i) {
+                    for (int k = 0; k < ratio; ++k) {
+                        dst[i * ratio + k] = src32[i];
+                    }
                 }
             }
             SDL_QueueAudio(g_audio_dev, out, (Uint32)out_bytes);
