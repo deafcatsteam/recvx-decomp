@@ -29,13 +29,12 @@ static int               g_audio_rate;        /* source rate we were asked to pl
 static int               g_device_rate;       /* rate SDL actually opened */
 static uint8_t           g_audio_carry[4];    /* 0..3 leftover bytes between calls */
 static int               g_audio_carry_len;
-/* Deferred last frame from previous call, prepended to next call's
- * input so linear interpolation always has a valid "next" sample for
- * every output. Fixes a 93 Hz (block-pair-rate) artifact that came
- * from using this value as a stale lookahead. */
-static int16_t           g_audio_prev_L;
-static int16_t           g_audio_prev_R;
-static bool              g_audio_has_prev;
+/* Deferred trailing frames from previous calls. Cubic Hermite needs
+ * a 4-sample window (prev-1, prev, next, next+1), so we keep 2 frames
+ * of lookbehind in state. */
+static int16_t           g_audio_hist_L[2];
+static int16_t           g_audio_hist_R[2];
+static int               g_audio_hist_count;  /* 0, 1, or 2 */
 
 static int gl_init(const recvx_backend_config* cfg) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
@@ -205,54 +204,81 @@ static void gl_audio_queue(const void* samples, int byte_count) {
         const int16_t* src = (const int16_t*)combined;
 
         if (ratio == 2) {
-            /* Defer the last frame of every call: we can't interpolate
-             * it until we see the NEXT call's first frame as the
-             * "next" lookahead. Process (prev + new) frames as pairs;
-             * save the final frame for next round. */
-            int have_prev_int = g_audio_has_prev ? 1 : 0;
-            int work_count    = frames + have_prev_int;
-            int process_pairs = work_count - 1;  /* last frame deferred */
+            /* Cubic Hermite (Catmull-Rom) upsample at t=0.5:
+             *   y(0.5) = (-1/16)·s[-1] + (9/16)·s[0] + (9/16)·s[1] + (-1/16)·s[2]
+             * Needs a 4-frame window: 2 behind (from history/state),
+             * current, 1 ahead. We process up to (frames - 1) new
+             * outputs this call; the last NEW frame is deferred to
+             * next call (it's the "s[1]" a future call will need).
+             *
+             * Better stopband than linear interp; cuts the ~24 kHz
+             * image (and its intermod artifacts via speaker nonlinearity)
+             * much harder, which was the remaining source of the
+             * residual static and voice-fan after linear interp. */
+            int hist_n        = g_audio_hist_count;   /* 0..2 */
+            int work_count    = frames + hist_n;
+            int process_pairs = work_count - 2;       /* need s[1] = defer last, and s[-1] = need ≥2 hist */
             if (process_pairs > 0) {
                 int16_t* out = (int16_t*)SDL_malloc((size_t)(process_pairs * 8));
                 if (out) {
+                    /* Helper: read L or R at work-index i, pulling from
+                     * history slots first then into `src`. */
+                    #define WORK_L(idx) ((idx) < hist_n ? g_audio_hist_L[idx] : src[((idx) - hist_n)*2])
+                    #define WORK_R(idx) ((idx) < hist_n ? g_audio_hist_R[idx] : src[((idx) - hist_n)*2+1])
                     for (int i = 0; i < process_pairs; ++i) {
-                        /* Gather L/R of pair[i] and pair[i+1] from
-                         * (prev | new), switching source at boundary. */
-                        int16_t L, R, Ln, Rn;
-                        int a = i;            /* "current" index in work */
-                        int b = i + 1;        /* "next" index */
-                        if (have_prev_int && a == 0) {
-                            L = g_audio_prev_L;
-                            R = g_audio_prev_R;
-                        } else {
-                            int si = a - have_prev_int;
-                            L = src[si*2];
-                            R = src[si*2+1];
-                        }
-                        if (have_prev_int && b == 0) {
-                            /* can't happen since b = i+1 >= 1, but guard */
-                            Ln = g_audio_prev_L; Rn = g_audio_prev_R;
-                        } else {
-                            int si = b - have_prev_int;
-                            Ln = src[si*2];
-                            Rn = src[si*2+1];
-                        }
-                        int16_t Lm = (int16_t)(((int32_t)L + (int32_t)Ln) / 2);
-                        int16_t Rm = (int16_t)(((int32_t)R + (int32_t)Rn) / 2);
-                        out[i*4]   = L;
-                        out[i*4+1] = R;
-                        out[i*4+2] = Lm;
-                        out[i*4+3] = Rm;
+                        /* Pair at work-index i+1 means we need
+                         * s[-1]=work[i-1], s[0]=work[i], s[1]=work[i+1],
+                         * s[2]=work[i+2]. But our pair's "current"
+                         * output is at work[i+1] if i+1 is within
+                         * work_count. Let's anchor on "current" =
+                         * work[i+1], so window is work[i..i+3]. */
+                        int idx_m1 = i;
+                        int idx_0  = i + 1;
+                        int idx_1  = i + 2;
+                        int idx_2  = (i + 3 < work_count) ? (i + 3) : (i + 2);
+                        int32_t Lm1 = WORK_L(idx_m1);
+                        int32_t L0  = WORK_L(idx_0);
+                        int32_t L1  = WORK_L(idx_1);
+                        int32_t L2  = WORK_L(idx_2);
+                        int32_t Rm1 = WORK_R(idx_m1);
+                        int32_t R0  = WORK_R(idx_0);
+                        int32_t R1  = WORK_R(idx_1);
+                        int32_t R2  = WORK_R(idx_2);
+                        int32_t Lmid = ((-Lm1 + 9*L0 + 9*L1 - L2) + 8) >> 4;
+                        int32_t Rmid = ((-Rm1 + 9*R0 + 9*R1 - R2) + 8) >> 4;
+                        if (Lmid < -32768) Lmid = -32768;
+                        if (Lmid >  32767) Lmid =  32767;
+                        if (Rmid < -32768) Rmid = -32768;
+                        if (Rmid >  32767) Rmid =  32767;
+                        out[i*4]   = (int16_t)L0;
+                        out[i*4+1] = (int16_t)R0;
+                        out[i*4+2] = (int16_t)Lmid;
+                        out[i*4+3] = (int16_t)Rmid;
                     }
+                    #undef WORK_L
+                    #undef WORK_R
                     SDL_QueueAudio(g_audio_dev, out, (Uint32)(process_pairs * 8));
                     SDL_free(out);
                 }
             }
-            /* Save last NEW frame as prev for next call's lookahead. */
-            if (frames > 0) {
-                g_audio_prev_L   = src[(frames-1)*2];
-                g_audio_prev_R   = src[(frames-1)*2+1];
-                g_audio_has_prev = true;
+            /* Save last two NEW frames as history for next call's
+             * lookbehind. If there weren't enough, pad from current
+             * state as best we can. */
+            if (frames >= 2) {
+                g_audio_hist_L[0] = src[(frames-2)*2];
+                g_audio_hist_R[0] = src[(frames-2)*2+1];
+                g_audio_hist_L[1] = src[(frames-1)*2];
+                g_audio_hist_R[1] = src[(frames-1)*2+1];
+                g_audio_hist_count = 2;
+            } else if (frames == 1) {
+                /* Shift existing history down by 1 and append new. */
+                if (hist_n >= 2) {
+                    g_audio_hist_L[0] = g_audio_hist_L[1];
+                    g_audio_hist_R[0] = g_audio_hist_R[1];
+                }
+                g_audio_hist_L[1] = src[0];
+                g_audio_hist_R[1] = src[0 + 1];
+                if (hist_n < 2) g_audio_hist_count = hist_n + 1;
             }
         } else {
             /* ZOH fallback for uncommon ratios. */
