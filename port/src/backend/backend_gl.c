@@ -129,12 +129,26 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
 static void gl_audio_init(int sample_rate) {
     if (g_audio_dev && g_audio_rate == sample_rate) return;
     if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
+
+    /* Diagnostic: log the default audio device's native spec before we
+     * try to open one at 48 kHz. If the device runs at 96 kHz, SDL's
+     * internal resampling could explain the 2× playback issue even
+     * though have.freq looks correct to us. */
+    SDL_AudioSpec default_spec = {0};
+    char* default_name = NULL;
+    if (SDL_GetDefaultAudioInfo(&default_name, &default_spec, 0) == 0) {
+        RX_LOG("backend_gl",
+               "default audio device: '%s' freq=%d ch=%d fmt=0x%04x samples=%d",
+               default_name ? default_name : "(null)",
+               default_spec.freq, default_spec.channels,
+               default_spec.format, default_spec.samples);
+        if (default_name) SDL_free(default_name);
+    } else {
+        RX_LOG("backend_gl", "SDL_GetDefaultAudioInfo failed: %s", SDL_GetError());
+    }
+
     SDL_AudioSpec want = {0}, have = {0};
-    /* Diagnostic: open SDL at HALF the requested rate. If helium
-     * disappears with this change, SDL (or the output device layer)
-     * is effectively doubling our sample rate somewhere invisible.
-     * Revert immediately once the cause is confirmed. */
-    want.freq     = sample_rate / 2;
+    want.freq     = sample_rate;
     want.format   = AUDIO_S16SYS;
     want.channels = 2;
     want.samples  = 1024;
