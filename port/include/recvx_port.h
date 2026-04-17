@@ -57,6 +57,9 @@ int          recvx_iso_read_sectors(recvx_iso_t* iso, uint32_t lba,
 void         recvx_iso_set_global(recvx_iso_t* iso);
 recvx_iso_t* recvx_iso_global(void);
 
+/* Debug: log every entry in the directory at `dir_path` (use "" for root). */
+void         recvx_iso_debug_listdir(recvx_iso_t* iso, const char* dir_path);
+
 /* --------------------------------------------------------------------------
  * FMV (Sofdec replacement)
  * -------------------------------------------------------------------------- */

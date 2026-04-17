@@ -55,6 +55,8 @@ int main(int argc, char** argv) {
                 RX_LOG("iso", "probe %s NOT FOUND", probes[i]);
             }
         }
+        recvx_iso_debug_listdir(iso, "");
+        recvx_iso_debug_listdir(iso, "\\MOVIE");
     }
 
     const recvx_backend* backend = recvx_backend_gl();

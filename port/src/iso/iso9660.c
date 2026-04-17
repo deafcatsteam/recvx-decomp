@@ -175,3 +175,64 @@ int recvx_iso_find(recvx_iso_t* iso, const char* path,
 
 void         recvx_iso_set_global(recvx_iso_t* iso) { g_iso = iso; }
 recvx_iso_t* recvx_iso_global(void)                  { return g_iso; }
+
+void recvx_iso_debug_listdir(recvx_iso_t* iso, const char* dir_path) {
+    if (!iso) return;
+    uint32_t dir_lba = iso->root_lba, dir_size = iso->root_size;
+    int is_dir = 1;
+    if (dir_path && *dir_path) {
+        if (recvx_iso_find(iso, dir_path, &dir_lba, &dir_size) != 0) {
+            RX_LOG("iso", "listdir: %s not found", dir_path);
+            return;
+        }
+        /* find filled lba/size but only accepts files; re-search with dir
+         * accept. Walk manually via dir_search for each component. */
+        const char* p = dir_path;
+        while (*p == '\\' || *p == '/') ++p;
+        dir_lba = iso->root_lba; dir_size = iso->root_size;
+        char comp[256];
+        while (*p) {
+            int ci = 0;
+            while (*p && *p != '\\' && *p != '/' && ci < 255) comp[ci++] = *p++;
+            comp[ci] = 0;
+            if (*p) ++p;
+            uint32_t flba = 0, fsz = 0;
+            if (dir_search(iso, dir_lba, dir_size, comp, &flba, &fsz, &is_dir) != 0) {
+                char with_ver[260];
+                snprintf(with_ver, sizeof(with_ver), "%s;1", comp);
+                if (dir_search(iso, dir_lba, dir_size, with_ver, &flba, &fsz, &is_dir) != 0) {
+                    RX_LOG("iso", "listdir: component '%s' not found", comp);
+                    return;
+                }
+            }
+            dir_lba = flba; dir_size = fsz;
+        }
+    }
+    uint8_t sector[ISO_SECTOR_SIZE];
+    uint32_t sectors = (dir_size + ISO_SECTOR_SIZE - 1) / ISO_SECTOR_SIZE;
+    RX_LOG("iso", "listdir %s (lba=%u size=%u):",
+           (dir_path && *dir_path) ? dir_path : "/", dir_lba, dir_size);
+    for (uint32_t s = 0; s < sectors; ++s) {
+        if (read_sector(iso, dir_lba + s, sector) != 0) return;
+        uint32_t off = 0;
+        while (off < ISO_SECTOR_SIZE) {
+            uint8_t rec_len = sector[off];
+            if (rec_len == 0) break;
+            uint32_t flba  = rd_u32_le(sector + off + 2);
+            uint32_t fsize = rd_u32_le(sector + off + 10);
+            uint8_t  flags = sector[off + 25];
+            uint8_t  nlen  = sector[off + 32];
+            char name[256];
+            int n = nlen < 255 ? nlen : 255;
+            memcpy(name, sector + off + 33, n);
+            name[n] = 0;
+            if (nlen == 1 && (name[0] == 0 || name[0] == 1)) {
+                /* skip '.' and '..' */
+            } else {
+                RX_LOG("iso", "  %-32s %s lba=%u size=%u",
+                       name, (flags & 0x02) ? "[DIR]" : "     ", flba, fsize);
+            }
+            off += rec_len;
+        }
+    }
+}
