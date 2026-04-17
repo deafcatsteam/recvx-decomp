@@ -390,17 +390,14 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* Offset 20 of SShd reports 512, but byte-dump analysis
-                 * of the actual payload shows no block boundary at 1024
-                 * or 2048 bytes — values flow smoothly across both
-                 * offsets. That rules out 512-sample-per-channel blocks.
-                 * The 512 is almost certainly samples-per-FRAME; two
-                 * frames per block makes the true block 1024 samples
-                 * per channel (4096-byte block-pair). */
+                /* Block-size iteration. Offset 20 reports 512, byte-dumps
+                 * showed smooth PCM at offsets 1024 and 2048 (ruling out
+                 * 512-sample blocks) and 1024-sample blocks reduced but
+                 * didn't eliminate the fan artifact. Try 2048. */
                 int frame_samples = (int)(p[20] | (p[21] << 8) |
                                           (p[22] << 16) | (p[23] << 24));
                 if (frame_samples <= 0) frame_samples = 512;
-                int block_samples = frame_samples * 2;
+                int block_samples = frame_samples * 4;   /* 512 × 4 = 2048 */
                 f->aud_block_bytes = block_samples * 2 * f->aud_ch;
                 f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
                 f->aud_inter_used  = 0;
@@ -434,23 +431,24 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                     payload_size = 0;
                 }
 
-                /* Once we know where audio starts, dump the bytes around
-                 * where a 1024-byte-per-channel block boundary would land
-                 * so we can see if there's a marker between L and R
-                 * blocks we're not stripping. Indices 1020..1036 straddle
-                 * the 512-sample L→R boundary. */
-                if (f->aud_ssbd_seen && payload_size >= 1040) {
-                    char hex[512] = {0};
-                    char* q = hex;
-                    for (int j2 = 1020; j2 < 1040; ++j2) {
-                        q += sprintf(q, "%02X ", p[j2]);
+                /* Single-shot boundary dump only for the first packet.
+                 * The first audio PES is only ~4073 bytes so we can't
+                 * see past offset 4096 without cross-packet buffering
+                 * — the 4092 slot is the last 20-byte window we can
+                 * reach reliably. */
+                if (f->aud_ssbd_seen && payload_size >= 20) {
+                    int probe_offsets[] = {1020, 2044, 3068, 4060};
+                    for (int po = 0; po < 4; ++po) {
+                        int o = probe_offsets[po];
+                        if (o + 20 > payload_size) break;
+                        char hex[512] = {0};
+                        char* q = hex;
+                        for (int j2 = o; j2 < o + 20; ++j2) {
+                            q += sprintf(q, "%02X ", p[j2]);
+                        }
+                        RX_LOG("fmv", "bytes[%d..%d]: %s",
+                               o, o + 19, hex);
                     }
-                    RX_LOG("fmv", "bytes[1020..1039] (L/R 512-sample boundary): %s", hex);
-                    q = hex;
-                    for (int j2 = 2044; j2 < 2064 && j2 < payload_size; ++j2) {
-                        q += sprintf(q, "%02X ", p[j2]);
-                    }
-                    RX_LOG("fmv", "bytes[2044..2063] (512-sample block-pair boundary): %s", hex);
                 }
             }
 
