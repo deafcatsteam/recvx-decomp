@@ -42,6 +42,19 @@ int main(int argc, char** argv) {
         RX_LOG("boot", "WARN: could not open ISO. Continuing in dry-run mode.");
     } else {
         recvx_iso_set_global(iso);
+        /* Sanity probe — RECVX always ships SYSTEM.CNF at root and a
+         * MOVIE directory. Prove the directory walk resolves both. */
+        const char* probes[] = {
+            "\\SYSTEM.CNF;1", "\\SLUS_201.84;1", "\\MOVIE\\OP.SFD;1"
+        };
+        for (int i = 0; i < (int)(sizeof(probes)/sizeof(probes[0])); ++i) {
+            uint32_t lba = 0, sz = 0;
+            if (recvx_iso_find(iso, probes[i], &lba, &sz) == 0) {
+                RX_LOG("iso", "probe %s -> lsn=%u size=%u", probes[i], lba, sz);
+            } else {
+                RX_LOG("iso", "probe %s NOT FOUND", probes[i]);
+            }
+        }
     }
 
     const recvx_backend* backend = recvx_backend_gl();
