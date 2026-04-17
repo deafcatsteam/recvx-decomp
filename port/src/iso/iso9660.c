@@ -181,15 +181,10 @@ void recvx_iso_debug_listdir(recvx_iso_t* iso, const char* dir_path) {
     uint32_t dir_lba = iso->root_lba, dir_size = iso->root_size;
     int is_dir = 1;
     if (dir_path && *dir_path) {
-        if (recvx_iso_find(iso, dir_path, &dir_lba, &dir_size) != 0) {
-            RX_LOG("iso", "listdir: %s not found", dir_path);
-            return;
-        }
-        /* find filled lba/size but only accepts files; re-search with dir
-         * accept. Walk manually via dir_search for each component. */
+        /* recvx_iso_find rejects directories on the last component (it's
+         * tuned for file opens), so walk manually here and accept dirs. */
         const char* p = dir_path;
         while (*p == '\\' || *p == '/') ++p;
-        dir_lba = iso->root_lba; dir_size = iso->root_size;
         char comp[256];
         while (*p) {
             int ci = 0;
