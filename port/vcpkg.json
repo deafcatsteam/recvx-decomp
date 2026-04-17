@@ -4,6 +4,11 @@
   "description": "Resident Evil: Code Veronica X PC port",
   "dependencies": [
     "sdl2",
-    "opengl"
+    "opengl",
+    {
+      "name": "ffmpeg",
+      "default-features": false,
+      "features": ["avformat", "avcodec", "swscale", "swresample"]
+    }
   ]
 }
