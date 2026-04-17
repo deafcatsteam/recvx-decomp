@@ -130,7 +130,11 @@ static void gl_audio_init(int sample_rate) {
     if (g_audio_dev && g_audio_rate == sample_rate) return;
     if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
     SDL_AudioSpec want = {0}, have = {0};
-    want.freq     = sample_rate;
+    /* Diagnostic: open SDL at HALF the requested rate. If helium
+     * disappears with this change, SDL (or the output device layer)
+     * is effectively doubling our sample rate somewhere invisible.
+     * Revert immediately once the cause is confirmed. */
+    want.freq     = sample_rate / 2;
     want.format   = AUDIO_S16SYS;
     want.channels = 2;
     want.samples  = 1024;
