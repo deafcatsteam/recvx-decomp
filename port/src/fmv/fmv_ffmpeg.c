@@ -390,19 +390,26 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* Samples-per-channel per planar block lives at offset 20
-                 * of SShd. 512 samples × 2 bytes × 2 channels = 2048-byte
-                 * block-pair that we de-interleave before emitting. */
-                int block_samples = (int)(p[20] | (p[21] << 8) |
+                /* Offset 20 of SShd reports 512, but byte-dump analysis
+                 * of the actual payload shows no block boundary at 1024
+                 * or 2048 bytes — values flow smoothly across both
+                 * offsets. That rules out 512-sample-per-channel blocks.
+                 * The 512 is almost certainly samples-per-FRAME; two
+                 * frames per block makes the true block 1024 samples
+                 * per channel (4096-byte block-pair). */
+                int frame_samples = (int)(p[20] | (p[21] << 8) |
                                           (p[22] << 16) | (p[23] << 24));
-                if (block_samples <= 0) block_samples = 512;
+                if (frame_samples <= 0) frame_samples = 512;
+                int block_samples = frame_samples * 2;
                 f->aud_block_bytes = block_samples * 2 * f->aud_ch;
                 f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
                 f->aud_inter_used  = 0;
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
-                RX_LOG("fmv", "PSS audio: %d Hz %d ch, planar %d-sample blocks",
-                       f->aud_rate, f->aud_ch, block_samples);
+                RX_LOG("fmv",
+                       "PSS audio: %d Hz %d ch, frame=%d samples → block=%d samples/ch (%d B/pair)",
+                       f->aud_rate, f->aud_ch,
+                       frame_samples, block_samples, f->aud_block_bytes);
                 p += 24; payload_size -= 24;
             }
 
