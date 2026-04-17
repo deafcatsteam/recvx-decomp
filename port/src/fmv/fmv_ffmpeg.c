@@ -391,23 +391,18 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* Best-sounding layout from iteration: cross-packet
-                 * buffer with 1024-sample-per-channel blocks. The
-                 * residual "slight helium" at this config turned out
-                 * to be the separate 48→96 kHz device-rate issue,
-                 * which is now handled via ZOH upsample in the backend.
-                 * So block=1024 de-interleave + ZOH together should be
-                 * the full fix. */
-                int block_samples = 1024;
-                f->aud_block_bytes = block_samples * 2 * 2;  /* 2 bytes/sample, stereo */
-                f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
-                f->aud_inter_used  = 0;
+                /* Per-packet planar de-interleave after stripping 1-byte
+                 * trailer. Packet-boundary HEAD dumps showed alternating
+                 * byte-0 vs byte-1 alignment — the signature of odd-size
+                 * packets in a continuous sample stream. Stripping the
+                 * trailer makes every packet even-aligned and the L+R
+                 * split cleanly lands at the packet's midpoint. */
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
-                f->aud_pkt_diag_left = 4;  /* dump first 4 packets' boundaries */
+                f->aud_pkt_diag_left = 4;
                 RX_LOG("fmv",
-                       "PSS audio: %d Hz %d ch, planar %d-sample blocks",
-                       f->aud_rate, f->aud_ch, block_samples);
+                       "PSS audio: %d Hz %d ch, per-packet planar (trailer=1 byte)",
+                       f->aud_rate, f->aud_ch);
                 p += 24; payload_size -= 24;
             }
 
@@ -434,62 +429,58 @@ static void pump_pss_audio(recvx_fmv_t* f) {
 
             }
 
-            /* Per-packet boundary diagnostic — dump first 16 and last 16
-             * bytes of the first few audio packets' payload so we can see
-             * whether data is continuous across packets (smooth waveform)
-             * or has packet-local framing (marker/jump at the boundary). */
-            if (f->aud_pkt_diag_left > 0 && f->aud_header_seen &&
-                f->aud_ssbd_seen && payload_size >= 32) {
-                char hex[200] = {0};
-                char* q = hex;
-                for (int j2 = 0; j2 < 16; ++j2)
-                    q += sprintf(q, "%02X ", p[j2]);
-                RX_LOG("fmv", "pkt boundary  HEAD (size=%d): %s",
-                       payload_size, hex);
-                q = hex;
-                for (int j2 = payload_size - 16; j2 < payload_size; ++j2)
-                    q += sprintf(q, "%02X ", p[j2]);
-                RX_LOG("fmv", "pkt boundary  TAIL:            %s", hex);
-                f->aud_pkt_diag_left--;
+            /* Strip the 1-byte trailer each PES packet ends with. This
+             * byte is consistently the "extra" that made packet audio
+             * sizes odd (4033 / 4073) and produced the alternating
+             * sample-alignment pattern observed in packet-boundary
+             * dumps. After the strip, every packet is even-aligned and
+             * the stream is samples-clean end-to-end. */
+            if (f->aud_header_seen && f->aud_ssbd_seen && payload_size >= 2) {
+                payload_size -= 1;
             }
 
-            /* De-interleave planar 1024-sample blocks cross-packet,
-             * emit as interleaved stereo. Output rate matches source
-             * rate (192 kB/s at 48 kHz stereo S16); the backend ZOH-
-             * upsamples as needed to reach the device native rate. */
-            while (f->aud_header_seen && f->aud_ssbd_seen &&
-                   payload_size > 0 && f->aud_inter_buf) {
-                int space = f->aud_block_bytes - f->aud_inter_used;
-                int take  = payload_size < space ? payload_size : space;
-                memcpy(f->aud_inter_buf + f->aud_inter_used, p, take);
-                f->aud_inter_used += take;
-                p                 += take;
-                payload_size      -= take;
+            /* Per-packet planar de-interleave using the packet's own
+             * midpoint. Packet 1 has 4032 audio bytes = 1008 frames;
+             * packets 2+ have 4072 bytes = 1018 frames. Split the even
+             * payload in half and interleave. No cross-packet buffer
+             * means no block-boundary drift. */
+            if (f->aud_header_seen && f->aud_ssbd_seen && payload_size > 0) {
+                int usable = payload_size & ~3;  /* multiple of 4 */
+                int half   = usable / 2;
+                int samples_per_ch = half / 2;
+                int16_t* Lsrc = (int16_t*)p;
+                int16_t* Rsrc = (int16_t*)(p + half);
+                int16_t* out  = (int16_t*)malloc(usable);
+                for (int k = 0; k < samples_per_ch; ++k) {
+                    out[k*2]   = Lsrc[k];
+                    out[k*2+1] = Rsrc[k];
+                }
+                f->audio_sink(f->audio_sink_op, f->aud_rate, out, usable);
+                free(out);
+                f->aud_bytes_emitted += usable;
 
-                if (f->aud_inter_used == f->aud_block_bytes) {
-                    int samples_per_ch = f->aud_block_bytes / (2 * 2);
-                    int16_t* Lsrc = (int16_t*)(f->aud_inter_buf);
-                    int16_t* Rsrc = (int16_t*)(f->aud_inter_buf + samples_per_ch * 2);
-                    int16_t* out  = (int16_t*)malloc(f->aud_block_bytes);
-                    for (int k = 0; k < samples_per_ch; ++k) {
-                        out[k*2]   = Lsrc[k];
-                        out[k*2+1] = Rsrc[k];
-                    }
-                    f->audio_sink(f->audio_sink_op, f->aud_rate,
-                                  out, f->aud_block_bytes);
-                    free(out);
-                    f->aud_bytes_emitted += f->aud_block_bytes;
-                    f->aud_inter_used = 0;
+                /* Keep the per-packet HEAD/TAIL diag for one more run
+                 * so we can verify the trailer strip landed the right
+                 * byte and the midpoint split is on a clean boundary. */
+                if (f->aud_pkt_diag_left > 0 && payload_size >= 32) {
+                    char hex[200] = {0};
+                    char* q = hex;
+                    int mid = usable / 2;
+                    for (int j2 = mid - 8; j2 < mid + 8; ++j2)
+                        q += sprintf(q, "%02X ", p[j2]);
+                    RX_LOG("fmv", "pkt mid (L→R at byte %d, size=%d): %s",
+                           mid, usable, hex);
+                    f->aud_pkt_diag_left--;
+                }
 
-                    if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
-                        double implied = f->aud_bytes_emitted /
-                                         (f->cur_pts_s + 1.0);
-                        RX_LOG("fmv",
-                               "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
-                               (long long)f->aud_bytes_emitted,
-                               f->cur_pts_s, implied);
-                        f->aud_diag_done = 1;
-                    }
+                if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
+                    double implied = f->aud_bytes_emitted /
+                                     (f->cur_pts_s + 1.0);
+                    RX_LOG("fmv",
+                           "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
+                           (long long)f->aud_bytes_emitted,
+                           f->cur_pts_s, implied);
+                    f->aud_diag_done = 1;
                 }
             }
         }
