@@ -136,6 +136,69 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
                                      iso_read_packet, NULL, iso_seek);
     if (!f->avio) { recvx_fmv_close(f); return NULL; }
 
+    /* Diagnostic: walk the MPEG-PS packet structure manually (not
+     * byte-scan, since that trips on start codes embedded in video ES)
+     * and dump the first bytes of each audio PES payload. This tells us
+     * what codec is actually in there — MP2 starts with 0xFF 0xFx, AC3
+     * starts with 0x0B 0x77, CRI ADX starts with 0x80 0x00, LPCM is
+     * typically 0xA0-0xAF substream IDs under 0xBD. */
+    {
+        const int scan_bytes = 4 * 1024 * 1024;
+        uint8_t* big = (uint8_t*)malloc(scan_bytes);
+        int read_total = 0;
+        if (big) {
+            f->file_cursor = 0;
+            while (read_total < scan_bytes) {
+                int n = iso_read_packet(f, big + read_total,
+                                        scan_bytes - read_total);
+                if (n <= 0) break;
+                read_total += n;
+            }
+            int reports = 0;
+            int i = 0;
+            while (i + 16 < read_total && reports < 8) {
+                if (!(big[i]==0 && big[i+1]==0 && big[i+2]==1)) {
+                    i++; continue;
+                }
+                uint8_t sid = big[i+3];
+                if (sid == 0xBA) {
+                    /* MPEG-2 pack header: 14 bytes + stuffing (low 3 bits
+                     * of byte 13 give stuffing byte count). */
+                    int stuffing = (i + 13 < read_total) ? (big[i+13] & 7) : 0;
+                    i += 14 + stuffing;
+                    continue;
+                }
+                if (sid == 0xBB || sid == 0xBE /*padding*/) {
+                    int sh_len = (big[i+4] << 8) | big[i+5];
+                    i += 6 + sh_len;
+                    continue;
+                }
+                /* PES packet with explicit length. */
+                int pes_len = (big[i+4] << 8) | big[i+5];
+                int is_audio = (sid == 0xBD) || (sid >= 0xC0 && sid <= 0xDF);
+                if (is_audio) {
+                    int hdr_data_len = (i + 8 < read_total) ? big[i+8] : 0;
+                    int payload_off  = i + 9 + hdr_data_len;
+                    char hex[100] = {0};
+                    int dump = 24;
+                    if (payload_off + dump <= read_total) {
+                        char* q = hex;
+                        for (int j = 0; j < dump; ++j) {
+                            q += sprintf(q, "%02X ", big[payload_off + j]);
+                        }
+                        RX_LOG("fmv", "audio PES id=0x%02X len=%d hdr=%d",
+                               sid, pes_len, hdr_data_len);
+                        RX_LOG("fmv", "  payload: %s", hex);
+                        reports++;
+                    }
+                }
+                i += 6 + pes_len;
+            }
+            free(big);
+        }
+        f->file_cursor = 0;
+    }
+
     f->fmt = avformat_alloc_context();
     f->fmt->pb = f->avio;
     /* Bump the probe window so the mpeg-ps demuxer sees enough bytes to
