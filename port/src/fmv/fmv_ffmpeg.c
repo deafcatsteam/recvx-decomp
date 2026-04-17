@@ -136,6 +136,38 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
                                      iso_read_packet, NULL, iso_seek);
     if (!f->avio) { recvx_fmv_close(f); return NULL; }
 
+    /* Diagnostic: scan first 1 MB for MPEG-PS start codes so we can see
+     * what stream IDs the disc is actually using. Remove once audio
+     * wiring is stable. */
+    {
+        uint8_t buf[64 * 1024];
+        int seen[256] = {0};
+        int scanned = 0;
+        for (int pass = 0; pass < 16 && scanned < (int)sz; ++pass) {
+            int r = iso_read_packet(f, buf, sizeof(buf));
+            if (r <= 0) break;
+            for (int i = 0; i + 4 <= r; ++i) {
+                if (buf[i]==0 && buf[i+1]==0 && buf[i+2]==1) {
+                    seen[buf[i+3]] = 1;
+                }
+            }
+            scanned += r;
+        }
+        f->file_cursor = 0; /* rewind for avformat */
+        for (int id = 0; id < 256; ++id) {
+            if (!seen[id]) continue;
+            const char* kind = "?";
+            if (id >= 0xE0 && id <= 0xEF) kind = "video";
+            else if (id >= 0xC0 && id <= 0xDF) kind = "mpeg-audio";
+            else if (id == 0xBD) kind = "private_stream_1";
+            else if (id == 0xBE) kind = "padding";
+            else if (id == 0xBF) kind = "private_stream_2";
+            else if (id == 0xBA) kind = "pack_header";
+            else if (id == 0xBB) kind = "system_header";
+            RX_LOG("fmv", "  raw start code 0x%02X (%s)", id, kind);
+        }
+    }
+
     f->fmt = avformat_alloc_context();
     f->fmt->pb = f->avio;
     /* Bump the probe window so the mpeg-ps demuxer sees enough bytes to
