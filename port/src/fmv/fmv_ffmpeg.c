@@ -390,16 +390,22 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* 2048-sample blocks sounded worse than 1024, so we're
-                 * not looking for a larger cross-packet block — each PES
-                 * packet IS one self-contained Sofdec audio frame, and
-                 * the planar L+R split is at the packet's own midpoint.
-                 * Per-packet de-interleave, no cross-packet buffer. */
+                /* Best-sounding layout from iteration: cross-packet
+                 * buffer with 1024-sample-per-channel blocks. The
+                 * residual "slight helium" at this config turned out
+                 * to be the separate 48→96 kHz device-rate issue,
+                 * which is now handled via ZOH upsample in the backend.
+                 * So block=1024 de-interleave + ZOH together should be
+                 * the full fix. */
+                int block_samples = 1024;
+                f->aud_block_bytes = block_samples * 2 * 2;  /* 2 bytes/sample, stereo */
+                f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
+                f->aud_inter_used  = 0;
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
                 RX_LOG("fmv",
-                       "PSS audio: %d Hz %d ch, per-packet planar frames",
-                       f->aud_rate, f->aud_ch);
+                       "PSS audio: %d Hz %d ch, planar %d-sample blocks",
+                       f->aud_rate, f->aud_ch, block_samples);
                 p += 24; payload_size -= 24;
             }
 
@@ -424,45 +430,45 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                     payload_size = 0;
                 }
 
-                /* Single-shot boundary dump only for the first packet.
-                 * The first audio PES is only ~4073 bytes so we can't
-                 * see past offset 4096 without cross-packet buffering
-                 * — the 4092 slot is the last 20-byte window we can
-                 * reach reliably. */
-                if (f->aud_ssbd_seen && payload_size >= 20) {
-                    int probe_offsets[] = {1020, 2044, 3068, 4060};
-                    for (int po = 0; po < 4; ++po) {
-                        int o = probe_offsets[po];
-                        if (o + 20 > payload_size) break;
-                        char hex[512] = {0};
-                        char* q = hex;
-                        for (int j2 = o; j2 < o + 20; ++j2) {
-                            q += sprintf(q, "%02X ", p[j2]);
-                        }
-                        RX_LOG("fmv", "bytes[%d..%d]: %s",
-                               o, o + 19, hex);
-                    }
-                }
             }
 
-            /* Fresh hypothesis: data is already interleaved LRLR stereo,
-             * and the "helium" we chased earlier was actually an
-             * unrelated artifact. Emit raw bytes with no reordering —
-             * this is the null hypothesis that falsifies every layout
-             * theory at once. */
-            if (f->aud_header_seen && f->aud_ssbd_seen && payload_size > 0) {
-                int usable = payload_size & ~3;
-                f->audio_sink(f->audio_sink_op, f->aud_rate, p, usable);
-                f->aud_bytes_emitted += usable;
+            /* De-interleave planar 1024-sample blocks cross-packet,
+             * emit as interleaved stereo. Output rate matches source
+             * rate (192 kB/s at 48 kHz stereo S16); the backend ZOH-
+             * upsamples as needed to reach the device native rate. */
+            while (f->aud_header_seen && f->aud_ssbd_seen &&
+                   payload_size > 0 && f->aud_inter_buf) {
+                int space = f->aud_block_bytes - f->aud_inter_used;
+                int take  = payload_size < space ? payload_size : space;
+                memcpy(f->aud_inter_buf + f->aud_inter_used, p, take);
+                f->aud_inter_used += take;
+                p                 += take;
+                payload_size      -= take;
 
-                if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
-                    double implied = f->aud_bytes_emitted /
-                                     (f->cur_pts_s + 1.0);
-                    RX_LOG("fmv",
-                           "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
-                           (long long)f->aud_bytes_emitted,
-                           f->cur_pts_s, implied);
-                    f->aud_diag_done = 1;
+                if (f->aud_inter_used == f->aud_block_bytes) {
+                    int samples_per_ch = f->aud_block_bytes / (2 * 2);
+                    int16_t* Lsrc = (int16_t*)(f->aud_inter_buf);
+                    int16_t* Rsrc = (int16_t*)(f->aud_inter_buf + samples_per_ch * 2);
+                    int16_t* out  = (int16_t*)malloc(f->aud_block_bytes);
+                    for (int k = 0; k < samples_per_ch; ++k) {
+                        out[k*2]   = Lsrc[k];
+                        out[k*2+1] = Rsrc[k];
+                    }
+                    f->audio_sink(f->audio_sink_op, f->aud_rate,
+                                  out, f->aud_block_bytes);
+                    free(out);
+                    f->aud_bytes_emitted += f->aud_block_bytes;
+                    f->aud_inter_used = 0;
+
+                    if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
+                        double implied = f->aud_bytes_emitted /
+                                         (f->cur_pts_s + 1.0);
+                        RX_LOG("fmv",
+                               "audio rate check: %lld B emitted @ PTS %.2fs => %.0f B/s",
+                               (long long)f->aud_bytes_emitted,
+                               f->cur_pts_s, implied);
+                        f->aud_diag_done = 1;
+                    }
                 }
             }
         }
