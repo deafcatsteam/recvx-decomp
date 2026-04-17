@@ -138,6 +138,11 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
 
     f->fmt = avformat_alloc_context();
     f->fmt->pb = f->avio;
+    /* Bump the probe window so the mpeg-ps demuxer sees enough bytes to
+     * identify the private_stream_1 substream (PS2 PSS tends to place
+     * MP2/ADX audio there, and the default 5s window isn't enough). */
+    f->fmt->probesize            = 20 * 1024 * 1024; /* 20 MB */
+    f->fmt->max_analyze_duration = 30 * AV_TIME_BASE;
     /* .PSS is MPEG-PS; force the demuxer so probing doesn't trip on the
      * zero-padded sectors libavformat sometimes sees through CD I/O. */
     const AVInputFormat* ifmt = av_find_input_format("mpeg");
