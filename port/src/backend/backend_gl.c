@@ -27,7 +27,6 @@ static bool           g_fmv_valid;
 static SDL_AudioDeviceID g_audio_dev;
 static int               g_audio_rate;        /* source rate we were asked to play */
 static int               g_device_rate;       /* rate SDL actually opened */
-static SDL_AudioStream*  g_audio_stream;      /* non-NULL when conversion is needed */
 
 static int gl_init(const recvx_backend_config* cfg) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
@@ -59,7 +58,6 @@ static int gl_init(const recvx_backend_config* cfg) {
 }
 
 static void gl_shutdown(void) {
-    if (g_audio_stream) { SDL_FreeAudioStream(g_audio_stream); g_audio_stream = NULL; }
     if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
     if (g_fmv_tex) { glDeleteTextures(1, &g_fmv_tex); g_fmv_tex = 0; }
     if (g_glctx)   { SDL_GL_DeleteContext(g_glctx); g_glctx = NULL; }
@@ -167,43 +165,37 @@ static void gl_audio_init(int sample_rate) {
            "SDL audio opened: device freq=%d ch=%d (source freq=%d)",
            have.freq, have.channels, sample_rate);
 
-    /* If our source rate differs from the device rate, SDL_AudioStream
-     * handles the resampling. We put at source rate/format/channels and
-     * get at device rate/format/channels. */
-    if (sample_rate != have.freq) {
-        g_audio_stream = SDL_NewAudioStream(
-            AUDIO_S16SYS, 2, sample_rate,
-            have.format, have.channels, have.freq);
-        if (!g_audio_stream) {
-            RX_LOG("backend_gl", "SDL_NewAudioStream failed: %s", SDL_GetError());
-        } else {
-            RX_LOG("backend_gl",
-                   "conversion stream: %d Hz → %d Hz", sample_rate, have.freq);
-        }
-    }
+    /* We do the rate conversion ourselves via simple zero-order-hold
+     * frame duplication — SDL_AudioStream produced garbage in this
+     * setup and we want to eliminate opaque SDL state as a variable. */
     SDL_PauseAudioDevice(g_audio_dev, 0);
 }
 
 static void gl_audio_queue(const void* samples, int byte_count) {
     if (!g_audio_dev || !samples || byte_count <= 0) return;
-    if (!g_audio_stream) {
+    if (g_device_rate == g_audio_rate || g_audio_rate <= 0) {
         SDL_QueueAudio(g_audio_dev, samples, (Uint32)byte_count);
         return;
     }
-    /* Push source-rate bytes into the conversion stream, drain whatever
-     * it produces at device rate into the SDL audio queue. */
-    if (SDL_AudioStreamPut(g_audio_stream, samples, byte_count) != 0) {
-        RX_LOG("backend_gl", "SDL_AudioStreamPut: %s", SDL_GetError());
-        return;
+    /* Manual zero-order-hold upsample. Each source stereo S16 frame
+     * (4 bytes) is duplicated `ratio` times. Works for any integer
+     * ratio (48→96 = 2, 48→192 = 4). Bass/aliasing artifacts from ZOH
+     * are inaudible at these small ratios. */
+    int ratio = g_device_rate / g_audio_rate;
+    if (ratio < 1) ratio = 1;
+    int frames = byte_count / 4;
+    int out_bytes = byte_count * ratio;
+    uint8_t* out = (uint8_t*)SDL_malloc((size_t)out_bytes);
+    if (!out) return;
+    const uint32_t* src = (const uint32_t*)samples;
+    uint32_t* dst = (uint32_t*)out;
+    for (int i = 0; i < frames; ++i) {
+        for (int k = 0; k < ratio; ++k) {
+            dst[i * ratio + k] = src[i];
+        }
     }
-    uint8_t chunk[8192];
-    int available;
-    while ((available = SDL_AudioStreamAvailable(g_audio_stream)) > 0) {
-        int want = available > (int)sizeof(chunk) ? (int)sizeof(chunk) : available;
-        int got = SDL_AudioStreamGet(g_audio_stream, chunk, want);
-        if (got <= 0) break;
-        SDL_QueueAudio(g_audio_dev, chunk, (Uint32)got);
-    }
+    SDL_QueueAudio(g_audio_dev, out, (Uint32)out_bytes);
+    SDL_free(out);
 }
 
 static const recvx_backend g_gl = {
