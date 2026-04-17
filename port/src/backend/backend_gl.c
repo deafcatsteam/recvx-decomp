@@ -129,16 +129,15 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
 
 static void gl_audio_init(int sample_rate) {
     if (g_audio_dev && g_audio_rate == sample_rate) return;
-    if (g_audio_stream) { SDL_FreeAudioStream(g_audio_stream); g_audio_stream = NULL; }
-    if (g_audio_dev)    { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
+    if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
 
     /* Query the default device's native rate. SDL's QueueAudio path on
      * WASAPI doesn't always honor a mismatched `want.freq`: it reports
      * our requested rate back through `have.freq` but the underlying
      * device runs at its own rate, so queued bytes play at the device's
      * effective rate (2× fast when device=96 kHz and want=48 kHz). The
-     * fix is to open at the *device's* rate and do our own conversion
-     * through SDL_AudioStream. */
+     * fix is to open at the device's rate and do manual zero-order-hold
+     * upsampling in gl_audio_queue. */
     SDL_AudioSpec default_spec = {0};
     int device_rate = sample_rate;
     if (SDL_GetDefaultAudioInfo(NULL, &default_spec, 0) == 0 &&
