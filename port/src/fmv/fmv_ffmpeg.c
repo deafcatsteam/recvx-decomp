@@ -445,24 +445,14 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                 }
             }
 
-            /* Per-packet de-interleave. Each PES packet is one Sofdec
-             * audio frame: first half of the (even-aligned) payload is
-             * L samples, second half is R. Split, interleave, emit.
-             * Using the packet itself as the block avoids cross-packet
-             * drift that produces the ~47 Hz fan artifact. */
+            /* Fresh hypothesis: data is already interleaved LRLR stereo,
+             * and the "helium" we chased earlier was actually an
+             * unrelated artifact. Emit raw bytes with no reordering —
+             * this is the null hypothesis that falsifies every layout
+             * theory at once. */
             if (f->aud_header_seen && f->aud_ssbd_seen && payload_size > 0) {
-                int usable = payload_size & ~3;   /* multiple of 4 bytes (stereo S16 frame) */
-                int half   = usable / 2;
-                int samples_per_ch = half / 2;
-                int16_t* Lsrc = (int16_t*)p;
-                int16_t* Rsrc = (int16_t*)(p + half);
-                int16_t* out  = (int16_t*)malloc(usable);
-                for (int k = 0; k < samples_per_ch; ++k) {
-                    out[k*2]   = Lsrc[k];
-                    out[k*2+1] = Rsrc[k];
-                }
-                f->audio_sink(f->audio_sink_op, f->aud_rate, out, usable);
-                free(out);
+                int usable = payload_size & ~3;
+                f->audio_sink(f->audio_sink_op, f->aud_rate, p, usable);
                 f->aud_bytes_emitted += usable;
 
                 if (!f->aud_diag_done && f->cur_pts_s >= 5.0) {
