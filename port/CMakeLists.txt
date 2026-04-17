@@ -45,11 +45,19 @@ set(RECVX_GAME_INC   ${RECVX_INCLUDE}/ps2/veronica/prog)
 find_package(SDL2 CONFIG QUIET)
 find_package(OpenGL QUIET)
 
+# vcpkg FFMPEG port exposes these as components of a single CONFIG package.
+find_package(FFMPEG COMPONENTS avformat avcodec avutil swscale swresample)
+
 if(NOT SDL2_FOUND)
     message(STATUS "SDL2 not found — building stub-only target. Install via vcpkg: vcpkg install sdl2:x86-windows")
 endif()
 if(NOT OpenGL_FOUND)
     message(STATUS "OpenGL not found — renderer backend will be a no-op until installed.")
+endif()
+if(NOT FFMPEG_FOUND)
+    message(STATUS "FFmpeg not found — FMV backend will be null.")
+else()
+    message(STATUS "FFmpeg found: ${FFMPEG_VERSION} (include=${FFMPEG_INCLUDE_DIRS})")
 endif()
 
 # ----------------------------------------------------------------------------
@@ -108,10 +116,18 @@ add_library(recvx_iso STATIC
 )
 target_include_directories(recvx_iso PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
-add_library(recvx_fmv STATIC
-    src/fmv/fmv_null.c
-)
+set(FMV_SOURCES src/fmv/fmv_null.c)
+if(FFMPEG_FOUND)
+    list(APPEND FMV_SOURCES src/fmv/fmv_ffmpeg.c)
+endif()
+add_library(recvx_fmv STATIC ${FMV_SOURCES})
 target_include_directories(recvx_fmv PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+if(FFMPEG_FOUND)
+    target_include_directories(recvx_fmv PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(recvx_fmv PUBLIC ${FFMPEG_LIBRARIES})
+    target_compile_definitions(recvx_fmv PUBLIC RECVX_HAVE_FFMPEG=1)
+endif()
+target_link_libraries(recvx_fmv PUBLIC recvx_iso)
 
 # ----------------------------------------------------------------------------
 # Phase 0 executable: spins up the backend, walks a fake frame loop.
