@@ -11,6 +11,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+
+/* Wall-clock milliseconds since program start. clock() on MSVC is
+ * wall time, which is what we want for FMV pacing; *nix would need a
+ * clock_gettime(MONOTONIC) replacement but this file is Windows-only. */
+static uint32_t now_ms(void) {
+    return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
+}
 
 static const char* g_iso_path = NULL;
 
@@ -77,21 +85,39 @@ int main(int argc, char** argv) {
     }
     RX_LOG("boot", "backend: %s", backend->name);
 
-    /* Phase 4b: play the logo intro into the window. One decoded frame
-     * per pump_events tick — vsync does the pacing, which is wrong for
-     * FMV framerate but gives us a visible pipeline to iterate on. */
+    /* Phase 4c: FMV playback with PTS-based pacing. Advance the decoder
+     * only when wall-clock catches up to the next frame's PTS, so a
+     * 240Hz display no longer runs the movie at ~8x. */
     recvx_fmv_t* fmv = NULL;
+    uint32_t     fmv_start_ms = 0;
     if (iso) {
         fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
+        if (fmv) {
+            /* Prime the first frame before starting the clock so PTS 0
+             * aligns with the first drawn frame, not the open() return. */
+            if (!recvx_fmv_advance(fmv)) {
+                recvx_fmv_close(fmv);
+                fmv = NULL;
+            } else {
+                fmv_start_ms = now_ms();
+            }
+        }
     }
 
     while (backend->pump_events()) {
         backend->begin_frame();
         if (fmv) {
-            if (!recvx_fmv_advance(fmv)) {
-                recvx_fmv_close(fmv);
-                fmv = NULL;
-            } else if (backend->draw_rgba) {
+            double elapsed_s = (double)(now_ms() - fmv_start_ms) / 1000.0;
+            /* Catch up: decode until the buffered frame's PTS is at or
+             * past the wall clock, then hold it until the next tick. */
+            while (recvx_fmv_pts_s(fmv) < elapsed_s) {
+                if (!recvx_fmv_advance(fmv)) {
+                    recvx_fmv_close(fmv);
+                    fmv = NULL;
+                    break;
+                }
+            }
+            if (fmv && backend->draw_rgba) {
                 backend->draw_rgba(recvx_fmv_pixels(fmv),
                                    recvx_fmv_width(fmv),
                                    recvx_fmv_height(fmv));

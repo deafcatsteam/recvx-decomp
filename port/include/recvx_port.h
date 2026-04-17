@@ -77,6 +77,7 @@ bool         recvx_fmv_advance(recvx_fmv_t* fmv); /* false when finished */
 const void*  recvx_fmv_pixels(const recvx_fmv_t* fmv);
 int          recvx_fmv_width (const recvx_fmv_t* fmv);
 int          recvx_fmv_height(const recvx_fmv_t* fmv);
+double       recvx_fmv_pts_s (const recvx_fmv_t* fmv); /* current frame PTS */
 
 #ifdef __cplusplus
 }

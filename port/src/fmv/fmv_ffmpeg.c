@@ -46,6 +46,7 @@ struct recvx_fmv {
     int                width, height;
     int                have_frame;
     int                eof;
+    double             cur_pts_s; /* PTS of last decoded video frame, seconds */
 };
 
 /* --- I/O glue between libavformat and the ISO reader ------------------ */
@@ -198,8 +199,9 @@ void recvx_fmv_close(recvx_fmv_t* f) {
 const void* recvx_fmv_pixels(const recvx_fmv_t* f) {
     return (f && f->have_frame) ? f->rgba_frame->data[0] : NULL;
 }
-int recvx_fmv_width (const recvx_fmv_t* f) { return f ? f->width  : 0; }
-int recvx_fmv_height(const recvx_fmv_t* f) { return f ? f->height : 0; }
+int    recvx_fmv_width (const recvx_fmv_t* f) { return f ? f->width  : 0; }
+int    recvx_fmv_height(const recvx_fmv_t* f) { return f ? f->height : 0; }
+double recvx_fmv_pts_s (const recvx_fmv_t* f) { return f ? f->cur_pts_s : 0.0; }
 
 bool recvx_fmv_advance(recvx_fmv_t* f) {
     if (!f || f->eof) return false;
@@ -217,6 +219,12 @@ bool recvx_fmv_advance(recvx_fmv_t* f) {
         av_packet_unref(f->pkt);
         int got = avcodec_receive_frame(f->vdec, f->dec_frame);
         if (got == 0) {
+            int64_t pts = f->dec_frame->best_effort_timestamp;
+            if (pts == AV_NOPTS_VALUE) pts = f->dec_frame->pts;
+            if (pts != AV_NOPTS_VALUE) {
+                AVRational tb = f->fmt->streams[f->video_idx]->time_base;
+                f->cur_pts_s = (double)pts * av_q2d(tb);
+            }
             sws_scale(f->sws,
                       (const uint8_t* const*)f->dec_frame->data,
                       f->dec_frame->linesize,
