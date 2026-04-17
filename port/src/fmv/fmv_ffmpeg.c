@@ -391,22 +391,23 @@ static void pump_pss_audio(recvx_fmv_t* f) {
                                     (p[14] << 16) | (p[15] << 24));
                 f->aud_ch   = (int)(p[16] | (p[17] << 8) |
                                     (p[18] << 16) | (p[19] << 24));
-                /* Data is planar stereo in 1024-sample-per-channel blocks
-                 * (4096-byte block-pairs) spanning PES boundaries. The
-                 * earlier "no boundary at packet midpoint" was because
-                 * block boundaries don't align with packet midpoints —
-                 * each packet contains fragments of multiple blocks.
-                 * Accumulate whole block-pairs in aud_inter_buf and
-                 * de-interleave before sending to the sink.  */
-                int block_samples = 1024;
+                /* Block size = samples-per-channel-per-block, read from
+                 * SShd offset 20. Total samples-per-channel in the file
+                 * (10,099,200) divides cleanly by 512 but not by 1024,
+                 * proving 512 is correct despite earlier experiments
+                 * preferring 1024 (those were polluted by the device-rate
+                 * and byte-drop bugs that have since been fixed). */
+                int block_samples = (int)(p[20] | (p[21] << 8) |
+                                          (p[22] << 16) | (p[23] << 24));
+                if (block_samples <= 0) block_samples = 512;
                 f->aud_block_bytes = block_samples * 2 * 2;
                 f->aud_inter_buf   = (uint8_t*)malloc(f->aud_block_bytes);
                 f->aud_inter_used  = 0;
                 f->aud_ssbd_seen   = 0;
                 f->aud_header_seen = 1;
                 RX_LOG("fmv",
-                       "PSS audio: %d Hz %d ch, planar %d-sample blocks",
-                       f->aud_rate, f->aud_ch, block_samples);
+                       "PSS audio: %d Hz %d ch, planar %d samples/ch/block (%d-byte block-pair)",
+                       f->aud_rate, f->aud_ch, block_samples, f->aud_block_bytes);
                 p += 24; payload_size -= 24;
             }
 
