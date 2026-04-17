@@ -25,7 +25,9 @@ static int            g_fmv_w, g_fmv_h;
 static bool           g_fmv_valid;
 
 static SDL_AudioDeviceID g_audio_dev;
-static int               g_audio_rate;
+static int               g_audio_rate;        /* source rate we were asked to play */
+static int               g_device_rate;       /* rate SDL actually opened */
+static SDL_AudioStream*  g_audio_stream;      /* non-NULL when conversion is needed */
 
 static int gl_init(const recvx_backend_config* cfg) {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_AUDIO) != 0) {
@@ -57,6 +59,7 @@ static int gl_init(const recvx_backend_config* cfg) {
 }
 
 static void gl_shutdown(void) {
+    if (g_audio_stream) { SDL_FreeAudioStream(g_audio_stream); g_audio_stream = NULL; }
     if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
     if (g_fmv_tex) { glDeleteTextures(1, &g_fmv_tex); g_fmv_tex = 0; }
     if (g_glctx)   { SDL_GL_DeleteContext(g_glctx); g_glctx = NULL; }
@@ -128,27 +131,28 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
 
 static void gl_audio_init(int sample_rate) {
     if (g_audio_dev && g_audio_rate == sample_rate) return;
-    if (g_audio_dev) { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
+    if (g_audio_stream) { SDL_FreeAudioStream(g_audio_stream); g_audio_stream = NULL; }
+    if (g_audio_dev)    { SDL_CloseAudioDevice(g_audio_dev); g_audio_dev = 0; }
 
-    /* Diagnostic: log the default audio device's native spec before we
-     * try to open one at 48 kHz. If the device runs at 96 kHz, SDL's
-     * internal resampling could explain the 2× playback issue even
-     * though have.freq looks correct to us. */
+    /* Query the default device's native rate. SDL's QueueAudio path on
+     * WASAPI doesn't always honor a mismatched `want.freq`: it reports
+     * our requested rate back through `have.freq` but the underlying
+     * device runs at its own rate, so queued bytes play at the device's
+     * effective rate (2× fast when device=96 kHz and want=48 kHz). The
+     * fix is to open at the *device's* rate and do our own conversion
+     * through SDL_AudioStream. */
     SDL_AudioSpec default_spec = {0};
-    char* default_name = NULL;
-    if (SDL_GetDefaultAudioInfo(&default_name, &default_spec, 0) == 0) {
+    int device_rate = sample_rate;
+    if (SDL_GetDefaultAudioInfo(NULL, &default_spec, 0) == 0 &&
+        default_spec.freq > 0) {
+        device_rate = default_spec.freq;
         RX_LOG("backend_gl",
-               "default audio device: '%s' freq=%d ch=%d fmt=0x%04x samples=%d",
-               default_name ? default_name : "(null)",
-               default_spec.freq, default_spec.channels,
-               default_spec.format, default_spec.samples);
-        if (default_name) SDL_free(default_name);
-    } else {
-        RX_LOG("backend_gl", "SDL_GetDefaultAudioInfo failed: %s", SDL_GetError());
+               "default device reports freq=%d, opening SDL at that rate",
+               device_rate);
     }
 
     SDL_AudioSpec want = {0}, have = {0};
-    want.freq     = sample_rate;
+    want.freq     = device_rate;
     want.format   = AUDIO_S16SYS;
     want.channels = 2;
     want.samples  = 1024;
@@ -157,17 +161,49 @@ static void gl_audio_init(int sample_rate) {
         RX_LOG("backend_gl", "SDL_OpenAudioDevice: %s", SDL_GetError());
         return;
     }
-    g_audio_rate = have.freq;
+    g_device_rate = have.freq;
+    g_audio_rate  = sample_rate;
     RX_LOG("backend_gl",
-           "SDL audio opened: freq=%d ch=%d fmt=0x%04x silence=%d samples=%d (wanted freq=%d ch=%d)",
-           have.freq, have.channels, have.format, have.silence,
-           have.samples, want.freq, want.channels);
+           "SDL audio opened: device freq=%d ch=%d (source freq=%d)",
+           have.freq, have.channels, sample_rate);
+
+    /* If our source rate differs from the device rate, SDL_AudioStream
+     * handles the resampling. We put at source rate/format/channels and
+     * get at device rate/format/channels. */
+    if (sample_rate != have.freq) {
+        g_audio_stream = SDL_NewAudioStream(
+            AUDIO_S16SYS, 2, sample_rate,
+            have.format, have.channels, have.freq);
+        if (!g_audio_stream) {
+            RX_LOG("backend_gl", "SDL_NewAudioStream failed: %s", SDL_GetError());
+        } else {
+            RX_LOG("backend_gl",
+                   "conversion stream: %d Hz → %d Hz", sample_rate, have.freq);
+        }
+    }
     SDL_PauseAudioDevice(g_audio_dev, 0);
 }
 
 static void gl_audio_queue(const void* samples, int byte_count) {
     if (!g_audio_dev || !samples || byte_count <= 0) return;
-    SDL_QueueAudio(g_audio_dev, samples, (Uint32)byte_count);
+    if (!g_audio_stream) {
+        SDL_QueueAudio(g_audio_dev, samples, (Uint32)byte_count);
+        return;
+    }
+    /* Push source-rate bytes into the conversion stream, drain whatever
+     * it produces at device rate into the SDL audio queue. */
+    if (SDL_AudioStreamPut(g_audio_stream, samples, byte_count) != 0) {
+        RX_LOG("backend_gl", "SDL_AudioStreamPut: %s", SDL_GetError());
+        return;
+    }
+    uint8_t chunk[8192];
+    int available;
+    while ((available = SDL_AudioStreamAvailable(g_audio_stream)) > 0) {
+        int want = available > (int)sizeof(chunk) ? (int)sizeof(chunk) : available;
+        int got = SDL_AudioStreamGet(g_audio_stream, chunk, want);
+        if (got <= 0) break;
+        SDL_QueueAudio(g_audio_dev, chunk, (Uint32)got);
+    }
 }
 
 static const recvx_backend g_gl = {
