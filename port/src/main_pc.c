@@ -31,6 +31,14 @@ extern void         njUserExit(void);
 extern int  MountSoundAfs(void);
 extern void recvx_set_gamedata_dir(const char* dir);
 
+/* Defined in adv.c. Normally called from sdfunc.c SoundSetup (which we
+ * don't compile). Must run AFTER MountSoundAfs so PatId[3] is valid
+ * when MountAdvAfs latches it into AdvWork.PatId — otherwise the first
+ * Adv_FirstWarningMessage mode-4 call reads from partition 0
+ * (BGM1.AFS) instead of partition 3 (ADV.AFS). Idempotent: the
+ * AdvFirstInitFlag guard makes re-entry a no-op. */
+extern void InitAdvSystem(void);
+
 static uint32_t now_ms(void) {
     return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
 }
@@ -214,6 +222,8 @@ static int run_game_loop(const recvx_backend* backend) {
     if (MountSoundAfs() != 0) {
         RX_LOG("game", "WARN: MountSoundAfs failed — boot chain will stall");
     }
+    InitAdvSystem();
+    RX_LOG("game", "InitAdvSystem done (AdvWork.PatId latched to PatId[3]=%d)", 3);
 
     RX_LOG("game", "entering njUserMain loop");
 
