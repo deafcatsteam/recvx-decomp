@@ -60,9 +60,8 @@ void* bhGetFreeMemory(unsigned int size, int align) {
     return malloc(size);
 }
 
-void bhChangeHWSetting(void) {}
+/* bhChangeHWSetting + bhCheckSubTask live in system.c — don't stub. */
 void bhMainSequence(void)    {}
-void bhCheckSubTask(void)    {}
 void bhControlEvent(void)    {}
 void bhControlMessage(int m) { (void)m; }
 int  bhControlMap(void)      { return 0; }
@@ -133,6 +132,80 @@ int Adv_GameOptionScreen(void)    { return 1; }
  * ---------------------------------------------------------------------- */
 void InitGameSoundSystem(void)                       {}
 void RequestAllStopSoundEx(int a,int b,int c)        { (void)a;(void)b;(void)c; }
+
+/* ----------------------------------------------------------------------
+ * Pad layer (pdGetPeripheral is the low-level KATANA sg_pad.h entry —
+ * route it through our njGetPeripheral impl so both paths see the same
+ * peripheral state). padman.c globals are stubbed here until we bring
+ * the real padman.c into recvx_game.
+ * ---------------------------------------------------------------------- */
+extern const void* njGetPeripheral(uint32_t port);
+const void* pdGetPeripheral(uint32_t port) { return njGetPeripheral(port); }
+
+int SoftResetFlag;
+void ClearSoftResetKeyFlag(int id) { (void)id; SoftResetFlag = 0; }
+
+/* ----------------------------------------------------------------------
+ * Sound / SFX stubs — live in ps2_sg_sybt.c / sound.c once compiled.
+ * ---------------------------------------------------------------------- */
+void CallSystemVoice(int a, int b)                { (void)a;(void)b; }
+void RequestRoomSoundBank(int a)                  { (void)a; }
+void RequestArmsSoundBank(int a)                  { (void)a; }
+void RequestPlayerVoiceSoundBank(int a)           { (void)a; }
+int  CheckTransEndSoundBank(int a)                { (void)a; return 1; }
+int  GetRoomSoundCaseNo(void)                     { return 0; }
+void AllStopEnemySe(void)                         {}
+void SendSoundCommand(int a, int b, int c, int d) { (void)a;(void)b;(void)c;(void)d; }
+void ExecSoundSystemMonitor(void)                 {}
+
+/* ----------------------------------------------------------------------
+ * Movie / file request stubs (real bodies in ps2_sfd_mw.c, file.c).
+ * ---------------------------------------------------------------------- */
+int  RequestReadIsoFile(int a, int b)    { (void)a;(void)b; return 0; }
+int  RequestReadInsideFile(int a, int b) { (void)a;(void)b; return 0; }
+int  GetIsoFileSize(int a)               { (void)a; return 0; }
+int  GetInsideFileSize(int a)            { (void)a; return 0; }
+int  GetReadFileStatus(int a)            { (void)a; return 1; /* ready */ }
+int  PlayStartMovieEx(int a, int b)      { (void)a;(void)b; return 0; }
+int  PlayStopMovieEx(void)               { return 0; }
+int  WaitPrePlayMovie(void)              { return 1; }
+int  PlayMovieMain(void)                 { return 0; }
+void mwPlySetDispMode(int m)             { (void)m; }
+
+/* ----------------------------------------------------------------------
+ * Sub-task handlers (itemselect, typewriter, ending, monitor etc.).
+ * ---------------------------------------------------------------------- */
+int  ItemTaskCheck(void)    { return 0; }
+int  StatusMain(void)       { return 0; }
+void ControlTypewriter(void){}
+int  ControlRanking(void)   { return 0; }
+void Expand(void)           {}
+void AllItemInit(void)      {}
+void SbsTextureInit(void)   {}
+void StatusMapFlagInit(void){}
+void TypewriterKeepMemory(void) {}
+void Ps2ClearOT(void)       {}
+
+/* ----------------------------------------------------------------------
+ * EE cache-flush intrinsic — no-op on PC.
+ * ---------------------------------------------------------------------- */
+void FlushCache(int mode)   { (void)mode; }
+
+/* ----------------------------------------------------------------------
+ * More globals the game references. Most are never read/written during
+ * the boot chain, so zero-init is fine.
+ * ---------------------------------------------------------------------- */
+void*        _nj_vertex_buf_;
+float        FontScaleX  = 1.0f;
+float        FontScaleCR = 1.0f;
+int          FontSz      = 13;
+int          BackColorFlag;
+int          Ps2_albinoid_flag;
+int          Ps2_ice_flag;
+int          Ps2_rendertex_initflag;
+unsigned int Ps2_pad;
+unsigned int Pad_act;
+int          WpnTab[256];
 
 /* ----------------------------------------------------------------------
  * Additional nj* functions beyond what stub_ninja.c already covers.

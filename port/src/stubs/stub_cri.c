@@ -9,5 +9,5 @@
 
 void InitFirstSofdec(void)             {}
 void PS2_jikken(void)                  {}
-int  bhCalcVtxBuffer(int a,int b,int c){ (void)a;(void)b;(void)c; return 0; }
 void bhCheckSoftReset(void)            {}
+/* bhCalcVtxBuffer lives in system.c — don't stub, would multiply-define. */

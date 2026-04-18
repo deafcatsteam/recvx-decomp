@@ -220,6 +220,14 @@ if(RECVX_BUILD_GAME)
             -include ${CMAKE_CURRENT_SOURCE_DIR}/include/recvx_game_prelude.h)
     endif()
     target_link_libraries(recvx_game PUBLIC recvx_port_stubs)
+    # MSVC 2015+ inlined the printf/sprintf/scanf family into stdio.h.
+    # Code compiled without the inline header visible (system.c triggers
+    # a C4013 "sprintf assumed extern int") emits direct calls to the
+    # old out-of-line names. legacy_stdio_definitions.lib ships those
+    # symbols as forwards into the inline impls, satisfying the linker.
+    if(MSVC)
+        target_link_libraries(recvx_game PUBLIC legacy_stdio_definitions)
+    endif()
 
     target_link_libraries(recvx_pc PRIVATE recvx_game)
     message(STATUS "RECVX PC port: game source ENABLED (phase 2+)")
