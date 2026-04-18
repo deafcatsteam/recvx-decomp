@@ -100,16 +100,60 @@ static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso) {
     return 0;
 }
 
+/* SYS_WORK* sys from decomp main.c. offsets per types.h:
+ *   0x54 = tk_flg (task-run bitmap — bit i means bhSysTaskJumpTab[i] active)
+ *   0x58 = ts_flg (task-suspend bitmap) */
+extern void* sys;
+#define SYS_TK_FLG(s) (*(uint32_t*)((char*)(s) + 0x54))
+#define SYS_TS_FLG(s) (*(uint32_t*)((char*)(s) + 0x58))
+
+static const char* task_name(int bit) {
+    static const char* names[] = {
+        "Init","Warning","Ipl","Firstmovie","Title","Opening","Pad","Game",
+        "Event","Itemselect","Map","Doordemo","Movie","Ending","Gameover",
+        "Typewriter","Option","CompEvent","DiscChange","SoundMuseum",
+        "Monitor","SndMonitor","ScreenSaver"
+    };
+    return (bit >= 0 && bit < 23) ? names[bit] : "?";
+}
+
+static void log_task_flags(uint32_t tk, uint32_t ts) {
+    char active[256] = {0};
+    size_t used = 0;
+    for (int i = 0; i < 23; ++i) {
+        if (tk & (1u << i)) {
+            int n = snprintf(active + used, sizeof(active) - used,
+                             "%s%s", used ? "," : "", task_name(i));
+            if (n > 0) used += (size_t)n;
+        }
+    }
+    RX_LOG("game", "tk_flg=0x%08x ts_flg=0x%08x active=[%s]",
+           tk, ts, active);
+}
+
 static int run_game_loop(const recvx_backend* backend) {
     RX_LOG("game", "calling njUserInit...");
     njUserInit();
     RX_LOG("game", "njUserInit returned; entering njUserMain loop");
 
+    uint32_t prev_tk = 0xFFFFFFFF;
+    uint32_t prev_ts = 0xFFFFFFFF;
+    int frame = 0;
     while (backend->pump_events()) {
         backend->begin_frame();
         recvx_input_new_frame();
         njUserMain();
         backend->end_frame();
+
+        uint32_t tk = SYS_TK_FLG(sys);
+        uint32_t ts = SYS_TS_FLG(sys);
+        if (tk != prev_tk || ts != prev_ts) {
+            RX_LOG("game", "frame %d: task flags changed", frame);
+            log_task_flags(tk, ts);
+            prev_tk = tk;
+            prev_ts = ts;
+        }
+        ++frame;
     }
 
     njUserExit();

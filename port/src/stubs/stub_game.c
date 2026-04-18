@@ -54,10 +54,12 @@ void bhInitVSync(void)   {}
 void bhFontScaleSet(float a, float b, float c) { (void)a;(void)b;(void)c; }
 
 /* bhGetFreeMemory is a bump allocator in the real game. Back it with
- * plain malloc for now — the game will just leak until we free it. */
+ * calloc — zero-init so stubbed RequestReadInsideFile (which doesn't
+ * actually read anything) leaves the buffer in a predictable state;
+ * AdvGetResourcePtr offset reads will see 0s not UB. */
 void* bhGetFreeMemory(unsigned int size, int align) {
     (void)align;
-    return malloc(size);
+    return calloc(size ? size : 1, 1);
 }
 
 /* bhChangeHWSetting + bhCheckSubTask live in system.c — don't stub. */
@@ -152,11 +154,21 @@ void ExecSoundSystemMonitor(void)                 {}
 /* ----------------------------------------------------------------------
  * Movie / file request stubs (real bodies in ps2_sfd_mw.c, file.c).
  * ---------------------------------------------------------------------- */
-int  RequestReadIsoFile(int a, int b)    { (void)a;(void)b; return 0; }
-int  RequestReadInsideFile(int a, int b) { (void)a;(void)b; return 0; }
-int  GetIsoFileSize(int a)               { (void)a; return 0; }
-int  GetInsideFileSize(int a)            { (void)a; return 0; }
-int  GetReadFileStatus(int a)            { (void)a; return 1; /* ready */ }
+/* Semantics from CheckReadEndAdvInsideFile2 (adv.c line 348):
+ *   GetReadFileStatus return 0 = done loading (advance state)
+ *                     return 1 = still loading (stay in mode)
+ *                     return -1 = error (bail to Mode=-1)
+ * Stubs return 0 so boot-chain state machines don't wedge waiting for
+ * a fake async read to finish. ptr buffers returned by bhGetFreeMemory
+ * are zero-filled (calloc) so downstream AdvGetResourcePtr reads produce
+ * predictable nulls instead of undefined-memory crashes.
+ * GetInsideFileSize returns 1024 — small but non-zero so bhGetFreeMemory
+ * allocates a real buffer that AdvGetResourcePtr can safely offset into. */
+int  RequestReadIsoFile(int a, int b, void* dst)    { (void)a;(void)b;(void)dst; return 0; }
+int  RequestReadInsideFile(int a, int b, void* dst) { (void)a;(void)b;(void)dst; return 0; }
+int  GetIsoFileSize(int a)               { (void)a; return 1024; }
+int  GetInsideFileSize(int a, int b)     { (void)a;(void)b; return 1024; }
+int  GetReadFileStatus(void)             { return 0; /* done */ }
 int  PlayStartMovieEx(int a, int b)      { (void)a;(void)b; return 0; }
 int  PlayStopMovieEx(void)               { return 0; }
 int  WaitPrePlayMovie(void)              { return 1; }
