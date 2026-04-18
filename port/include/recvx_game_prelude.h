@@ -70,4 +70,17 @@ typedef unsigned int Uint32;
 /* --- 5. Port build flag --------------------------------------------- */
 #define RECVX_PC_PORT 1
 
+/* --- 6. Opaque types referenced by decomp headers without forward decl --
+ * adxwrap.h uses ADX_FS* / ADX_TALK* but never includes the CRI headers
+ * that define them (MWCC was apparently lenient). ps2_MemoryCard..h uses
+ * sceMcTblGetDir* in a function parameter; libmc.h from PS2 SDK defines
+ * the real struct but isn't on this header's include chain. Forward-
+ * declaring here as empty structs is enough for pointer-only uses. */
+struct ADX_FS;
+typedef struct ADX_FS         ADX_FS;
+struct ADX_TALK;
+typedef struct ADX_TALK       ADX_TALK;
+struct sceMcTblGetDir;
+typedef struct sceMcTblGetDir sceMcTblGetDir;
+
 #endif /* RECVX_GAME_PRELUDE_H */
