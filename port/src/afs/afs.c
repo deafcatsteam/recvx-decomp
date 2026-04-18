@@ -26,8 +26,13 @@ recvx_afs_t* recvx_afs_open(const char* path) {
         return NULL;
     }
     unsigned char hdr[8];
-    if (fread(hdr, 1, 8, fp) != 8 || memcmp(hdr, "AFS\0", 4) != 0) {
-        RX_LOG("afs", "bad magic in %s", path);
+    /* Magic is "AFS" followed by 0x00 or 0x20 — SYSTEM.AFS uses
+     * "AFS\0" while MULTSPQ?.AFS uses "AFS " (with trailing space).
+     * Both are standard Sega AFS, just a minor variant. */
+    if (fread(hdr, 1, 8, fp) != 8 || memcmp(hdr, "AFS", 3) != 0 ||
+        (hdr[3] != 0x00 && hdr[3] != 0x20)) {
+        RX_LOG("afs", "bad magic in %s (first4=%02x %02x %02x %02x)",
+               path, hdr[0], hdr[1], hdr[2], hdr[3]);
         fclose(fp);
         return NULL;
     }

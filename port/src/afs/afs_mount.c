@@ -57,25 +57,35 @@ extern void* sys;
 
 /* Called by adv.c ResetAdvSystem path (line 3737) and from main_pc.c
  * right after njUserInit so the AFS archives are open before the first
- * Adv_FirstWarningMessage tick. */
+ * Adv_FirstWarningMessage tick.
+ *
+ * Resilient: keeps going on per-partition failures. The boot chain
+ * (Warning / Ipl / Title) only reads from partition 6 (SYSTEM) and
+ * partition 3 (ADV); the rest are used later for BGM / voice / item
+ * menus and can fail to open without blocking progress. Partition IDs
+ * are still set unconditionally so read attempts into missing archives
+ * fall through to the -1 return in RequestReadInsideFile instead of
+ * accidentally hitting a different archive (which happened when we
+ * returned early and sys_partid stayed at its zero-init value,
+ * steering Warning's SYSTEM.AFS reads into BGM1.AFS). */
 int MountSoundAfs(void) {
     if (g_mounted) return 0;
     if (!g_gamedata[0]) {
         RX_LOG("afs", "MountSoundAfs: no --gamedata dir set");
         return -1;
     }
+    int opened = 0;
     for (int i = 0; g_afs_name[i]; ++i) {
         char path[512];
         snprintf(path, sizeof path, "%s/%s", g_gamedata, g_afs_name[i]);
         g_afs[i] = recvx_afs_open(path);
-        if (!g_afs[i]) {
-            RX_LOG("afs", "MountSoundAfs: failed to open partition %d (%s)",
-                   i, g_afs_name[i]);
-            return -1;
-        }
+        if (g_afs[i]) ++opened;
+        else          RX_LOG("afs", "skip partition %d (%s)", i, g_afs_name[i]);
     }
-    /* sdfunc.c:435..442 — set partition ids on success. Matching the
-     * table index is enough since we key lookups by id directly. */
+    /* sdfunc.c:435..442 — assign partition ids whether or not every
+     * file opened. PatId[-1] (the default) is a valid "missing" marker
+     * that downstream code treats as do-nothing; what we can't have is
+     * sys_partid staying 0 and routing reads to the wrong archive. */
     PatId[0] = 0;   /* BGM1      */
     PatId[1] = 1;   /* VOICE1    */
     PatId[2] = 2;   /* MULTSPQ1  */
@@ -84,8 +94,12 @@ int MountSoundAfs(void) {
     SYS_U32_AT(0x3C) = 5; /* dor_partid */
     SYS_U32_AT(0x30) = 6; /* sys_partid */
     g_mounted = 1;
-    RX_LOG("afs", "mounted 7 partitions; sys_partid=6 itm_partid=4 dor_partid=5");
-    return 0;
+    /* Warning / Title rely on SYSTEM (6) + ADV (3). Fail only if those
+     * two are missing. */
+    int ok = (g_afs[6] != NULL) && (g_afs[3] != NULL);
+    RX_LOG("afs", "mounted %d/7 partitions; sys_partid=6 itm_partid=4 dor_partid=5 (%s)",
+           opened, ok ? "boot OK" : "boot BLOCKED — SYSTEM/ADV missing");
+    return ok ? 0 : -1;
 }
 
 void UnmountSoundAfs(void) {
