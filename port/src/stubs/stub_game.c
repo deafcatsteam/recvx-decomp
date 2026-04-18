@@ -114,18 +114,9 @@ void bhDispMessage(float x,float y,float z,int a,int b,int c,int d){(void)x;(voi
 void bhDispMessageEx(float x,float y,float z,int a,int b,int c,int d){(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)d;}
 void bhDispTime(void* pos,int n,int tim,int col,float z){(void)pos;(void)n;(void)tim;(void)col;(void)z;}
 
-/* ----------------------------------------------------------------------
- * Adv_* — screens implemented in adv.c. Returning 1 makes bhSysCall*
- * advance to the next task immediately so we get out of the boot chain
- * into Title without needing real rendering. Returning 0 would stall
- * forever on the warning screen.
- * ---------------------------------------------------------------------- */
-int Adv_FirstWarningMessage(void) { return 1; }
-int Adv_CapcomLogo(void)          { return 1; }
-int Adv_BioCvTitle(void)          { return 6; /* default: skip_save → Title */ }
-int Adv_ChangeDiscScreen(void)    { return 1; }
-int Adv_SoundMuseum(void)         { return 1; }
-int Adv_GameOptionScreen(void)    { return 1; }
+/* Adv_FirstWarningMessage / Adv_CapcomLogo / Adv_BioCvTitle /
+ * Adv_ChangeDiscScreen / Adv_SoundMuseum / Adv_GameOptionScreen all live
+ * in adv.c now (compiled into recvx_game). No stubs needed. */
 
 /* ----------------------------------------------------------------------
  * Sound (will be replaced by SDL audio once we wire it in phase 5b).
@@ -147,8 +138,8 @@ const void* pdGetPeripheral(uint32_t port) { return njGetPeripheral(port); }
 
 /* ----------------------------------------------------------------------
  * Sound / SFX stubs — live in ps2_sg_sybt.c / sound.c once compiled.
+ * CallSystemVoice lives in adv.c (line 50) — removed here.
  * ---------------------------------------------------------------------- */
-void CallSystemVoice(int a, int b)                { (void)a;(void)b; }
 void RequestRoomSoundBank(int a)                  { (void)a; }
 void RequestArmsSoundBank(int a)                  { (void)a; }
 void RequestPlayerVoiceSoundBank(int a)           { (void)a; }
@@ -224,6 +215,84 @@ void  njGarbageTexture(void* tl,int n){ (void)tl;(void)n; }
 void  njReleaseTexture(void* tl)      { (void)tl; }
 void  njReleaseTextureAll(void)       {}
 
+/* Additional nj* draw/texture primitives adv.c pulls in. All no-ops for
+ * now — black-screen gate. Wiring these to GL quads is the "pixels gate"
+ * that makes the title screen visible; until then menu logic runs blind. */
+void  njTextureFilterMode(int m)                   { (void)m; }
+void  njDrawPolygon(void* p, int n, int flag)      { (void)p;(void)n;(void)flag; }
+void  njMemCopy4(void* d, void* s, int n)          { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
+void  njLoadTexture(void* tl)                      { (void)tl; }
+void  njSetTexture(void* tl)                       { (void)tl; }
+void  njSetTextureNum(int n)                       { (void)n; }
+void  njSetTextureInfo(void* ti, int w, int h, int fmt) { (void)ti;(void)w;(void)h;(void)fmt; }
+void  njSetTextureName(void* tn, int id)           { (void)tn;(void)id; }
+int   njGetPaletteMode(void)                       { return 0; }
+void  njSetPaletteData(int mode, int offset, int count, void* data) {
+    (void)mode;(void)offset;(void)count;(void)data;
+}
+void  njQuadTextureStart(void)                     { }
+void  njQuadTextureEnd(void)                       { }
+void  njSetQuadTexture(void* q, int tex, int flag) { (void)q;(void)tex;(void)flag; }
+void  njDrawQuadTexture(void* q)                   { (void)q; }
+
+/* MSVC 2015+ has fabsf as intrinsic but C4013 shows compiler emitted
+ * extern call. Shim it to fabs. */
+#include <math.h>
+float fabsf_wrapper(float x) { return (float)fabs((double)x); }
+/* Supply a real fabsf symbol for the linker to satisfy the extern call. */
+#if !defined(fabsf)
+float fabsf(float x) { return (float)fabs((double)x); }
+#endif
+
+/* adxwrap.c isn't compiled yet — stub the handful adv.c calls. */
+void PlayAdx(unsigned int slot, unsigned int part, unsigned int file) {
+    (void)slot;(void)part;(void)file;
+}
+void StopAdx(unsigned int slot)                    { (void)slot; }
+void SetVolumeAdx2(unsigned int slot, float vol)   { (void)slot;(void)vol; }
+
+/* bh helpers not yet in a compiled .c */
+void bhSetFontTexture(void* p)                     { (void)p; }
+void bhReleaseFreeMemory(void* p)                  { (void)p; }
+
+/* Memory card — always report "no card" so title screen skips VM path. */
+void* CreateMemoryCard(void* pCard)                { (void)pCard; return pCard; }
+int   GetMcSelectPortType(void* pCard, unsigned int port) {
+    (void)pCard;(void)port; return 0;
+}
+int   CheckMcSelectPortInfoState(unsigned int port){ (void)port; return 0; }
+
+/* Sys load/save screens — always return "ready" so boot chain advances
+ * past the VM check in Adv_FirstWarningMessage mode 11. */
+void* CreateSysLoadScreen(void* s, void* arg)      { (void)s;(void)arg; return s; }
+int   ExecuteSysLoadScreen(void* ps)               { (void)ps; return 1; /* ok */ }
+void* CreateSysSaveScreen(void* s, void* arg)      { (void)s;(void)arg; return s; }
+int   ExecuteSysSaveScreen(void* ps)               { (void)ps; return 1; }
+void  SetAdjustDisplay(void)                       { }
+
+/* Sound config shims. */
+void  syCfgSetSoundMode(int mode)                  { (void)mode; }
+void  SetSoundModeEx(int mode)                     { (void)mode; }
+int   GetSoundMode(void)                           { return 0; }
+void  MountSoundAfs(void)                          { }
+void  UnmountSoundAfs(void)                        { }
+void  CallSystemSe(int id)                         { (void)id; }
+void  CallSystemSeBasic(int id)                    { (void)id; }
+
+/* Vibration extra. */
+void  StartVibrationEx(int port, int motor, int power, int time) {
+    (void)port;(void)motor;(void)power;(void)time;
+}
+void  StopVibrationEx(int port, int motor)         { (void)port;(void)motor; }
+
+/* Globals adv.c references. PatId is a music patch-id lookup table
+ * indexed by enum in the decomp; 256 entries is plenty. palbuf holds
+ * the current palette; Ps2_current_texmemlist is a pointer latched by
+ * texture-upload helpers. Zero-init all three. */
+int   PatId[256];
+unsigned int palbuf[256];
+void* Ps2_current_texmemlist;
+
 /* ----------------------------------------------------------------------
  * adv.c pulls in: sound bank (PlayBgm/Voice), vibration (vibman),
  * softreset key state, display adjust, AFS mount, ExitApplication,
@@ -234,7 +303,7 @@ void PlayBgmEx2(int a, int b, int c, int d) { (void)a;(void)b;(void)c;(void)d; }
 void PlayVoiceEx2(int a, int b, void* p, int c, int d, int e) {
     (void)a;(void)b;(void)p;(void)c;(void)d;(void)e;
 }
-void MountAdvAfs(void)                { }
+/* MountAdvAfs lives in adv.c (line 157) — don't stub. */
 void ExitApplication(void)            { /* boot chain shouldn't hit this */ }
 /* SetUseVibrationUnit, CheckSoftResetKeyFlag come from vibman.c / padman.c.
  * SetEventVibrationMode is in sdfunc.c (not compiled yet) so still stub. */
