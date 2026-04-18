@@ -93,6 +93,35 @@ typedef void (*recvx_fmv_audio_sink)(void* opaque, int sample_rate,
 void recvx_fmv_set_audio_sink(recvx_fmv_t* fmv,
                               recvx_fmv_audio_sink sink, void* opaque);
 
+/* --------------------------------------------------------------------------
+ * Input (Sega Ninja peripheral model).
+ *
+ * Game reads input via njGetPeripheral(port) which returns a PDS_PERIPHERAL*.
+ * We maintain that struct here driven by SDL keyboard + gamepad events.
+ * The backend calls recvx_input_set_key() from its event pump, and
+ * recvx_input_new_frame() before each njUserMain() to compute press/release
+ * edges from the previous frame's `on` snapshot.
+ * -------------------------------------------------------------------------- */
+/* Abstract scan-code enum so the backend doesn't leak SDL into the port. */
+typedef enum recvx_key {
+    RX_KEY_UP, RX_KEY_DOWN, RX_KEY_LEFT, RX_KEY_RIGHT,
+    RX_KEY_ACTION,   /* Cross / OK   */
+    RX_KEY_CANCEL,   /* Circle       */
+    RX_KEY_AIM,      /* Square       */
+    RX_KEY_MENU,     /* Triangle     */
+    RX_KEY_L1,
+    RX_KEY_R1,
+    RX_KEY_L2,
+    RX_KEY_R2,
+    RX_KEY_START,
+    RX_KEY_SELECT,
+    RX_KEY__COUNT
+} recvx_key;
+
+void recvx_input_set_key(recvx_key k, bool pressed);
+void recvx_input_set_stick(int axis_x, int axis_y);  /* -128..127 */
+void recvx_input_new_frame(void);  /* compute edges; call once per njUserMain */
+
 #ifdef __cplusplus
 }
 #endif

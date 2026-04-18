@@ -74,6 +74,8 @@ set(PORT_STUB_SOURCES
     src/stubs/stub_sg.c
     src/stubs/stub_cri.c
     src/stubs/stub_sb.c
+    src/stubs/stub_game.c
+    src/input/input.c
 )
 
 add_library(recvx_port_stubs STATIC ${PORT_STUB_SOURCES})

@@ -82,6 +82,26 @@ static void gl_end(void) {
     SDL_GL_SwapWindow(g_window);
 }
 
+static bool map_sdl_key(SDL_Keycode k, recvx_key* out) {
+    switch (k) {
+        case SDLK_UP:        *out = RX_KEY_UP;     return true;
+        case SDLK_DOWN:      *out = RX_KEY_DOWN;   return true;
+        case SDLK_LEFT:      *out = RX_KEY_LEFT;   return true;
+        case SDLK_RIGHT:     *out = RX_KEY_RIGHT;  return true;
+        case SDLK_z:         *out = RX_KEY_ACTION; return true;  /* Cross */
+        case SDLK_x:         *out = RX_KEY_CANCEL; return true;  /* Circle */
+        case SDLK_a:         *out = RX_KEY_AIM;    return true;  /* Square */
+        case SDLK_s:         *out = RX_KEY_MENU;   return true;  /* Triangle */
+        case SDLK_q:         *out = RX_KEY_L1;     return true;
+        case SDLK_w:         *out = RX_KEY_R1;     return true;
+        case SDLK_e:         *out = RX_KEY_L2;     return true;
+        case SDLK_r:         *out = RX_KEY_R2;     return true;
+        case SDLK_RETURN:    *out = RX_KEY_START;  return true;
+        case SDLK_BACKSPACE: *out = RX_KEY_SELECT; return true;
+        default: return false;
+    }
+}
+
 static bool gl_pump(void) {
     SDL_Event ev;
     while (SDL_PollEvent(&ev)) {
@@ -91,6 +111,12 @@ static bool gl_pump(void) {
             ev.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) {
             g_win_w = ev.window.data1;
             g_win_h = ev.window.data2;
+        }
+        if (ev.type == SDL_KEYDOWN || ev.type == SDL_KEYUP) {
+            recvx_key k;
+            if (!ev.key.repeat && map_sdl_key(ev.key.keysym.sym, &k)) {
+                recvx_input_set_key(k, ev.type == SDL_KEYDOWN);
+            }
         }
     }
     return !g_quit;
