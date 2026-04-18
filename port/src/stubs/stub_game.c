@@ -235,14 +235,12 @@ void  njQuadTextureEnd(void)                       { }
 void  njSetQuadTexture(void* q, int tex, int flag) { (void)q;(void)tex;(void)flag; }
 void  njDrawQuadTexture(void* q)                   { (void)q; }
 
-/* MSVC 2015+ has fabsf as intrinsic but C4013 shows compiler emitted
- * extern call. Shim it to fabs. */
-#include <math.h>
-float fabsf_wrapper(float x) { return (float)fabs((double)x); }
-/* Supply a real fabsf symbol for the linker to satisfy the extern call. */
-#if !defined(fabsf)
+/* adv.c calls fabsf but MSVC /Od can emit an out-of-line reference that
+ * the default lib chain doesn't satisfy. Provide an extern-linkage
+ * fabsf implemented via double fabs. Forward-declare fabs so we don't
+ * pull in <math.h> (which inlines fabsf and would collide). */
+extern double fabs(double);
 float fabsf(float x) { return (float)fabs((double)x); }
-#endif
 
 /* adxwrap.c isn't compiled yet — stub the handful adv.c calls. */
 void PlayAdx(unsigned int slot, unsigned int part, unsigned int file) {
