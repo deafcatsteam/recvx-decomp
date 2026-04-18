@@ -118,6 +118,17 @@ add_library(recvx_iso STATIC
 )
 target_include_directories(recvx_iso PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
 
+# AFS reader + boot-time glue that replaces sdfunc.c's file-request surface.
+# afs_mount.c defines PatId / MountSoundAfs / RequestReadInsideFile /
+# GetInsideFileSize / GetReadFileStatus — same signatures as sdfunc.c but
+# backed by loose AFS files on disk.
+add_library(recvx_afs STATIC
+    src/afs/afs.c
+    src/afs/afs_mount.c
+)
+target_include_directories(recvx_afs PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(recvx_afs PUBLIC recvx_port_stubs)
+
 if(FFMPEG_FOUND)
     set(FMV_SOURCES src/fmv/fmv_ffmpeg.c)
 else()
@@ -142,6 +153,7 @@ target_link_libraries(recvx_pc PRIVATE
     recvx_backend
     recvx_iso
     recvx_fmv
+    recvx_afs
     recvx_port_stubs
 )
 target_include_directories(recvx_pc PRIVATE
@@ -222,7 +234,7 @@ if(RECVX_BUILD_GAME)
         target_compile_options(recvx_game PRIVATE
             -include ${CMAKE_CURRENT_SOURCE_DIR}/include/recvx_game_prelude.h)
     endif()
-    target_link_libraries(recvx_game PUBLIC recvx_port_stubs)
+    target_link_libraries(recvx_game PUBLIC recvx_port_stubs recvx_afs)
     # MSVC 2015+ inlined the printf/sprintf/scanf family into stdio.h.
     # Code compiled without the inline header visible (system.c triggers
     # a C4013 "sprintf assumed extern int") emits direct calls to the

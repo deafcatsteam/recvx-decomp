@@ -153,27 +153,10 @@ void ExecSoundSystemMonitor(void)                 {}
 
 /* ----------------------------------------------------------------------
  * Movie / file request stubs (real bodies in ps2_sfd_mw.c, file.c).
+ * Note: RequestReadInsideFile / GetInsideFileSize / GetReadFileStatus /
+ * RequestReadIsoFile / GetIsoFileSize are implemented in
+ * port/src/afs/afs_mount.c — they are NOT stubs, they back real AFS reads.
  * ---------------------------------------------------------------------- */
-/* Semantics from CheckReadEndAdvInsideFile2 (adv.c line 348):
- *   GetReadFileStatus return 0 = done loading (advance state)
- *                     return 1 = still loading (stay in mode)
- *                     return -1 = error (bail to Mode=-1)
- *
- * We return 1 (safe stall) so the state machine freezes at whatever
- * mode is waiting on a read. Returning 0 let it advance into
- * AdvEasySetupTextureBasic / AdvGetResourcePtr paths which parse the
- * zero-filled dummy buffer as a texture header and AV on dereferencing
- * null field pointers inside it.
- *
- * The stall is deliberate: the goal is to demonstrate controls feed
- * into the ninja peripheral (visible via main_pc's button-edge log)
- * while the menu logic sits parked. Wiring a real AFS reader is the
- * next milestone — at that point flip this back to 0 on read complete. */
-int  RequestReadIsoFile(int a, int b, void* dst)    { (void)a;(void)b;(void)dst; return 0; }
-int  RequestReadInsideFile(int a, int b, void* dst) { (void)a;(void)b;(void)dst; return 0; }
-int  GetIsoFileSize(int a)               { (void)a; return 1024; }
-int  GetInsideFileSize(int a, int b)     { (void)a;(void)b; return 1024; }
-int  GetReadFileStatus(void)             { return 1; /* still loading — safe stall */ }
 int  PlayStartMovieEx(int a, int b)      { (void)a;(void)b; return 0; }
 int  PlayStopMovieEx(void)               { return 0; }
 int  WaitPrePlayMovie(void)              { return 1; }
@@ -289,8 +272,7 @@ void  SetAdjustDisplay(void)                       { }
 void  syCfgSetSoundMode(int mode)                  { (void)mode; }
 void  SetSoundModeEx(int mode)                     { (void)mode; }
 int   GetSoundMode(void)                           { return 0; }
-void  MountSoundAfs(void)                          { }
-void  UnmountSoundAfs(void)                        { }
+/* MountSoundAfs / UnmountSoundAfs now live in port/src/afs/afs_mount.c. */
 void  CallSystemSe(int id)                         { (void)id; }
 void  CallSystemSeBasic(int id)                    { (void)id; }
 
@@ -300,11 +282,9 @@ void  StartVibrationEx(int port, int motor, int power, int time) {
 }
 void  StopVibrationEx(int port, int motor)         { (void)port;(void)motor; }
 
-/* Globals adv.c references. PatId is a music patch-id lookup table
- * indexed by enum in the decomp; 256 entries is plenty. palbuf holds
- * the current palette; Ps2_current_texmemlist is a pointer latched by
- * texture-upload helpers. Zero-init all three. */
-int   PatId[256];
+/* Globals adv.c references. PatId is now owned by afs_mount.c (matches
+ * sdfunc.c:91 `int PatId[4]` exactly). palbuf holds the current palette;
+ * Ps2_current_texmemlist is a pointer latched by texture-upload helpers. */
 unsigned int palbuf[256];
 void* Ps2_current_texmemlist;
 

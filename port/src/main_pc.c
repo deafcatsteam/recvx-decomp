@@ -25,6 +25,12 @@ extern void         njUserInit(void);
 extern int32_t      njUserMain(void);
 extern void         njUserExit(void);
 
+/* Defined in port/src/afs/afs_mount.c. Must run AFTER njUserInit since
+ * MountSoundAfs wants sys->sys_partid / itm_partid / dor_partid writable
+ * and njUserInit allocates / zeroes the SYS_WORK block. */
+extern int  MountSoundAfs(void);
+extern void recvx_set_gamedata_dir(const char* dir);
+
 static uint32_t now_ms(void) {
     return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
 }
@@ -36,24 +42,29 @@ static void audio_sink_to_backend(void* opaque, int rate,
     if (b->audio_queue) b->audio_queue(pcm, bytes);
 }
 
-static const char* g_iso_path = NULL;
-static bool        g_run_game = false;
+static const char* g_iso_path      = NULL;
+static const char* g_gamedata_path = NULL;
+static bool        g_run_game      = false;
 
 static void parse_args(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
         if (strcmp(argv[i], "--iso") == 0 && i + 1 < argc) {
             g_iso_path = argv[++i];
+        } else if (strcmp(argv[i], "--gamedata") == 0 && i + 1 < argc) {
+            g_gamedata_path = argv[++i];
         } else if (strcmp(argv[i], "--game") == 0) {
             g_run_game = true;
         } else if (strcmp(argv[i], "--help") == 0) {
-            printf("usage: recvx_pc [--iso path\\to\\recvx.iso] [--game]\n"
-                   "  --game   run njUserInit/njUserMain task loop instead of FMV demo\n");
+            printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
+                   "                [--gamedata path\\to\\extracted\\dir]\n"
+                   "                [--game]\n"
+                   "  --game      run njUserInit/njUserMain task loop instead of FMV demo\n"
+                   "  --gamedata  dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n");
             exit(0);
         }
     }
-    if (!g_iso_path) {
-        g_iso_path = "recvx.iso";
-    }
+    if (!g_iso_path)      g_iso_path      = "recvx.iso";
+    if (!g_gamedata_path) g_gamedata_path = "C:\\Claude\\codeveronica\\gamedata";
 }
 
 #if defined(RECVX_HAVE_SDL2) && defined(_WIN32)
@@ -196,7 +207,15 @@ static void log_input_edges(uint32_t prev, uint32_t cur) {
 static int run_game_loop(const recvx_backend* backend) {
     RX_LOG("game", "calling njUserInit...");
     njUserInit();
-    RX_LOG("game", "njUserInit returned; entering njUserMain loop");
+    RX_LOG("game", "njUserInit returned");
+
+    RX_LOG("game", "gamedata dir: %s", g_gamedata_path);
+    recvx_set_gamedata_dir(g_gamedata_path);
+    if (MountSoundAfs() != 0) {
+        RX_LOG("game", "WARN: MountSoundAfs failed — boot chain will stall");
+    }
+
+    RX_LOG("game", "entering njUserMain loop");
 
     uint32_t prev_tk  = 0xFFFFFFFF;
     uint32_t prev_ts  = 0xFFFFFFFF;
@@ -233,6 +252,7 @@ int main(int argc, char** argv) {
     parse_args(argc, argv);
     RX_LOG("boot", "RECVX PC port — phase 5 scaffold");
     RX_LOG("boot", "ISO path: %s", g_iso_path);
+    RX_LOG("boot", "gamedata: %s", g_gamedata_path);
     RX_LOG("boot", "mode: %s", g_run_game ? "game" : "fmv-demo");
 
     recvx_iso_t* iso = recvx_iso_open(g_iso_path);
