@@ -122,6 +122,11 @@ void recvx_input_set_key(recvx_key k, bool pressed);
 void recvx_input_set_stick(int axis_x, int axis_y);  /* -128..127 */
 void recvx_input_new_frame(void);  /* compute edges; call once per njUserMain */
 
+/* Diagnostic snapshot of the Sega Ninja peripheral "on" bitmap for the
+ * main loop's input-change log. Bits follow PDD_DGT_* from sg_pad.h
+ * (e.g. bit 3 = Start, bit 5 = KD). Not part of the decomp's ABI. */
+uint32_t recvx_input_buttons(void);
+
 #ifdef __cplusplus
 }
 #endif

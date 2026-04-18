@@ -112,3 +112,7 @@ void recvx_input_new_frame(void) {
 const void* njGetPeripheral(uint32_t port) {
     return port == 0 ? (const void*)&g_per : NULL;
 }
+
+uint32_t recvx_input_buttons(void) {
+    return g_per.on;
+}

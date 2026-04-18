@@ -100,12 +100,18 @@ static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso) {
     return 0;
 }
 
-/* SYS_WORK* sys from decomp main.c. offsets per types.h:
- *   0x54 = tk_flg (task-run bitmap — bit i means bhSysTaskJumpTab[i] active)
- *   0x58 = ts_flg (task-suspend bitmap) */
+/* SYS_WORK* sys from decomp main.c. Offsets listed in types.h are for
+ * the PS2 32-bit ABI; on MSVC x64 the single `void* typ_exp` at 0x50
+ * grows from 4 to 8 bytes, shifting every subsequent field by +4.
+ *
+ *   types.h says: tk_flg @ 0x54, ts_flg @ 0x58
+ *   PC x64 real:  tk_flg @ 0x58, ts_flg @ 0x5C
+ *
+ * First crash log read 0x54/0x58 and saw tk_flg=0 ts_flg=0x300002 —
+ * the "tk_flg" slot had been looking at the low 4 bytes of typ_exp. */
 extern void* sys;
-#define SYS_TK_FLG(s) (*(uint32_t*)((char*)(s) + 0x54))
-#define SYS_TS_FLG(s) (*(uint32_t*)((char*)(s) + 0x58))
+#define SYS_TK_FLG(s) (*(uint32_t*)((char*)(s) + 0x58))
+#define SYS_TS_FLG(s) (*(uint32_t*)((char*)(s) + 0x5C))
 
 static const char* task_name(int bit) {
     static const char* names[] = {
@@ -131,13 +137,70 @@ static void log_task_flags(uint32_t tk, uint32_t ts) {
            tk, ts, active);
 }
 
+/* PDD_DGT_* bit -> short label, mirrors port/src/input/input.c. Covers
+ * only the digital buttons we actually pump from SDL. */
+static const char* button_name(int bit) {
+    switch (bit) {
+        case 0:  return "Sq";    /* TC */
+        case 1:  return "Ci";    /* TB */
+        case 2:  return "Cr";    /* TA */
+        case 3:  return "St";    /* ST */
+        case 4:  return "U";     /* KU */
+        case 5:  return "D";     /* KD */
+        case 6:  return "L";     /* KL */
+        case 7:  return "R";     /* KR */
+        case 8:  return "L2";    /* TZ */
+        case 9:  return "Tri";   /* TY */
+        case 10: return "R2";    /* TX */
+        case 11: return "TD";
+        case 16: return "R1";    /* TR */
+        case 17: return "L1";    /* TL */
+        default: return "?";
+    }
+}
+
+/* Dump a bitmap diff (old->new) as "Down U,Cr  Up Ci". Logs only when
+ * anything changed so held keys stay quiet. */
+static void log_input_edges(uint32_t prev, uint32_t cur) {
+    uint32_t down = cur  & ~prev;
+    uint32_t up   = prev & ~cur;
+    if (!down && !up) return;
+    char line[256] = {0};
+    size_t used = 0;
+    if (down) {
+        int n = snprintf(line + used, sizeof(line) - used, "Down ");
+        if (n > 0) used += (size_t)n;
+        int first = 1;
+        for (int i = 0; i < 32; ++i) if (down & (1u << i)) {
+            n = snprintf(line + used, sizeof(line) - used,
+                         "%s%s", first ? "" : ",", button_name(i));
+            if (n > 0) used += (size_t)n;
+            first = 0;
+        }
+    }
+    if (up) {
+        int n = snprintf(line + used, sizeof(line) - used,
+                         "%sUp ", down ? "  " : "");
+        if (n > 0) used += (size_t)n;
+        int first = 1;
+        for (int i = 0; i < 32; ++i) if (up & (1u << i)) {
+            n = snprintf(line + used, sizeof(line) - used,
+                         "%s%s", first ? "" : ",", button_name(i));
+            if (n > 0) used += (size_t)n;
+            first = 0;
+        }
+    }
+    RX_LOG("input", "%s (on=0x%08x)", line, cur);
+}
+
 static int run_game_loop(const recvx_backend* backend) {
     RX_LOG("game", "calling njUserInit...");
     njUserInit();
     RX_LOG("game", "njUserInit returned; entering njUserMain loop");
 
-    uint32_t prev_tk = 0xFFFFFFFF;
-    uint32_t prev_ts = 0xFFFFFFFF;
+    uint32_t prev_tk  = 0xFFFFFFFF;
+    uint32_t prev_ts  = 0xFFFFFFFF;
+    uint32_t prev_btn = 0;
     int frame = 0;
     while (backend->pump_events()) {
         backend->begin_frame();
@@ -152,6 +215,12 @@ static int run_game_loop(const recvx_backend* backend) {
             log_task_flags(tk, ts);
             prev_tk = tk;
             prev_ts = ts;
+        }
+
+        uint32_t btn = recvx_input_buttons();
+        if (btn != prev_btn) {
+            log_input_edges(prev_btn, btn);
+            prev_btn = btn;
         }
         ++frame;
     }

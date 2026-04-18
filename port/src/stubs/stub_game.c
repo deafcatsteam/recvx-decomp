@@ -158,17 +158,22 @@ void ExecSoundSystemMonitor(void)                 {}
  *   GetReadFileStatus return 0 = done loading (advance state)
  *                     return 1 = still loading (stay in mode)
  *                     return -1 = error (bail to Mode=-1)
- * Stubs return 0 so boot-chain state machines don't wedge waiting for
- * a fake async read to finish. ptr buffers returned by bhGetFreeMemory
- * are zero-filled (calloc) so downstream AdvGetResourcePtr reads produce
- * predictable nulls instead of undefined-memory crashes.
- * GetInsideFileSize returns 1024 — small but non-zero so bhGetFreeMemory
- * allocates a real buffer that AdvGetResourcePtr can safely offset into. */
+ *
+ * We return 1 (safe stall) so the state machine freezes at whatever
+ * mode is waiting on a read. Returning 0 let it advance into
+ * AdvEasySetupTextureBasic / AdvGetResourcePtr paths which parse the
+ * zero-filled dummy buffer as a texture header and AV on dereferencing
+ * null field pointers inside it.
+ *
+ * The stall is deliberate: the goal is to demonstrate controls feed
+ * into the ninja peripheral (visible via main_pc's button-edge log)
+ * while the menu logic sits parked. Wiring a real AFS reader is the
+ * next milestone — at that point flip this back to 0 on read complete. */
 int  RequestReadIsoFile(int a, int b, void* dst)    { (void)a;(void)b;(void)dst; return 0; }
 int  RequestReadInsideFile(int a, int b, void* dst) { (void)a;(void)b;(void)dst; return 0; }
 int  GetIsoFileSize(int a)               { (void)a; return 1024; }
 int  GetInsideFileSize(int a, int b)     { (void)a;(void)b; return 1024; }
-int  GetReadFileStatus(void)             { return 0; /* done */ }
+int  GetReadFileStatus(void)             { return 1; /* still loading — safe stall */ }
 int  PlayStartMovieEx(int a, int b)      { (void)a;(void)b; return 0; }
 int  PlayStopMovieEx(void)               { return 0; }
 int  WaitPrePlayMovie(void)              { return 1; }
