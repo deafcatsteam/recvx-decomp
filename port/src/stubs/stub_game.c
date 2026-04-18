@@ -142,8 +142,8 @@ void RequestAllStopSoundEx(int a,int b,int c)        { (void)a;(void)b;(void)c; 
 extern const void* njGetPeripheral(uint32_t port);
 const void* pdGetPeripheral(uint32_t port) { return njGetPeripheral(port); }
 
-int SoftResetFlag;
-void ClearSoftResetKeyFlag(int id) { (void)id; SoftResetFlag = 0; }
+/* SoftResetFlag + ClearSoftResetKeyFlag + CheckSoftResetKeyFlag come from
+ * padman.c now that it's compiled into recvx_game. */
 
 /* ----------------------------------------------------------------------
  * Sound / SFX stubs — live in ps2_sg_sybt.c / sound.c once compiled.
@@ -223,3 +223,31 @@ int   njCalcTexture(int mode)         { (void)mode; return 0; }
 void  njGarbageTexture(void* tl,int n){ (void)tl;(void)n; }
 void  njReleaseTexture(void* tl)      { (void)tl; }
 void  njReleaseTextureAll(void)       {}
+
+/* ----------------------------------------------------------------------
+ * adv.c pulls in: sound bank (PlayBgm/Voice), vibration (vibman),
+ * softreset key state, display adjust, AFS mount, ExitApplication,
+ * Ps2 texture helpers. Most are plain no-ops; CheckSoftResetKeyFlag
+ * returns 0 so the title screen never thinks we pressed L1+R1+Start+Sel.
+ * ---------------------------------------------------------------------- */
+void PlayBgmEx2(int a, int b, int c, int d) { (void)a;(void)b;(void)c;(void)d; }
+void PlayVoiceEx2(int a, int b, void* p, int c, int d, int e) {
+    (void)a;(void)b;(void)p;(void)c;(void)d;(void)e;
+}
+void MountAdvAfs(void)                { }
+void ExitApplication(void)            { /* boot chain shouldn't hit this */ }
+/* SetUseVibrationUnit, CheckSoftResetKeyFlag come from vibman.c / padman.c.
+ * SetEventVibrationMode is in sdfunc.c (not compiled yet) so still stub. */
+void SetEventVibrationMode(int m)     { (void)m; }
+
+/* KATANA pad-vib rumble primitives — no-op on PC. Keeps vibman.c linking. */
+int  pdVibMxIsReady(uint32_t port)                    { (void)port; return 1; }
+void pdVibMxSetStopTime(uint32_t port, uint32_t time) { (void)port;(void)time; }
+void pdVibMxStart(uint32_t port, int motor, int power){ (void)port;(void)motor;(void)power; }
+void pdVibMxStop(uint32_t port, int motor)            { (void)port;(void)motor; }
+
+void Ps2CheckTextureAlpha(void* pp)   { (void)pp; }
+void RequestAdjustDisplay(int a, int b) { (void)a;(void)b; }
+void SetSoundMode(int m)              { (void)m; }
+
+/* Pad[4] comes from padman.c. */

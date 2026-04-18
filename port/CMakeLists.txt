@@ -170,6 +170,9 @@ if(RECVX_BUILD_GAME)
     set(RECVX_GAME_SOURCES
         ${RECVX_SRC}/ps2/veronica/prog/main.c
         ${RECVX_SRC}/ps2/veronica/prog/system.c
+        ${RECVX_SRC}/ps2/veronica/prog/adv.c
+        ${RECVX_SRC}/ps2/veronica/prog/padman.c
+        ${RECVX_SRC}/ps2/veronica/prog/vibman.c
         # Expand this list incrementally as each file compiles.
     )
 
