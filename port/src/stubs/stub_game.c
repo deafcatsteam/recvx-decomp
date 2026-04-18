@@ -221,11 +221,33 @@ void  njReleaseTextureAll(void)       {}
 void  njTextureFilterMode(int m)                   { (void)m; }
 void  njDrawPolygon(void* p, int n, int flag)      { (void)p;(void)n;(void)flag; }
 void  njMemCopy4(void* d, void* s, int n)          { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
-void  njLoadTexture(void* tl)                      { (void)tl; }
-void  njSetTexture(void* tl)                       { (void)tl; }
-void  njSetTextureNum(int n)                       { (void)n; }
-void  njSetTextureInfo(void* ti, int w, int h, int fmt) { (void)ti;(void)w;(void)h;(void)fmt; }
-void  njSetTextureName(void* tn, int id)           { (void)tn;(void)id; }
+
+/* Signatures match ninjaapi.h — logging here so the first call that blows
+ * up leaves a breadcrumb. Mode-6 boot chain order (adv.c:1237..1248):
+ *   AdvGetResourcePtr(ptr[0], 0..3) -> SetPvrInfo -> Ps2CheckTextureAlpha ->
+ *   njSetTextureInfo(ip, data, fmt, w, h) -> njSetTextureName(np, ip, idx, attr)
+ *   TransPvpData(pal, flag) -> AdvEasyTransTextureBasic(0,2,1) ->
+ *   njSetTexture -> njSetTextureNum -> njLoadTexture
+ */
+void  njLoadTexture(void* tl) {
+    RX_LOG("nj", "njLoadTexture tl=%p", tl);
+}
+void  njSetTexture(void* tl) {
+    RX_LOG("nj", "njSetTexture tl=%p", tl);
+}
+void  njSetTextureNum(int n) {
+    RX_LOG("nj", "njSetTextureNum n=%d", n);
+}
+void  njSetTextureInfo(void* ti, unsigned short* data, int type,
+                       int w, int h) {
+    RX_LOG("nj", "njSetTextureInfo ti=%p data=%p type=%d w=%d h=%d",
+           ti, data, type, w, h);
+}
+void  njSetTextureName(void* tn, void* addr, unsigned int gIdx,
+                       unsigned int attr) {
+    RX_LOG("nj", "njSetTextureName tn=%p addr=%p gIdx=%u attr=0x%08x",
+           tn, addr, gIdx, attr);
+}
 int   njGetPaletteMode(void)                       { return 0; }
 void  njSetPaletteData(int mode, int offset, int count, void* data) {
     (void)mode;(void)offset;(void)count;(void)data;
@@ -249,8 +271,18 @@ void PlayAdx(unsigned int slot, unsigned int part, unsigned int file) {
 void StopAdx(unsigned int slot)                    { (void)slot; }
 void SetVolumeAdx2(unsigned int slot, float vol)   { (void)slot;(void)vol; }
 
-/* bh helpers not yet in a compiled .c */
-void bhSetFontTexture(void* p)                     { (void)p; }
+/* bh helpers not yet in a compiled .c. bhSetFontTexture is the first
+ * resource-touching call in Adv_FirstWarningMessage mode 3 — logging
+ * the pointer lets us see whether ap->ptr[0] (SYSTEM.AFS entry 1 payload)
+ * actually survived the read. */
+void bhSetFontTexture(void* p) {
+    RX_LOG("bh", "bhSetFontTexture p=%p first8=%02x%02x%02x%02x%02x%02x%02x%02x",
+           p,
+           p ? ((unsigned char*)p)[0] : 0, p ? ((unsigned char*)p)[1] : 0,
+           p ? ((unsigned char*)p)[2] : 0, p ? ((unsigned char*)p)[3] : 0,
+           p ? ((unsigned char*)p)[4] : 0, p ? ((unsigned char*)p)[5] : 0,
+           p ? ((unsigned char*)p)[6] : 0, p ? ((unsigned char*)p)[7] : 0);
+}
 void bhReleaseFreeMemory(void* p)                  { (void)p; }
 
 /* Memory card — always report "no card" so title screen skips VM path. */
@@ -310,7 +342,16 @@ void pdVibMxSetStopTime(uint32_t port, uint32_t time) { (void)port;(void)time; }
 void pdVibMxStart(uint32_t port, int motor, int power){ (void)port;(void)motor;(void)power; }
 void pdVibMxStop(uint32_t port, int motor)            { (void)port;(void)motor; }
 
-void Ps2CheckTextureAlpha(void* pp)   { (void)pp; }
+/* Called from SetPvrInfo (adv.c:587) with the raw TIM2 payload ptr just
+ * before njSetTextureInfo. Logs first 16 bytes so we can see whether the
+ * TIM2 header ('TIM2' magic + version etc.) looks sane. */
+void Ps2CheckTextureAlpha(void* pp) {
+    if (!pp) { RX_LOG("ps2", "Ps2CheckTextureAlpha pp=NULL"); return; }
+    unsigned char* b = (unsigned char*)pp;
+    RX_LOG("ps2", "Ps2CheckTextureAlpha pp=%p hdr=%02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x %02x%02x%02x%02x",
+           pp, b[0],b[1],b[2],b[3],b[4],b[5],b[6],b[7],
+           b[8],b[9],b[10],b[11],b[12],b[13],b[14],b[15]);
+}
 void RequestAdjustDisplay(int a, int b) { (void)a;(void)b; }
 void SetSoundMode(int m)              { (void)m; }
 

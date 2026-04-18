@@ -132,6 +132,14 @@ extern void* sys;
 #define SYS_TK_FLG(s) (*(uint32_t*)((char*)(s) + 0x58))
 #define SYS_TS_FLG(s) (*(uint32_t*)((char*)(s) + 0x5C))
 
+/* AdvWork is ADV_WORK in adv.c:27. Mode lives at offset 0x4 (adv.h).
+ * Every field we care about is before any pointer-sized member (ptr[] is
+ * at 0x40 but we only read Mode/Mode2 here), so no x64 ABI shift. Declare
+ * as char[] so the linker binds the address without needing types.h. */
+extern char AdvWork[];
+#define ADV_MODE()  (*(int32_t*)(AdvWork + 0x04))
+#define ADV_MODE2() (*(int32_t*)(AdvWork + 0x08))
+
 static const char* task_name(int bit) {
     static const char* names[] = {
         "Init","Warning","Ipl","Firstmovie","Title","Opening","Pad","Game",
@@ -227,15 +235,42 @@ static int run_game_loop(const recvx_backend* backend) {
 
     RX_LOG("game", "entering njUserMain loop");
 
-    uint32_t prev_tk  = 0xFFFFFFFF;
-    uint32_t prev_ts  = 0xFFFFFFFF;
-    uint32_t prev_btn = 0;
+    uint32_t prev_tk   = 0xFFFFFFFF;
+    uint32_t prev_ts   = 0xFFFFFFFF;
+    uint32_t prev_btn  = 0;
+    int32_t  prev_adv  = INT32_MIN;
+    int32_t  prev_adv2 = INT32_MIN;
     int frame = 0;
     while (backend->pump_events()) {
         backend->begin_frame();
         recvx_input_new_frame();
+
+        /* Sample AdvWork.Mode BEFORE njUserMain so we see the mode that
+         * just crashed (if it does) in the log, then sample AFTER to
+         * catch transitions. */
+        int32_t adv_before  = ADV_MODE();
+        int32_t adv2_before = ADV_MODE2();
+        if (adv_before != prev_adv || adv2_before != prev_adv2) {
+            RX_LOG("adv", "frame %d: AdvWork.Mode=%d Mode2=%d (was %d/%d)",
+                   frame, adv_before, adv2_before, prev_adv, prev_adv2);
+            prev_adv  = adv_before;
+            prev_adv2 = adv2_before;
+        }
+
         njUserMain();
         backend->end_frame();
+
+        /* Also check after the tick so single-tick mode transitions
+         * (e.g. mode 3 falls through to 4 without break at adv.c:1228)
+         * are visible as "3 -> 4" on the next frame. */
+        int32_t adv_after  = ADV_MODE();
+        int32_t adv2_after = ADV_MODE2();
+        if (adv_after != prev_adv || adv2_after != prev_adv2) {
+            RX_LOG("adv", "frame %d (post): AdvWork.Mode=%d Mode2=%d (was %d/%d)",
+                   frame, adv_after, adv2_after, prev_adv, prev_adv2);
+            prev_adv  = adv_after;
+            prev_adv2 = adv2_after;
+        }
 
         uint32_t tk = SYS_TK_FLG(sys);
         uint32_t ts = SYS_TS_FLG(sys);
