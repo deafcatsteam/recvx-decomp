@@ -243,6 +243,10 @@ static int run_game_loop(const recvx_backend* backend) {
     int frame = 0;
     while (backend->pump_events()) {
         backend->begin_frame();
+        /* Set up PS2 2D ortho (640x480, Y-down) once per frame so every
+         * njDrawPolygon / njDrawQuadTexture the game issues lands in the
+         * right screen-space. Game coords match PS2 SetQuadPos convention. */
+        recvx_gfx_begin_2d(640, 480);
         recvx_input_new_frame();
 
         /* Sample AdvWork.Mode BEFORE njUserMain so we see the mode that
@@ -258,6 +262,7 @@ static int run_game_loop(const recvx_backend* backend) {
         }
 
         njUserMain();
+        recvx_gfx_end_2d();
         backend->end_frame();
 
         /* Also check after the tick so single-tick mode transitions

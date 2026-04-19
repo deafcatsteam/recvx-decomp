@@ -215,26 +215,18 @@ void  njGarbageTexture(void* tl,int n){ (void)tl;(void)n; }
 void  njReleaseTexture(void* tl)      { (void)tl; }
 void  njReleaseTextureAll(void)       {}
 
-/* Additional nj* draw/texture primitives adv.c pulls in. All no-ops for
- * now — black-screen gate. Wiring these to GL quads is the "pixels gate"
- * that makes the title screen visible; until then menu logic runs blind. */
-void  njTextureFilterMode(int m)                   { (void)m; }
-void  njDrawPolygon(void* p, int n, int flag)      { (void)p;(void)n;(void)flag; }
 void  njMemCopy4(void* d, void* s, int n)          { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
 
-/* njLoadTexture / njSetTexture / njSetTextureNum / njSetTextureInfo /
- * njSetTextureName are now implemented in port/src/game_texture_stubs.c,
- * which is compiled into recvx_game so it sees the real NJS_TEXMEMLIST
- * layout from ninjastr.h (crucial for writing nWidth/nHeight back into
- * the right offsets after SetQuadUv2Ex reads them through texaddr). */
+/* njTextureFilterMode / njDrawPolygon / njLoadTexture / njSetTexture /
+ * njSetTextureNum / njSetTextureInfo / njSetTextureName / njQuadTextureStart /
+ * njQuadTextureEnd / njSetQuadTexture / njDrawQuadTexture all live in
+ * port/src/game_texture_stubs.c. That file is compiled into recvx_game so it
+ * sees the real NJS_TEXMEMLIST / QUAD / NJS_POLYGON_VTX layouts — they drive
+ * the gfx API in backend_gl.c that finally puts pixels on screen. */
 int   njGetPaletteMode(void)                       { return 0; }
 void  njSetPaletteData(int mode, int offset, int count, void* data) {
     (void)mode;(void)offset;(void)count;(void)data;
 }
-void  njQuadTextureStart(void)                     { }
-void  njQuadTextureEnd(void)                       { }
-void  njSetQuadTexture(void* q, int tex, int flag) { (void)q;(void)tex;(void)flag; }
-void  njDrawQuadTexture(void* q)                   { (void)q; }
 
 /* adv.c calls fabsf but MSVC /Od can emit an out-of-line reference that
  * the default lib chain doesn't satisfy. Provide an extern-linkage
@@ -294,10 +286,10 @@ void  StartVibrationEx(int port, int motor, int power, int time) {
 void  StopVibrationEx(int port, int motor)         { (void)port;(void)motor; }
 
 /* Globals adv.c references. PatId is now owned by afs_mount.c (matches
- * sdfunc.c:91 `int PatId[4]` exactly). palbuf holds the current palette;
- * Ps2_current_texmemlist is a pointer latched by texture-upload helpers. */
+ * sdfunc.c:91 `int PatId[4]` exactly). palbuf holds the current palette.
+ * Ps2_current_texmemlist is defined in game_texture_stubs.c (typed
+ * NJS_TEXMEMLIST* so adv.c:695 dereferences cleanly). */
 unsigned int palbuf[256];
-void* Ps2_current_texmemlist;
 
 /* ----------------------------------------------------------------------
  * adv.c pulls in: sound bank (PlayBgm/Voice), vibration (vibman),

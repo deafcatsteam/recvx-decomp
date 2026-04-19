@@ -203,6 +203,155 @@ static void gl_audio_init(int sample_rate) {
     SDL_PauseAudioDevice(g_audio_dev, 0);
 }
 
+/* --------------------------------------------------------------------------
+ * 2D gfx — textured / vertex-colored draw primitives for the nj* shims.
+ *
+ * Design: map PS2 screen-space (0..640, 0..480, Y down) to an orthographic
+ * projection that covers the whole client area. Textures live in a flat
+ * array keyed by pool slot (see game_texture_stubs.c). A single 2x2 white
+ * fallback tex gets bound when a slot isn't populated yet, so draws from
+ * not-yet-decoded TIM2 show as solid-color quads rather than disappearing.
+ * -------------------------------------------------------------------------- */
+#define RX_GFX_TEX_SLOTS 64
+static GLuint g_gfx_tex[RX_GFX_TEX_SLOTS];
+static int    g_gfx_tex_w[RX_GFX_TEX_SLOTS];
+static int    g_gfx_tex_h[RX_GFX_TEX_SLOTS];
+static GLuint g_gfx_white_tex;
+static int    g_gfx_filter = 0;
+static int    g_gfx_ps2_w  = 640;
+static int    g_gfx_ps2_h  = 480;
+
+static void gfx_ensure_white(void) {
+    if (g_gfx_white_tex) return;
+    glGenTextures(1, &g_gfx_white_tex);
+    glBindTexture(GL_TEXTURE_2D, g_gfx_white_tex);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S,     GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T,     GL_CLAMP_TO_EDGE);
+    const uint32_t white[4] = { 0xFFFFFFFFu, 0xFFFFFFFFu,
+                                0xFFFFFFFFu, 0xFFFFFFFFu };
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, 2, 2, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, white);
+}
+
+void recvx_gfx_begin_2d(int target_w, int target_h) {
+    if (target_w > 0 && target_h > 0) {
+        g_gfx_ps2_w = target_w;
+        g_gfx_ps2_h = target_h;
+    }
+    glViewport(0, 0, g_win_w, g_win_h);
+
+    glMatrixMode(GL_PROJECTION); glLoadIdentity();
+    /* Top-left origin, Y grows down. Matches PS2 SetQuadPos convention. */
+    glOrtho(0.0, (double)g_gfx_ps2_w,
+            (double)g_gfx_ps2_h, 0.0,
+            -1.0, 1.0);
+    glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
+
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_TEXTURE_2D);
+    gfx_ensure_white();
+}
+
+void recvx_gfx_end_2d(void) {
+    glDisable(GL_TEXTURE_2D);
+    glDisable(GL_BLEND);
+}
+
+void recvx_gfx_tex_upload(int slot, const void* rgba, int w, int h) {
+    if (slot < 0 || slot >= RX_GFX_TEX_SLOTS) return;
+    if (!rgba || w <= 0 || h <= 0) return;
+    if (!g_gfx_tex[slot]) {
+        glGenTextures(1, &g_gfx_tex[slot]);
+        glBindTexture(GL_TEXTURE_2D, g_gfx_tex[slot]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        g_gfx_filter ? GL_LINEAR : GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                        g_gfx_filter ? GL_LINEAR : GL_NEAREST);
+    }
+    glBindTexture(GL_TEXTURE_2D, g_gfx_tex[slot]);
+    if (w != g_gfx_tex_w[slot] || h != g_gfx_tex_h[slot]) {
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0,
+                     GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+        g_gfx_tex_w[slot] = w;
+        g_gfx_tex_h[slot] = h;
+    } else {
+        glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, w, h,
+                        GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    }
+}
+
+/* Expand ARGB32 (A in top byte) to four floats 0..1. PS2 color masks are
+ * mostly in the same order as ARGB; confirm visually on first draw. */
+static void gfx_unpack_argb(uint32_t c, float out[4]) {
+    out[3] = ((c >> 24) & 0xFF) / 255.0f;  /* A */
+    out[0] = ((c >> 16) & 0xFF) / 255.0f;  /* R */
+    out[1] = ((c >>  8) & 0xFF) / 255.0f;  /* G */
+    out[2] = ( c        & 0xFF) / 255.0f;  /* B */
+}
+
+void recvx_gfx_draw_quad(int slot,
+                         float x1, float y1, float x2, float y2,
+                         float u1, float v1, float u2, float v2,
+                         float z, uint32_t color, int trans) {
+    GLuint tex = (slot >= 0 && slot < RX_GFX_TEX_SLOTS && g_gfx_tex[slot])
+                     ? g_gfx_tex[slot]
+                     : g_gfx_white_tex;
+    glBindTexture(GL_TEXTURE_2D, tex);
+    if (trans) glEnable(GL_BLEND);
+    else       glDisable(GL_BLEND);
+
+    float c[4]; gfx_unpack_argb(color, c);
+    glColor4f(c[0], c[1], c[2], c[3]);
+
+    glBegin(GL_QUADS);
+    glTexCoord2f(u1, v1); glVertex3f(x1, y1, z);
+    glTexCoord2f(u2, v1); glVertex3f(x2, y1, z);
+    glTexCoord2f(u2, v2); glVertex3f(x2, y2, z);
+    glTexCoord2f(u1, v2); glVertex3f(x1, y2, z);
+    glEnd();
+
+    glEnable(GL_BLEND);  /* leave blend on as default */
+}
+
+void recvx_gfx_draw_polygon(const recvx_gfx_vtx* verts, int count, int trans) {
+    if (!verts || count < 3) return;
+    if (trans) glEnable(GL_BLEND);
+    else       glDisable(GL_BLEND);
+
+    /* Untextured path — bind white so the per-vertex color shows as-is. */
+    gfx_ensure_white();
+    glBindTexture(GL_TEXTURE_2D, g_gfx_white_tex);
+
+    glBegin(GL_TRIANGLE_FAN);
+    for (int i = 0; i < count; ++i) {
+        float c[4]; gfx_unpack_argb(verts[i].color, c);
+        glColor4f(c[0], c[1], c[2], c[3]);
+        glTexCoord2f(0.0f, 0.0f);
+        glVertex3f(verts[i].x, verts[i].y, verts[i].z);
+    }
+    glEnd();
+    glEnable(GL_BLEND);
+}
+
+void recvx_gfx_set_filter(int mode) {
+    g_gfx_filter = mode ? 1 : 0;
+    /* Apply to all existing textures immediately. */
+    for (int i = 0; i < RX_GFX_TEX_SLOTS; ++i) {
+        if (!g_gfx_tex[i]) continue;
+        glBindTexture(GL_TEXTURE_2D, g_gfx_tex[i]);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                        g_gfx_filter ? GL_LINEAR : GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER,
+                        g_gfx_filter ? GL_LINEAR : GL_NEAREST);
+    }
+}
+
 static void gl_audio_queue(const void* samples, int byte_count) {
     if (!g_audio_dev || !samples || byte_count <= 0) return;
     if (g_device_rate == g_audio_rate || g_audio_rate <= 0) {
@@ -312,5 +461,20 @@ const recvx_backend* recvx_backend_gl(void) { return &g_gl; }
 #else /* SDL2/GL not available — fall back to null */
 
 const recvx_backend* recvx_backend_gl(void) { return NULL; }
+
+/* Headless stubs so recvx_gfx_* always resolves at link time. */
+void recvx_gfx_begin_2d(int w, int h)                 { (void)w; (void)h; }
+void recvx_gfx_end_2d(void)                           {}
+void recvx_gfx_tex_upload(int s, const void* p, int w, int h)
+                                                      { (void)s; (void)p; (void)w; (void)h; }
+void recvx_gfx_draw_quad(int s, float x1, float y1, float x2, float y2,
+                         float u1, float v1, float u2, float v2,
+                         float z, uint32_t c, int t) {
+    (void)s; (void)x1; (void)y1; (void)x2; (void)y2;
+    (void)u1; (void)v1; (void)u2; (void)v2; (void)z; (void)c; (void)t;
+}
+void recvx_gfx_draw_polygon(const recvx_gfx_vtx* v, int n, int t)
+                                                      { (void)v; (void)n; (void)t; }
+void recvx_gfx_set_filter(int m)                      { (void)m; }
 
 #endif

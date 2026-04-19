@@ -127,6 +127,45 @@ void recvx_input_new_frame(void);  /* compute edges; call once per njUserMain */
  * (e.g. bit 3 = Start, bit 5 = KD). Not part of the decomp's ABI. */
 uint32_t recvx_input_buttons(void);
 
+/* --------------------------------------------------------------------------
+ * 2D gfx API for game nj* draw primitives.
+ *
+ * The game draws in PS2 screen-space: origin top-left, 640x480 logical.
+ * Backend implements these; game_texture_stubs.c + friends call them from
+ * njQuadTextureStart / njSetQuadTexture / njDrawQuadTexture / njDrawPolygon /
+ * njTextureFilterMode. Keeping the game side free of GL headers means game
+ * target builds only against KATANA + compat; all GL calls live in backend.
+ *
+ * Texture slots are a flat 0..63 array that mirrors the low-4GiB NJS_TEXMEMLIST
+ * pool in game_texture_stubs.c. The game references textures by NJS_TEXMEMLIST
+ * pointer; we convert that to a slot index = (ptr - pool_base)/sizeof(entry).
+ * -------------------------------------------------------------------------- */
+#define RX_GFX_TEX_SLOTS 64
+
+void recvx_gfx_begin_2d(int target_w, int target_h);
+void recvx_gfx_end_2d(void);
+
+/* Uploads RGBA8 pixels to the backend texture for this slot. Creates the
+ * GL texture on first call, re-uploads on size change or re-decode. */
+void recvx_gfx_tex_upload(int slot, const void* rgba, int w, int h);
+
+/* Textured quad in screen-space. color is ARGB32 (A in top byte);
+ * trans enables alpha blending. z is unused for 2D but passed through. */
+void recvx_gfx_draw_quad(int slot,
+                         float x1, float y1, float x2, float y2,
+                         float u1, float v1, float u2, float v2,
+                         float z, uint32_t color, int trans);
+
+/* Vertex-colored polygon (fan). Each vertex is {x,y,z,ARGB}. */
+typedef struct recvx_gfx_vtx {
+    float    x, y, z;
+    uint32_t color;
+} recvx_gfx_vtx;
+void recvx_gfx_draw_polygon(const recvx_gfx_vtx* verts, int count, int trans);
+
+/* 0 = nearest, 1 = linear. Matches njTextureFilterMode conventions. */
+void recvx_gfx_set_filter(int mode);
+
 #ifdef __cplusplus
 }
 #endif
