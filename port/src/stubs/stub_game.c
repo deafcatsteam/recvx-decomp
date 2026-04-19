@@ -222,32 +222,11 @@ void  njTextureFilterMode(int m)                   { (void)m; }
 void  njDrawPolygon(void* p, int n, int flag)      { (void)p;(void)n;(void)flag; }
 void  njMemCopy4(void* d, void* s, int n)          { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
 
-/* Signatures match ninjaapi.h — logging here so the first call that blows
- * up leaves a breadcrumb. Mode-6 boot chain order (adv.c:1237..1248):
- *   AdvGetResourcePtr(ptr[0], 0..3) -> SetPvrInfo -> Ps2CheckTextureAlpha ->
- *   njSetTextureInfo(ip, data, fmt, w, h) -> njSetTextureName(np, ip, idx, attr)
- *   TransPvpData(pal, flag) -> AdvEasyTransTextureBasic(0,2,1) ->
- *   njSetTexture -> njSetTextureNum -> njLoadTexture
- */
-void  njLoadTexture(void* tl) {
-    RX_LOG("nj", "njLoadTexture tl=%p", tl);
-}
-void  njSetTexture(void* tl) {
-    RX_LOG("nj", "njSetTexture tl=%p", tl);
-}
-void  njSetTextureNum(int n) {
-    RX_LOG("nj", "njSetTextureNum n=%d", n);
-}
-void  njSetTextureInfo(void* ti, unsigned short* data, int type,
-                       int w, int h) {
-    RX_LOG("nj", "njSetTextureInfo ti=%p data=%p type=%d w=%d h=%d",
-           ti, data, type, w, h);
-}
-void  njSetTextureName(void* tn, void* addr, unsigned int gIdx,
-                       unsigned int attr) {
-    RX_LOG("nj", "njSetTextureName tn=%p addr=%p gIdx=%u attr=0x%08x",
-           tn, addr, gIdx, attr);
-}
+/* njLoadTexture / njSetTexture / njSetTextureNum / njSetTextureInfo /
+ * njSetTextureName are now implemented in port/src/game_texture_stubs.c,
+ * which is compiled into recvx_game so it sees the real NJS_TEXMEMLIST
+ * layout from ninjastr.h (crucial for writing nWidth/nHeight back into
+ * the right offsets after SetQuadUv2Ex reads them through texaddr). */
 int   njGetPaletteMode(void)                       { return 0; }
 void  njSetPaletteData(int mode, int offset, int count, void* data) {
     (void)mode;(void)offset;(void)count;(void)data;

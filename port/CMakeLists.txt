@@ -185,6 +185,10 @@ if(RECVX_BUILD_GAME)
         ${RECVX_SRC}/ps2/veronica/prog/adv.c
         ${RECVX_SRC}/ps2/veronica/prog/padman.c
         ${RECVX_SRC}/ps2/veronica/prog/vibman.c
+        # Port-side nj* texture stubs that need the real ninjastr.h layout.
+        # Lives in the game target (not recvx_port_stubs) so it gets prelude
+        # force-include + KATANA include path, matching decomp struct offsets.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/game_texture_stubs.c
         # Expand this list incrementally as each file compiles.
     )
 
