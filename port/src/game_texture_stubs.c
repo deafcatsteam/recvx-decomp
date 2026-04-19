@@ -131,9 +131,10 @@ void njSetTextureName(NJS_TEXNAME* tn, void* addr,
 /* adv.c:847 njLoadTexture(&AdvTexList[0]). Walk every NJS_TEXNAME in the
  * list, pull the NJS_TEXINFO we stashed into filename, copy nWidth/nHeight
  * into a pool TEXMEMLIST, and stamp that pool address into .texaddr so
- * SetQuadUv2Ex's cast resolves to valid memory. */
-void njLoadTexture(NJS_TEXLIST* tl) {
-    if (!tl) { RX_LOG("nj", "njLoadTexture tl=NULL"); return; }
+ * SetQuadUv2Ex's cast resolves to valid memory. Returns Sint32 per
+ * ninjaapi.h:523 — real API returns the texture count; 0 is fine for us. */
+Sint32 njLoadTexture(NJS_TEXLIST* tl) {
+    if (!tl) { RX_LOG("nj", "njLoadTexture tl=NULL"); return -1; }
     RX_LOG("nj", "njLoadTexture tl=%p nbTex=%u", (void*)tl,
            (unsigned)tl->nbTexture);
     for (Uint32 i = 0; i < tl->nbTexture; ++i) {
@@ -170,10 +171,11 @@ void njLoadTexture(NJS_TEXLIST* tl) {
                (unsigned)ml->texinfo.texsurface.nHeight,
                (unsigned)tn->texaddr);
     }
+    return (Sint32)tl->nbTexture;
 }
 
 /* Remaining nj* texture helpers — adv.c calls these from the draw path
  * but we don't actually render yet. Keep them quiet no-ops (no log spam
- * once per frame). */
-void njSetTexture(NJS_TEXLIST* tl)   { (void)tl; }
-void njSetTextureNum(Sint32 n)       { (void)n; }
+ * once per frame). Signatures/returns match ninjaapi.h:525-526. */
+Sint32 njSetTexture(NJS_TEXLIST* tl) { (void)tl; return 0; }
+Sint32 njSetTextureNum(Uint32 n)     { (void)n;  return 0; }
