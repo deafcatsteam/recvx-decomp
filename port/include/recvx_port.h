@@ -127,6 +127,11 @@ void recvx_input_new_frame(void);  /* compute edges; call once per njUserMain */
  * (e.g. bit 3 = Start, bit 5 = KD). Not part of the decomp's ABI. */
 uint32_t recvx_input_buttons(void);
 
+/* Auto-repeat snapshot for Pad[].Rept. Mirrors the onon register from
+ * ps2_sg_pad.c's Pad_set — fires once on rising edge, then every other
+ * frame while held. CheckButton uses this for UP/DOWN cursor nav. */
+uint32_t recvx_input_rept(void);
+
 /* --------------------------------------------------------------------------
  * 2D gfx API for game nj* draw primitives.
  *

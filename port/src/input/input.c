@@ -67,6 +67,13 @@ static recvx_ninja_peripheral g_per = {
 };
 static uint32_t g_prev_on;
 
+/* Auto-repeat (Rept / "onon") — mirrors ps2_sg_pad.c:578-632. CheckButton
+ * reads Pad[].Rept for UP/DOWN cursor nav, so without this the menu is
+ * stuck. Per-bit timer counts down after initial press; when it hits 0
+ * a single-frame Rept pulse fires, then resets to 2 (repeat rate). */
+static uint8_t  g_time1[16];
+static uint32_t g_rept;
+
 static const uint32_t key_to_bit[RX_KEY__COUNT] = {
     [RX_KEY_UP]     = RX_PAD_UP,
     [RX_KEY_DOWN]   = RX_PAD_DOWN,
@@ -102,10 +109,34 @@ void recvx_input_set_stick(int x, int y) {
 void recvx_input_new_frame(void) {
     uint32_t on   = g_per.on;
     uint32_t prev = g_prev_on;
-    g_per.press   = on & ~prev;
+    uint32_t push = on & ~prev;
+    g_per.press   = push;
     g_per.release = prev & ~on;
     g_per.off     = ~on;
     g_prev_on = on;
+
+    for (int i = 0; i < 16; ++i) {
+        uint32_t mask = 1u << i;
+        if (push & mask) {
+            g_time1[i] = 10;
+            g_rept |= mask;
+        } else if (on & mask) {
+            if (g_time1[i] != 0) {
+                g_time1[i]--;
+                g_rept &= ~mask;
+            } else {
+                g_time1[i] = 2;
+                g_rept |= mask;
+            }
+        } else {
+            g_rept &= ~mask;
+            g_time1[i] = 0;
+        }
+    }
+}
+
+uint32_t recvx_input_rept(void) {
+    return g_rept;
 }
 
 /* Called by the game via include/recvx-decomp-katana/KATANA/Include/ninjapad.h.

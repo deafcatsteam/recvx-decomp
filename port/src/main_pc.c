@@ -187,8 +187,10 @@ static const char* button_name(int bit) {
     }
 }
 
-/* Dump a bitmap diff (old->new) as "Down U,Cr  Up Ci". Logs only when
- * anything changed so held keys stay quiet. */
+/* Dump a bitmap diff (old->new) as "Press U,Cr  Release Ci". Logs only
+ * when anything changed so held keys stay quiet. We use Press/Release
+ * rather than Down/Up because "U" and "D" are our button names for the
+ * Up/Down arrows, which made the edge labels ambiguous. */
 static void log_input_edges(uint32_t prev, uint32_t cur) {
     uint32_t down = cur  & ~prev;
     uint32_t up   = prev & ~cur;
@@ -196,7 +198,7 @@ static void log_input_edges(uint32_t prev, uint32_t cur) {
     char line[256] = {0};
     size_t used = 0;
     if (down) {
-        int n = snprintf(line + used, sizeof(line) - used, "Down ");
+        int n = snprintf(line + used, sizeof(line) - used, "Press ");
         if (n > 0) used += (size_t)n;
         int first = 1;
         for (int i = 0; i < 32; ++i) if (down & (1u << i)) {
@@ -208,7 +210,7 @@ static void log_input_edges(uint32_t prev, uint32_t cur) {
     }
     if (up) {
         int n = snprintf(line + used, sizeof(line) - used,
-                         "%sUp ", down ? "  " : "");
+                         "%sRelease ", down ? "  " : "");
         if (n > 0) used += (size_t)n;
         int first = 1;
         for (int i = 0; i < 32; ++i) if (up & (1u << i)) {

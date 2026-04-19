@@ -410,6 +410,7 @@ void recvx_pump_pad(void) {
     if (!p) {
         Pad[0].on = 0;
         Pad[0].press = 0;
+        Pad[0].Rept = 0;
         Pad[0].l = 0;
         Pad[0].r = 0;
         Pad[0].x1 = Pad[0].y1 = 0;
@@ -417,6 +418,7 @@ void recvx_pump_pad(void) {
     }
     Pad[0].on      = p->on;
     Pad[0].press   = p->press;
+    Pad[0].Rept    = recvx_input_rept();
     Pad[0].l       = p->l;
     Pad[0].r       = p->r;
     Pad[0].x1      = p->x1;
