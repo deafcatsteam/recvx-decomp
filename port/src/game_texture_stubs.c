@@ -29,7 +29,9 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>         /* getenv for RECVX_DUMP_TEX */
 #include <string.h>
+#include <direct.h>         /* _mkdir for the dump dir on Windows */
 
 /* recvx_port.h is on the port-stubs include path but NOT on recvx_game's
  * include path (game target is PRIVATE). Forward-declare the log entry
@@ -117,6 +119,68 @@ static int pool_slot_of(const NJS_TEXMEMLIST* ml) {
 #define TIM2_MAX_H   1024
 
 static uint8_t g_decode_scratch[TIM2_MAX_W * TIM2_MAX_H * 4];
+
+/* ------------------------------------------------------------------ */
+/* Texture dump (RECVX_DUMP_TEX=1) — writes every decoded RGBA8       */
+/* texture to port/debug/tex/tex_<slot>_<W>x<H>.tga so we can         */
+/* eyeball whether decode succeeded for the menu plate text strips.   */
+/* TGA chosen over PNG to avoid pulling stb_image_write; 32-bit BGRA  */
+/* uncompressed is ~30 lines and opens in every viewer. Re-decoding   */
+/* the same slot just overwrites — newest TEXLIST wins.               */
+/* ------------------------------------------------------------------ */
+static int tex_dump_enabled(void) {
+    static int checked = 0;
+    static int on = 0;
+    if (!checked) {
+        const char* e = getenv("RECVX_DUMP_TEX");
+        on = (e && e[0] && e[0] != '0');
+        if (on) {
+            (void)_mkdir("port");
+            (void)_mkdir("port/debug");
+            (void)_mkdir("port/debug/tex");
+            RX_LOG("dump", "RECVX_DUMP_TEX on -> port/debug/tex/");
+        }
+        checked = 1;
+    }
+    return on;
+}
+
+static void dump_rgba_tga(int slot, int w, int h, const uint8_t* rgba) {
+    if (!tex_dump_enabled() || !rgba || w <= 0 || h <= 0) return;
+    char path[160];
+    snprintf(path, sizeof(path), "port/debug/tex/tex_%02d_%dx%d.tga",
+             slot, w, h);
+    FILE* f = fopen(path, "wb");
+    if (!f) { RX_LOG("dump", "open %s FAILED", path); return; }
+
+    uint8_t hdr[18] = {0};
+    hdr[2]  = 2;                                /* uncompressed true-color */
+    hdr[12] = (uint8_t)(w & 0xFF);
+    hdr[13] = (uint8_t)((w >> 8) & 0xFF);
+    hdr[14] = (uint8_t)(h & 0xFF);
+    hdr[15] = (uint8_t)((h >> 8) & 0xFF);
+    hdr[16] = 32;
+    hdr[17] = 0x28;                             /* top-left origin, 8a bits */
+    fwrite(hdr, 1, 18, f);
+
+    /* Swap RGBA -> BGRA in chunks (TGA is little-endian BGRA). */
+    enum { CHUNK = 4096 };
+    static uint8_t buf[CHUNK * 4];
+    int total = w * h, i = 0;
+    while (i < total) {
+        int n = (total - i) < CHUNK ? (total - i) : CHUNK;
+        for (int k = 0; k < n; ++k) {
+            buf[k*4+0] = rgba[(i+k)*4+2];
+            buf[k*4+1] = rgba[(i+k)*4+1];
+            buf[k*4+2] = rgba[(i+k)*4+0];
+            buf[k*4+3] = rgba[(i+k)*4+3];
+        }
+        fwrite(buf, 4, n, f);
+        i += n;
+    }
+    fclose(f);
+    RX_LOG("dump", "wrote %s", path);
+}
 
 static inline uint8_t alpha_ps2_to_pc(uint8_t a) {
     int x = (int)a * 2;
@@ -297,6 +361,7 @@ Sint32 njLoadTexture(NJS_TEXLIST* tl) {
         uint8_t* dpix = NULL;
         if (ti && ti->texaddr && tim2_decode(ti->texaddr, &dw, &dh, &dpix)) {
             recvx_gfx_tex_upload(slot, dpix, dw, dh);
+            dump_rgba_tga(slot, dw, dh, dpix);
             RX_LOG("nj", "  slot %d: decoded %dx%d from %p uploaded",
                    slot, dw, dh, ti->texaddr);
         } else {
