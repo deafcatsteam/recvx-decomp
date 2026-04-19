@@ -369,6 +369,17 @@ void njSetQuadTexture(int tex_id, Uint32 base_color) {
  * screen-space and u1/v1/u2/v2 already normalized by SetQuadUv2Ex. */
 void njDrawQuadTexture(QUAD* q, float z) {
     if (!q) return;
+    /* Trace: log every textured quad so we can see whether the menu plate
+     * (slot 4) ever reaches the backend with sane params. Remove once we
+     * know why DisplayPressStartPlate / DisplayGameModePlate aren't visible. */
+    static int s_trace_count = 0;
+    if (s_trace_count++ < 200) {
+        RX_LOG("draw", "slot=%d screen=(%.0f,%.0f-%.0f,%.0f) "
+               "uv=(%.3f,%.3f-%.3f,%.3f) z=%.3f col=0x%08x trans=%d",
+               g_current_slot, q->x1, q->y1, q->x2, q->y2,
+               q->u1, q->v1, q->u2, q->v2,
+               z, (unsigned)g_current_color, g_current_trans);
+    }
     recvx_gfx_draw_quad(g_current_slot,
                         q->x1, q->y1, q->x2, q->y2,
                         q->u1, q->v1, q->u2, q->v2,
