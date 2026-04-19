@@ -157,10 +157,20 @@ void ExecSoundSystemMonitor(void)                 {}
  * RequestReadIsoFile / GetIsoFileSize are implemented in
  * port/src/afs/afs_mount.c — they are NOT stubs, they back real AFS reads.
  * ---------------------------------------------------------------------- */
-int  PlayStartMovieEx(int a, int b)      { (void)a;(void)b; return 0; }
+/* FMV stubs: no playback yet. Return "skip" codes so ADV state machines
+ * treat the movie as finished immediately and advance to the next Mode.
+ * - WaitPrePlayMovie: 0=ready, 1=waiting, 2/3=skip/error → use 3 to skip
+ * - PlayMovieMain:    0=playing, 1/2/3=done → use 3 so Mode 9 exits too
+ * PlayStartMovieEx signature is (MovieNo, MovieType, PauseFlag) per sdfunc.h.
+ * Stub mismatch would silently drop the 3rd arg on x64; fix the proto.
+ */
+int  PlayStartMovieEx(int no, int type, int pause) {
+    (void)no; (void)type; (void)pause;
+    return 0;
+}
 int  PlayStopMovieEx(void)               { return 0; }
-int  WaitPrePlayMovie(void)              { return 1; }
-int  PlayMovieMain(void)                 { return 0; }
+int  WaitPrePlayMovie(void)              { return 3; }
+int  PlayMovieMain(void)                 { return 3; }
 void mwPlySetDispMode(int m)             { (void)m; }
 
 /* ----------------------------------------------------------------------
