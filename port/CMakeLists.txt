@@ -80,6 +80,10 @@ set(PORT_STUB_SOURCES
     # game_texture_stubs.c because <windows.h>'s POINT struct collides
     # with types.h's POINT when both are included in the same TU.
     src/tex_pool_alloc.c
+    # Debug-only TGA dumper (RECVX_DUMP_TEX=1). Lives here, not in the
+    # game target, because the recvx_game_prelude.h /FI guards (set to
+    # mask KATANA's SH-series stdio) leave FILE undeclared in that TU.
+    src/tex_dump.c
 )
 
 add_library(recvx_port_stubs STATIC ${PORT_STUB_SOURCES})
