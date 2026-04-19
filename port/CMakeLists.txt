@@ -76,6 +76,10 @@ set(PORT_STUB_SOURCES
     src/stubs/stub_sb.c
     src/stubs/stub_game.c
     src/input/input.c
+    # Low-4GiB allocator for the NJS_TEXMEMLIST pool. Split out from
+    # game_texture_stubs.c because <windows.h>'s POINT struct collides
+    # with types.h's POINT when both are included in the same TU.
+    src/tex_pool_alloc.c
 )
 
 add_library(recvx_port_stubs STATIC ${PORT_STUB_SOURCES})
