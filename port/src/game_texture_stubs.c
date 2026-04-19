@@ -401,21 +401,12 @@ void njTextureFilterMode(Sint32 mode) {
  * input.c header), so this is just a struct copy — no remapping.
  */
 #include "padman.h"  /* Pad[4] */
-
-typedef struct rx_per_mirror {
-    Uint32 id, support, on, off, press, release;
-    Uint16 r, l;
-    Sint16 x1, y1, x2, y2;
-    char*  name;
-    void*  extend;
-    Uint32 old;
-    void*  info;
-} rx_per_mirror;
-
-extern const void* njGetPeripheral(Uint32 port);
+/* njGetPeripheral is already declared in KATANA/Include/ninjapad.h pulled
+ * via ninja.h above. Its return type is `const NJS_PERIPHERAL*` which is
+ * typedef'd from PDS_PERIPHERAL — same layout as our port-side mirror. */
 
 void recvx_pump_pad(void) {
-    const rx_per_mirror* p = (const rx_per_mirror*)njGetPeripheral(0);
+    const NJS_PERIPHERAL* p = njGetPeripheral(0);
     if (!p) {
         Pad[0].on = 0;
         Pad[0].press = 0;
