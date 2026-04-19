@@ -190,6 +190,27 @@ static int tim2_decode(const void* blob, int* out_w, int* out_h,
             dst[i*4+2] = pal[2];
             dst[i*4+3] = alpha_ps2_to_pc(pal[3]);
         }
+    } else if (image_type == 4) {
+        /* 4-bit paletted. Two pixels per byte, PS2 packs low nibble first
+         * (pixel 0 = low nibble, pixel 1 = high nibble). Palette is
+         * nominally 16 entries; TIM2 files sometimes pad ClutSize to 32
+         * (128 bytes @ ABGR32) — we only index 0..15 so padding is inert.
+         * No CSM bit-swap: 16-entry palettes are read linearly by the GS. */
+        if (clut_fmt != 3) {
+            RX_LOG("tim2", "unsupported clut_fmt=%d for 4bpp (want ABGR32)",
+                   clut_fmt);
+            return 0;
+        }
+        for (int i = 0; i < w * h; ++i) {
+            uint8_t byte   = img[i >> 1];
+            uint8_t nibble = (i & 1) ? (uint8_t)(byte >> 4)
+                                     : (uint8_t)(byte & 0x0F);
+            const uint8_t* pal = clut + nibble * 4;
+            dst[i*4+0] = pal[0];
+            dst[i*4+1] = pal[1];
+            dst[i*4+2] = pal[2];
+            dst[i*4+3] = alpha_ps2_to_pc(pal[3]);
+        }
     } else {
         RX_LOG("tim2", "unsupported image_type=%d", image_type);
         return 0;
