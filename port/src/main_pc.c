@@ -164,24 +164,25 @@ static void log_task_flags(uint32_t tk, uint32_t ts) {
            tk, ts, active);
 }
 
-/* PDD_DGT_* bit -> short label, mirrors port/src/input/input.c. Covers
- * only the digital buttons we actually pump from SDL. */
+/* scePad-shifted bit -> short label, mirrors port/src/input/input.c. */
 static const char* button_name(int bit) {
     switch (bit) {
-        case 0:  return "Sq";    /* TC */
-        case 1:  return "Ci";    /* TB */
-        case 2:  return "Cr";    /* TA */
-        case 3:  return "St";    /* ST */
-        case 4:  return "U";     /* KU */
-        case 5:  return "D";     /* KD */
-        case 6:  return "L";     /* KL */
-        case 7:  return "R";     /* KR */
-        case 8:  return "L2";    /* TZ */
-        case 9:  return "Tri";   /* TY */
-        case 10: return "R2";    /* TX */
-        case 11: return "TD";
-        case 16: return "R1";    /* TR */
-        case 17: return "L1";    /* TL */
+        case 0:  return "L2";
+        case 1:  return "R2";
+        case 2:  return "L1";
+        case 3:  return "R1";
+        case 4:  return "Tri";
+        case 5:  return "Ci";
+        case 6:  return "Cr";
+        case 7:  return "Sq";
+        case 8:  return "Sel";
+        case 9:  return "L3";
+        case 10: return "R3";
+        case 11: return "St";
+        case 12: return "U";
+        case 13: return "R";
+        case 14: return "D";
+        case 15: return "L";
         default: return "?";
     }
 }
@@ -248,6 +249,11 @@ static int run_game_loop(const recvx_backend* backend) {
          * right screen-space. Game coords match PS2 SetQuadPos convention. */
         recvx_gfx_begin_2d(640, 480);
         recvx_input_new_frame();
+        /* Mirror our ninja peripheral into Pad[0] so the game's direct
+         * Pad[].press reads (CheckStartButton, AdvGetOkButton, etc.) fire.
+         * Defined in port/src/game_texture_stubs.c (recvx_game target). */
+        extern void recvx_pump_pad(void);
+        recvx_pump_pad();
 
         /* Sample AdvWork.Mode BEFORE njUserMain so we see the mode that
          * just crashed (if it does) in the log, then sample AFTER to

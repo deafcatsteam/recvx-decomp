@@ -1,18 +1,18 @@
 /*
- * Input plumbing: SDL keyboard/gamepad -> Sega Ninja PDS_PERIPHERAL.
+ * Input plumbing: SDL keyboard/gamepad -> ninja PDS_PERIPHERAL.
  *
- * The game calls njGetPeripheral(port) which we resolve to the address of
- * the static peripheral we maintain here. Bit layout matches sg_pad.h:
+ * CRITICAL: on the PS2 port the `per->on` field does NOT follow Sega
+ * Ninja's PDD_DGT_* layout — it holds the raw scePadRead button mask
+ * byte-swapped as `(byte2 << 8) | byte3`, so the game's Pad[] and
+ * bhSetPad's pad_type[] tables all decode scePad bits. Matching that is
+ * mandatory: `CheckStartButton()` tests bit 0x800 which is START in the
+ * shifted scePad layout (bit 11), but would be TD in PDD.
  *
- *   KU=4, KD=5, KL=6, KR=7      digital direction A (d-pad)
- *   ST=3                        Start
- *   TA=2 (Cross), TB=1 (Circle), TC=0 (Square on PS2 DS2 via ninja adapter)
- *   TX=10, TY=9, TZ=8, TD=11    shoulder / extra face buttons
- *   TR=16, TL=17                L/R emulation bits
- *
- * Note: there is no "Select" bit in the Sega Ninja peripheral layout. The
- * pads used by the decomp route Select through its scePad code path; for
- * now we just drop it — menu/title tasks don't require Select.
+ *   scePad shifted layout (this is what per->on / Pad[].on holds):
+ *     bit  0 L2     bit  1 R2     bit  2 L1     bit  3 R1
+ *     bit  4 TRI    bit  5 CIRC   bit  6 CROSS  bit  7 SQ
+ *     bit  8 SEL    bit  9 L3     bit 10 R3     bit 11 START
+ *     bit 12 UP     bit 13 RIGHT  bit 14 DOWN   bit 15 LEFT
  */
 
 #include "recvx_port.h"
@@ -38,21 +38,23 @@ typedef struct recvx_ninja_peripheral {
     void*     info;
 } recvx_ninja_peripheral;
 
-/* Digital button bit constants (must match sg_pad.h PDD_DGT_*) */
-#define RX_DGT_TC  (1u << 0)   /* Square (PS2) */
-#define RX_DGT_TB  (1u << 1)   /* Circle */
-#define RX_DGT_TA  (1u << 2)   /* Cross  */
-#define RX_DGT_ST  (1u << 3)   /* Start  */
-#define RX_DGT_KU  (1u << 4)
-#define RX_DGT_KD  (1u << 5)
-#define RX_DGT_KL  (1u << 6)
-#define RX_DGT_KR  (1u << 7)
-#define RX_DGT_TZ  (1u << 8)
-#define RX_DGT_TY  (1u << 9)   /* Triangle (PS2) */
-#define RX_DGT_TX  (1u << 10)
-#define RX_DGT_TD  (1u << 11)
-#define RX_DGT_TR  (1u << 16)  /* R1 */
-#define RX_DGT_TL  (1u << 17)  /* L1 */
+/* scePad-shifted bit constants (what per->on actually carries on PS2). */
+#define RX_PAD_L2     (1u <<  0)
+#define RX_PAD_R2     (1u <<  1)
+#define RX_PAD_L1     (1u <<  2)
+#define RX_PAD_R1     (1u <<  3)
+#define RX_PAD_TRI    (1u <<  4)
+#define RX_PAD_CIRC   (1u <<  5)
+#define RX_PAD_CROSS  (1u <<  6)
+#define RX_PAD_SQ     (1u <<  7)
+#define RX_PAD_SEL    (1u <<  8)
+#define RX_PAD_L3     (1u <<  9)
+#define RX_PAD_R3     (1u << 10)
+#define RX_PAD_START  (1u << 11)
+#define RX_PAD_UP     (1u << 12)
+#define RX_PAD_RIGHT  (1u << 13)
+#define RX_PAD_DOWN   (1u << 14)
+#define RX_PAD_LEFT   (1u << 15)
 
 /* Everything the pads used by bhSetPad care about — r, l (triggers),
  * x1, y1 (left stick), plus the digital `on` bitmap. */
@@ -66,20 +68,20 @@ static recvx_ninja_peripheral g_per = {
 static uint32_t g_prev_on;
 
 static const uint32_t key_to_bit[RX_KEY__COUNT] = {
-    [RX_KEY_UP]     = RX_DGT_KU,
-    [RX_KEY_DOWN]   = RX_DGT_KD,
-    [RX_KEY_LEFT]   = RX_DGT_KL,
-    [RX_KEY_RIGHT]  = RX_DGT_KR,
-    [RX_KEY_ACTION] = RX_DGT_TA,
-    [RX_KEY_CANCEL] = RX_DGT_TB,
-    [RX_KEY_AIM]    = RX_DGT_TC,
-    [RX_KEY_MENU]   = RX_DGT_TY,
-    [RX_KEY_L1]     = RX_DGT_TL,
-    [RX_KEY_R1]     = RX_DGT_TR,
-    [RX_KEY_L2]     = RX_DGT_TZ,
-    [RX_KEY_R2]     = RX_DGT_TX,
-    [RX_KEY_START]  = RX_DGT_ST,
-    [RX_KEY_SELECT] = 0,  /* no bit — see file header */
+    [RX_KEY_UP]     = RX_PAD_UP,
+    [RX_KEY_DOWN]   = RX_PAD_DOWN,
+    [RX_KEY_LEFT]   = RX_PAD_LEFT,
+    [RX_KEY_RIGHT]  = RX_PAD_RIGHT,
+    [RX_KEY_ACTION] = RX_PAD_CROSS,   /* X = OK for keytype 0 (AdvGetOk=0xC0) */
+    [RX_KEY_CANCEL] = RX_PAD_CIRC,    /* O = cancel */
+    [RX_KEY_AIM]    = RX_PAD_SQ,
+    [RX_KEY_MENU]   = RX_PAD_TRI,
+    [RX_KEY_L1]     = RX_PAD_L1,
+    [RX_KEY_R1]     = RX_PAD_R1,
+    [RX_KEY_L2]     = RX_PAD_L2,
+    [RX_KEY_R2]     = RX_PAD_R2,
+    [RX_KEY_START]  = RX_PAD_START,
+    [RX_KEY_SELECT] = RX_PAD_SEL,
 };
 
 void recvx_input_set_key(recvx_key k, bool pressed) {

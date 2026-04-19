@@ -386,3 +386,50 @@ void njDrawPolygon(NJS_POLYGON_VTX* p, Sint32 count, Sint32 trans) {
 void njTextureFilterMode(Sint32 mode) {
     recvx_gfx_set_filter((int)mode);
 }
+
+/* ------------------------------------------------------------------ */
+/* Pad[] bridge                                                       */
+/* ------------------------------------------------------------------ */
+
+/* On PS2 the Pad[] array is populated by Ps2_Read_Key (ps2_sg_pad.c) which
+ * we don't compile. Without it Pad[0].press stays 0 and every menu gate
+ * (CheckStartButton, AdvGetOkButton) misses. We simulate the same copy
+ * path: read our ninja peripheral each frame, mirror .on/.press into
+ * Pad[0]. Called from main_pc.c after recvx_input_new_frame().
+ *
+ * The ninja peripheral already carries scePad-shifted bits (see
+ * input.c header), so this is just a struct copy — no remapping.
+ */
+#include "padman.h"  /* Pad[4] */
+
+typedef struct rx_per_mirror {
+    Uint32 id, support, on, off, press, release;
+    Uint16 r, l;
+    Sint16 x1, y1, x2, y2;
+    char*  name;
+    void*  extend;
+    Uint32 old;
+    void*  info;
+} rx_per_mirror;
+
+extern const void* njGetPeripheral(Uint32 port);
+
+void recvx_pump_pad(void) {
+    const rx_per_mirror* p = (const rx_per_mirror*)njGetPeripheral(0);
+    if (!p) {
+        Pad[0].on = 0;
+        Pad[0].press = 0;
+        Pad[0].l = 0;
+        Pad[0].r = 0;
+        Pad[0].x1 = Pad[0].y1 = 0;
+        return;
+    }
+    Pad[0].on      = p->on;
+    Pad[0].press   = p->press;
+    Pad[0].l       = p->l;
+    Pad[0].r       = p->r;
+    Pad[0].x1      = p->x1;
+    Pad[0].y1      = p->y1;
+    Pad[0].x2      = p->x2;
+    Pad[0].y2      = p->y2;
+}
