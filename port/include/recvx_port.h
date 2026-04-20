@@ -233,6 +233,12 @@ int  recvx_adx_alloc_free_slot(int first, int last);
 int  recvx_msa_init(const char* mlt_path);
 void recvx_msa_shutdown(void);
 
+/* Override the per-sample source rate extracted from Smpl entries. Must be
+ * called before recvx_msa_init. Hz > 0 forces that value for every sample;
+ * Hz == 0 restores Smpl-driven rates. Used by main_pc's --msa-rate flag
+ * to let us A/B different rate guesses without rebuilding. */
+void recvx_msa_set_force_rate(int hz);
+
 /* Play system SE. se_no indexes the Sset table (0..9 for COMMON.MLT).
  * volume is PS2 convention 0..127. Returns 0 on success. */
 int  recvx_msa_play_se(int se_no, int volume);

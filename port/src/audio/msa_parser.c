@@ -90,9 +90,14 @@ typedef struct msa_sample {
 static struct {
     int        initialized;
     int        mixer_rate;
+    int        force_rate;   /* CLI override; 0 = use Smpl-derived rate */
     msa_sample samples[MSA_MAX_SAMPLES];
     int        sample_count;
 } g_msa;
+
+void recvx_msa_set_force_rate(int hz) {
+    g_msa.force_rate = (hz > 0) ? hz : 0;
+}
 
 /* ==========================================================================
  * SCEI section walker
@@ -390,6 +395,13 @@ int recvx_msa_init(const char* mlt_path) {
             for (int b = 0; b < dump && n + 3 < (int)sizeof(hex); ++b)
                 n += snprintf(hex + n, sizeof(hex) - n, "%02x ", e0[b]);
             RX_LOG("msa", "Smpl[0] raw: %s", hex);
+            /* Candidate rate-field probes so we can A/B which offset is
+             * the true sample rate if 0x14 turns out wrong by ear. */
+            RX_LOG("msa", "Smpl[0] candidates: u16@0x0E=%u u16@0x10=%u "
+                   "u16@0x12=%u u16@0x14=%u u16@0x16=%u",
+                   rd_u16_le(e0 + 0x0E), rd_u16_le(e0 + 0x10),
+                   rd_u16_le(e0 + 0x12), rd_u16_le(e0 + 0x14),
+                   rd_u16_le(e0 + 0x16));
         }
 
         for (uint32_t i = 0; i < smpl_count; ++i) {
@@ -427,9 +439,14 @@ int recvx_msa_init(const char* mlt_path) {
         if (!mono) continue;
         int decoded = psx_adpcm_decode(vag, vag_bytes, mono, max_samples);
 
-        /* Per-sample source rate from Smpl section; fall back to the
-         * guessed RE-series default if Smpl is missing or out of range. */
-        int src_rate = smpl_rate[i] > 0 ? smpl_rate[i] : MSA_SAMPLE_RATE;
+        /* Resolution order: CLI --msa-rate override → Smpl byte 0x14 →
+         * RE-series default. The CLI path lets us eyeball different rate
+         * guesses without rebuilding while we're still pinning down which
+         * Smpl field actually stores the authentic rate. */
+        int src_rate;
+        if      (g_msa.force_rate > 0) src_rate = g_msa.force_rate;
+        else if (smpl_rate[i] > 0)     src_rate = smpl_rate[i];
+        else                           src_rate = MSA_SAMPLE_RATE;
 
         int out_bytes = 0;
         int16_t* stereo = mono_to_stereo_resample(mono, decoded,

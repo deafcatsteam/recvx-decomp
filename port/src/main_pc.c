@@ -53,6 +53,7 @@ static void audio_sink_to_backend(void* opaque, int rate,
 static const char* g_iso_path      = NULL;
 static const char* g_gamedata_path = NULL;
 static bool        g_run_game      = false;
+static int         g_msa_rate      = 0;   /* 0 = use Smpl-derived rate */
 
 static void parse_args(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
@@ -62,12 +63,16 @@ static void parse_args(int argc, char** argv) {
             g_gamedata_path = argv[++i];
         } else if (strcmp(argv[i], "--game") == 0) {
             g_run_game = true;
+        } else if (strcmp(argv[i], "--msa-rate") == 0 && i + 1 < argc) {
+            g_msa_rate = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
                    "                [--gamedata path\\to\\extracted\\dir]\n"
-                   "                [--game]\n"
+                   "                [--game] [--msa-rate N]\n"
                    "  --game      run njUserInit/njUserMain task loop instead of FMV demo\n"
-                   "  --gamedata  dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n");
+                   "  --gamedata  dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n"
+                   "  --msa-rate  override COMMON.MLT source sample rate in Hz\n"
+                   "              (try 22050 / 24000 / 32000 / 44100 / 48000)\n");
             exit(0);
         }
     }
@@ -241,6 +246,10 @@ static int run_game_loop(const recvx_backend* backend) {
     {
         char mlt_path[512];
         snprintf(mlt_path, sizeof mlt_path, "%s/COMMON.MLT", g_gamedata_path);
+        if (g_msa_rate > 0) {
+            RX_LOG("game", "MSA rate override: %d Hz", g_msa_rate);
+            recvx_msa_set_force_rate(g_msa_rate);
+        }
         if (recvx_msa_init(mlt_path) != 0) {
             RX_LOG("game", "WARN: MSA init failed — SE disabled");
         }
