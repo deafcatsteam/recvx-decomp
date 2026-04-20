@@ -13,6 +13,7 @@
  */
 
 #include "recvx_port.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -121,10 +122,31 @@ void bhDispTime(void* pos,int n,int tim,int col,float z){(void)pos;(void)n;(void
  * in adv.c now (compiled into recvx_game). No stubs needed. */
 
 /* ----------------------------------------------------------------------
- * Sound (will be replaced by SDL audio once we wire it in phase 5b).
+ * Sound system bootstrap.
+ *
+ * On PS2 this calls InitSoundDriver("MANATEE.DRV","COMMON.MLT") which
+ * kicks off the whole CRI MANATEE pipeline. Our replacement is much
+ * slimmer: we parse COMMON.MLT directly, decode every Vagi sample to
+ * S16 stereo PCM, and cache them for CallSystemSe to pull from. The
+ * ADX mixer already gets us BGM + voice; the MSA loader piggybacks on
+ * the same mixer slots 2..15 for SE voice rotation.
  * ---------------------------------------------------------------------- */
-void InitGameSoundSystem(void)                       {}
-void RequestAllStopSoundEx(int a,int b,int c)        { (void)a;(void)b;(void)c; }
+void InitGameSoundSystem(void) {
+    const char* gd = recvx_gamedata_dir();
+    if (!gd) {
+        RX_LOG("snd", "InitGameSoundSystem: no gamedata dir — SE disabled");
+        return;
+    }
+    char path[512];
+    snprintf(path, sizeof path, "%s/COMMON.MLT", gd);
+    if (recvx_msa_init(path) != 0) {
+        RX_LOG("snd", "recvx_msa_init failed — SE disabled");
+    }
+}
+void RequestAllStopSoundEx(int AdxFlag,int InSoundFlag,int FadeCount) {
+    RX_LOG("snd", "RequestAllStopSoundEx adx=%d inSnd=%d fade=%d",
+           AdxFlag, InSoundFlag, FadeCount);
+}
 
 /* ----------------------------------------------------------------------
  * Pad layer (pdGetPeripheral is the low-level KATANA sg_pad.h entry —
@@ -245,12 +267,20 @@ void  njSetPaletteData(int mode, int offset, int count, void* data) {
 extern double fabs(double);
 float fabsf(float x) { return (float)fabs((double)x); }
 
-/* adxwrap.c isn't compiled yet — stub the handful adv.c calls. */
+/* adxwrap.c isn't compiled yet — shim adv.c's ADX calls into our
+ * FFmpeg-backed streaming player (port/src/audio/adx_player.c). */
 void PlayAdx(unsigned int slot, unsigned int part, unsigned int file) {
-    (void)slot;(void)part;(void)file;
+    RX_LOG("snd", "PlayAdx slot=%u part=%u file=%u", slot, part, file);
+    recvx_adx_play((int)slot, (int)part, (int)file);
 }
-void StopAdx(unsigned int slot)                    { (void)slot; }
-void SetVolumeAdx2(unsigned int slot, float vol)   { (void)slot;(void)vol; }
+void StopAdx(unsigned int slot)                    {
+    RX_LOG("snd", "StopAdx slot=%u", slot);
+    recvx_adx_stop((int)slot);
+}
+void SetVolumeAdx2(unsigned int slot, float vol)   {
+    RX_LOG("snd", "SetVolumeAdx2 slot=%u vol=%.2f", slot, vol);
+    recvx_adx_set_volume((int)slot, vol);
+}
 
 /* bh helpers not yet in a compiled .c. bhSetFontTexture is the first
  * resource-touching call in Adv_FirstWarningMessage mode 3 — logging
@@ -286,8 +316,32 @@ void  syCfgSetSoundMode(int mode)                  { (void)mode; }
 void  SetSoundModeEx(int mode)                     { (void)mode; }
 int   GetSoundMode(void)                           { return 0; }
 /* MountSoundAfs / UnmountSoundAfs now live in port/src/afs/afs_mount.c. */
-void  CallSystemSe(int id)                         { (void)id; }
-void  CallSystemSeBasic(int id)                    { (void)id; }
+/* sdfunc.h prototypes:
+ *   void CallSystemSe     (int param, int SeNo);
+ *   void CallSystemSeEx   (int SeNo, int Volume);
+ *   void CallSystemSeBasic(int SeNo, int Volume, int FxLevel);
+ *
+ * Real CallSystemSeBasic computes BankNo=SeNo/256, ListNo=SeNo and hands
+ * it to ExPlaySe(&RequestInfo). For the system bank (BankNo==0) that
+ * resolves through Sset/Prog/Smpl into a Vagi entry in COMMON.MLT.
+ * Stage 1 of the port skips the intermediate tables and plays
+ * Vagi[SeNo % sample_count] directly — good enough to hear menu beeps
+ * and verify the whole decode/mix chain end to end. */
+void  CallSystemSe(int param, int SeNo) {
+    (void)param;
+    RX_LOG("snd", "CallSystemSe param=%d SeNo=%d", param, SeNo);
+    recvx_msa_play_se(SeNo, 100);
+}
+void  CallSystemSeEx(int SeNo, int Volume) {
+    RX_LOG("snd", "CallSystemSeEx SeNo=%d vol=%d", SeNo, Volume);
+    recvx_msa_play_se(SeNo, Volume);
+}
+void  CallSystemSeBasic(int SeNo, int Volume, int FxLevel) {
+    (void)FxLevel;
+    RX_LOG("snd", "CallSystemSeBasic SeNo=%d vol=%d fx=%d",
+           SeNo, Volume, FxLevel);
+    recvx_msa_play_se(SeNo, Volume);
+}
 
 /* Vibration extra. */
 void  StartVibrationEx(int port, int motor, int power, int time) {
@@ -307,9 +361,36 @@ unsigned int palbuf[256];
  * Ps2 texture helpers. Most are plain no-ops; CheckSoftResetKeyFlag
  * returns 0 so the title screen never thinks we pressed L1+R1+Start+Sel.
  * ---------------------------------------------------------------------- */
-void PlayBgmEx2(int a, int b, int c, int d) { (void)a;(void)b;(void)c;(void)d; }
-void PlayVoiceEx2(int a, int b, void* p, int c, int d, int e) {
-    (void)a;(void)b;(void)p;(void)c;(void)d;(void)e;
+/* Slot convention for the ADX mixer:
+ *   0 = BGM (looped)
+ *   1 = voice (one-shot)
+ * PlayAdx also uses slot 0 for title voice, which stomps BGM — same as
+ * the original PS2 BGM channel sharing, so it matches game expectations. */
+#define RX_BGM_SLOT   0
+#define RX_VOICE_SLOT 1
+
+/* sdfunc.h: void PlayBgmEx2(unsigned int PatId, int BgmNo, int FadeInRate, int Volume);
+ * Volume on PS2 is 0..127. Normalize to 0..1 for the mixer. */
+void PlayBgmEx2(unsigned int part, int bgmNo, int fadeIn, int vol) {
+    (void)fadeIn;
+    RX_LOG("snd", "PlayBgmEx2 part=%u bgmNo=%d fadeIn=%d vol=%d",
+           part, bgmNo, fadeIn, vol);
+    if (bgmNo < 0) { recvx_adx_stop(RX_BGM_SLOT); return; }
+    float g = vol <= 0 ? 0.0f : (vol >= 127 ? 1.0f : (float)vol / 127.0f);
+    recvx_adx_set_volume(RX_BGM_SLOT, g);
+    recvx_adx_play_ex(RX_BGM_SLOT, (int)part, bgmNo, 1);
+}
+
+/* sdfunc.h: void PlayVoiceEx2(int PatId, int VoiceNo, NJS_POINT3* pPos,
+ *                             int Mode, int FadeInRate, int PauseFlag); */
+void PlayVoiceEx2(int part, int voiceNo, void* pPos, int mode, int fadeIn,
+                  int pauseFlag) {
+    (void)pPos;(void)mode;(void)fadeIn;(void)pauseFlag;
+    RX_LOG("snd", "PlayVoiceEx2 part=%d voiceNo=%d mode=%d fadeIn=%d pause=%d",
+           part, voiceNo, mode, fadeIn, pauseFlag);
+    if (voiceNo < 0) { recvx_adx_stop(RX_VOICE_SLOT); return; }
+    recvx_adx_set_volume(RX_VOICE_SLOT, 1.0f);
+    recvx_adx_play_ex(RX_VOICE_SLOT, part, voiceNo, 0);
 }
 /* MountAdvAfs lives in adv.c (line 157) — don't stub. */
 void ExitApplication(void)            { /* boot chain shouldn't hit this */ }

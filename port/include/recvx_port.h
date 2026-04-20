@@ -51,6 +51,12 @@ typedef struct recvx_backend {
 const recvx_backend* recvx_backend_gl(void);
 const recvx_backend* recvx_backend_null(void);
 
+/* Globally-live backend pointer. Set by main_pc after backend->init so
+ * subsystems (audio player, future mixers) can push PCM / surfaces
+ * without threading the backend handle through every stub. */
+void                 recvx_backend_set_current(const recvx_backend* b);
+const recvx_backend* recvx_backend_current(void);
+
 /* --------------------------------------------------------------------------
  * ISO reader
  * -------------------------------------------------------------------------- */
@@ -170,6 +176,73 @@ void recvx_gfx_draw_polygon(const recvx_gfx_vtx* verts, int count, int trans);
 
 /* 0 = nearest, 1 = linear. Matches njTextureFilterMode conventions. */
 void recvx_gfx_set_filter(int mode);
+
+/* Frame pacer. Sleep + spin until 1/target_hz seconds elapsed since the
+ * previous call. Pass 0 to just reset the clock (no wait). Used by the
+ * game loop to cap njUserMain at PS2 NTSC 60 Hz even on high-refresh
+ * monitors where SDL vsync alone lets the loop run at 144+ Hz. */
+void recvx_backend_pace(int target_hz);
+
+/* --------------------------------------------------------------------------
+ * ADX audio player (CRI ADX streaming decoded via FFmpeg).
+ *
+ * adv.c calls PlayAdx(slot, part, file) where `part` is a PatId[] index
+ * (0=BGM, 1=VOICE, 2=SE, 3=ADV) and `file` is the AFS inside-file id.
+ * The stubs in stub_game.c route into these. We read the whole AFS
+ * entry into memory, decode with libavformat+libavcodec's ADPCM_ADX,
+ * and push the PCM to the current backend's audio_init/audio_queue.
+ * -------------------------------------------------------------------------- */
+int  recvx_adx_play      (int slot, int part, int file);
+/* Same as play() but with a loop flag: 1 = wrap to 0 on reaching end,
+ * used for BGM so it keeps running until StopBgm / re-triggered. */
+int  recvx_adx_play_ex   (int slot, int part, int file, int loop);
+void recvx_adx_stop      (int slot);
+void recvx_adx_set_volume(int slot, float volume);  /* 0.0..1.0 */
+void recvx_adx_stop_all  (void);
+/* Drain a chunk of decoded PCM from each active slot to the backend
+ * audio queue. All slots mix into a single stereo stream. Call once
+ * per frame from the game loop. */
+void recvx_adx_pump      (void);
+
+/* Lazily open the backend audio device at `default_rate` if it isn't
+ * already. No-op if already open (returns the existing rate). Used by
+ * the SE path so menu beeps work before any PlayAdx has locked the
+ * rate. Returns the effective output sample rate, or -1 on failure. */
+int  recvx_adx_ensure_audio_open(int default_rate);
+
+/* Play pre-decoded S16 stereo PCM at the mixer's output rate on `slot`.
+ * Buffer is non-owning — caller must keep it alive until the slot
+ * completes or is stopped. Intended for short cached samples like
+ * system SE (shared decoded PCM pool). Returns 0 on success. */
+int  recvx_adx_slot_play_pcm(int slot, const void* s16_stereo, int byte_count,
+                             float volume);
+
+/* Pick an inactive slot in [first, last] and return its index, or -1
+ * if every slot in that range is busy. Used to rotate SE voices. */
+int  recvx_adx_alloc_free_slot(int first, int last);
+
+/* --------------------------------------------------------------------------
+ * SCEI MSA (CRI MANATEE sound bank) — system SE from COMMON.MLT
+ *
+ * sdfunc.c's CallSystemSe*() resolves an SeNo through a Sset → Prog →
+ * Smpl → Vagi chain inside COMMON.MLT and plays the selected PSX-ADPCM
+ * sample via MANATEE. We replicate just enough of that pipeline to play
+ * audible menu beeps: load + decode all Vagi samples once at init, then
+ * rotate through the voice pool (ADX slots 2..15) on each CallSystemSe.
+ * -------------------------------------------------------------------------- */
+int  recvx_msa_init(const char* mlt_path);
+void recvx_msa_shutdown(void);
+
+/* Play system SE. se_no indexes the Sset table (0..9 for COMMON.MLT).
+ * volume is PS2 convention 0..127. Returns 0 on success. */
+int  recvx_msa_play_se(int se_no, int volume);
+
+/* --------------------------------------------------------------------------
+ * Gamedata directory. Set by main_pc from the --gamedata CLI flag and
+ * read by any subsystem that needs to open loose files (COMMON.MLT,
+ * MANATEE.DRV, etc.) from outside the AFS archives.
+ * -------------------------------------------------------------------------- */
+const char* recvx_gamedata_dir(void);
 
 #ifdef __cplusplus
 }

@@ -48,6 +48,10 @@ void recvx_set_gamedata_dir(const char* dir) {
     g_gamedata[sizeof g_gamedata - 1] = 0;
 }
 
+const char* recvx_gamedata_dir(void) {
+    return g_gamedata[0] ? g_gamedata : NULL;
+}
+
 /* types.h field offsets (these fields live BEFORE `void* typ_exp` @ 0x50 in
  * SYS_WORK, so the PS2 32-bit offsets survive the x64 ABI pointer growth).
  *   sys_partid @ 0x30, itm_partid @ 0x34, dor_partid @ 0x3C

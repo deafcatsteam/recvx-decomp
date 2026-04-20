@@ -152,6 +152,22 @@ endif()
 target_link_libraries(recvx_fmv PUBLIC recvx_iso)
 
 # ----------------------------------------------------------------------------
+# ADX audio streaming (CRI ADX → S16 PCM via libavcodec) for PlayAdx paths
+# in the decomp. Needs FFmpeg like the FMV target.
+# ----------------------------------------------------------------------------
+add_library(recvx_audio STATIC
+    src/audio/adx_player.c
+    src/audio/msa_parser.c
+)
+target_include_directories(recvx_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_link_libraries(recvx_audio PUBLIC recvx_afs recvx_backend recvx_port_stubs)
+if(FFMPEG_FOUND)
+    target_include_directories(recvx_audio PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_link_libraries(recvx_audio PUBLIC ${FFMPEG_LIBRARIES})
+    target_compile_definitions(recvx_audio PRIVATE RECVX_HAVE_FFMPEG=1)
+endif()
+
+# ----------------------------------------------------------------------------
 # Phase 0 executable: spins up the backend, walks a fake frame loop.
 # Once Phase 1 lands we will swap in src/ps2/veronica/prog/*.c as a game lib
 # and replace the loop with njUserInit/njUserMain/njUserExit.
@@ -161,6 +177,7 @@ target_link_libraries(recvx_pc PRIVATE
     recvx_backend
     recvx_iso
     recvx_fmv
+    recvx_audio
     recvx_afs
     recvx_port_stubs
 )

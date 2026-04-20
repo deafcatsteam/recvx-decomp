@@ -233,6 +233,19 @@ static int run_game_loop(const recvx_backend* backend) {
     if (MountSoundAfs() != 0) {
         RX_LOG("game", "WARN: MountSoundAfs failed — boot chain will stall");
     }
+
+    /* Eager-load the system SE bank so CallSystemSe* works from the very
+     * first menu interaction. The decomp's InitGameSoundSystem (system.c)
+     * would otherwise not fire until after Warning/Ipl/Firstmovie runs —
+     * far too late for any SE queued during those phases. */
+    {
+        char mlt_path[512];
+        snprintf(mlt_path, sizeof mlt_path, "%s/COMMON.MLT", g_gamedata_path);
+        if (recvx_msa_init(mlt_path) != 0) {
+            RX_LOG("game", "WARN: MSA init failed — SE disabled");
+        }
+    }
+
     InitAdvSystem();
     RX_LOG("game", "InitAdvSystem done (AdvWork.PatId latched to PatId[3]=%d)", 3);
 
@@ -271,7 +284,14 @@ static int run_game_loop(const recvx_backend* backend) {
 
         njUserMain();
         recvx_gfx_end_2d();
+        /* Drain any decoded ADX PCM into the SDL audio queue for this
+         * frame. Keeps latency ~1/15s without starving playback. */
+        recvx_adx_pump();
         backend->end_frame();
+        /* Hard-cap to PS2 NTSC tick rate. SDL vsync alone lets the loop
+         * fire at the monitor refresh (144/240 Hz) which speeds up every
+         * adv.c Mode counter — menu plate flicker, cursor repeat, fades. */
+        recvx_backend_pace(60);
 
         /* Also check after the tick so single-tick mode transitions
          * (e.g. mode 3 falls through to 4 without break at adv.c:1228)
@@ -334,6 +354,7 @@ int main(int argc, char** argv) {
         RX_LOG("boot", "ERR: backend %s failed to init", backend->name);
         return 1;
     }
+    recvx_backend_set_current(backend);
     RX_LOG("boot", "backend: %s", backend->name);
 
     int rc = g_run_game ? run_game_loop(backend)
