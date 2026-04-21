@@ -36,12 +36,10 @@
  *   2. Inline PSX-ADPCM decode to S16 mono (14 samples per 16-byte frame,
  *      two per byte via nibble pairs, filtered through the 5-entry
  *      predictor LUT with a per-sample shift).
- *   3. Resolve per-sample source rate from the Smpl section (bytes [0x14]
- *      of each Smpl entry, LE u16 Hz). Falls back to MSA_SAMPLE_RATE
- *      default if Smpl is missing or the value is out of range.
- *   4. Linear-interpolation resample from that rate to g_out_rate,
- *      duplicated L/R into interleaved S16 stereo so the mixer's
- *      accumulator can sum without per-slot SRC.
+ *   3. Linear-interpolation resample from MSA_SAMPLE_RATE (32000 Hz,
+ *      verified by ear on RECVX's COMMON.MLT) to g_out_rate, duplicated
+ *      L/R into interleaved S16 stereo so the mixer's accumulator can
+ *      sum without per-slot SRC. `--msa-rate N` CLI overrides the default.
  *
  * Playback path:
  *   recvx_msa_play_se(seNo, vol) → alloc voice slot in [2..15] from the
@@ -72,11 +70,16 @@
 #define MSA_SE_SLOT_FIRST 2
 #define MSA_SE_SLOT_LAST  15
 
-/* Source rate of the PSX-ADPCM VAG samples baked into COMMON.MLT. PS2
- * SPU native sample rate at pitch 0x1000 is 48000, but SE patches are
- * typically stored at a fraction of that; 22050 is the common RE-series
- * choice and what these beeps sound right at (tune by ear later). */
-#define MSA_SAMPLE_RATE      22050
+/* Source rate of the PSX-ADPCM VAG samples baked into COMMON.MLT. 32000
+ * is what menu beeps sound correct at (verified by ear on RECVX).
+ *
+ * This is an *implicit* bank-wide rate: despite parsing Smpl entries I
+ * couldn't find a per-entry field that equals 32000 — the u16 at Smpl
+ * offset 0x14 reads 0x5FE6 (24550), which sounds noticeably too low in
+ * pitch. 24550 is presumably a tune/envelope value, not a sample rate,
+ * and SCEI MSA for this bank just assumes 32kHz authoring rate. Different
+ * banks (MULTSPQ.AFS room SE) may differ and need rate re-discovery. */
+#define MSA_SAMPLE_RATE      32000
 /* Rate we'd like the backend audio device opened at if nothing else has
  * opened it yet. Matches the ADX title voice native rate so subsequent
  * PlayAdx calls don't incur a resample when we init MSA first. */
@@ -349,28 +352,24 @@ int recvx_msa_init(const char* mlt_path) {
     }
     body_offsets[vagi_count] = body_span;   /* end sentinel */
 
-    /* ---- Smpl section parse (per-sample rate / center note) -------------
+    /* ---- Smpl section parse (center note + diagnostic rate candidates) ---
      *
      * Each Smpl entry observed as 42 B on COMMON.MLT:
      *   off 0x00 u16 vagi_id              (0..9)
      *   off 0x02 u16 flags/pad            (0x4001 constant in this bank)
      *   off 0x04 u16 velocity_max         (0x007F)
-     *   off 0x06..0x13 ADSR / tune fields (see hex-dump analysis)
+     *   off 0x06..0x13 ADSR / tune fields
      *   off 0x0B  u8  center_note         (0x3C = MIDI 60 = C5)
-     *   off 0x14 u16 sample_rate_hz       (0x5FE6 = 24550 Hz observed)
+     *   off 0x14 u16 ??? (0x5FE6 = 24550 — NOT the sample rate; ear test
+     *                     says 32000 Hz is right, so this field is likely
+     *                     fine-tune or an envelope coefficient)
      *   off 0x16..0x29 per-octave pitch shifts + reserved
      *
-     * The sample_rate field at 0x14 is the key output: it overrides our
-     * guessed 22050 Hz default so beeps resample at the correct pitch.
-     * Sanity-bounded to [4000..96000] Hz.
+     * Net effect: we don't use a per-Smpl rate. MSA_SAMPLE_RATE is the
+     * implicit bank-wide rate. The candidate-offset log below stays on
+     * so a future bank that actually carries per-Smpl rates is easy to
+     * spot (values would vary per entry instead of being constant).
      */
-    int smpl_rate[MSA_MAX_SAMPLES];
-    int smpl_note[MSA_MAX_SAMPLES];
-    for (int i = 0; i < MSA_MAX_SAMPLES; ++i) {
-        smpl_rate[i] = 0;
-        smpl_note[i] = 60;
-    }
-
     const unsigned char* smpl = msa_find_section(buf, file_size,
                                                  (int)hdr_size,
                                                  (int)block_offs[1],
@@ -404,23 +403,15 @@ int recvx_msa_init(const char* mlt_path) {
                    rd_u16_le(e0 + 0x16));
         }
 
+        /* Entry walk currently just for diagnostic coverage (vagi_id +
+         * center_note log). Once we add pitch/ADSR these values will
+         * drive envelope + per-sample pitch shift. */
         for (uint32_t i = 0; i < smpl_count; ++i) {
             const unsigned char* e = smpl + smpl_e0 + i * smpl_ent;
             uint16_t vid  = rd_u16_le(e + 0x00);
-            uint16_t rate = rd_u16_le(e + 0x14);
             uint8_t  note = e[0x0B];
-            if (vid < MSA_MAX_SAMPLES && rate >= 4000) {
-                smpl_rate[vid] = rate;
-                smpl_note[vid] = note ? note : 60;
-                RX_LOG("msa", "Smpl[%u] → vagi=%u rate=%u Hz note=%u",
-                       i, vid, rate, note);
-            } else if (vid < MSA_MAX_SAMPLES) {
-                RX_LOG("msa", "Smpl[%u] vagi=%u rate=%u out of range — ignored",
-                       i, vid, rate);
-            }
+            RX_LOG("msa", "Smpl[%u] → vagi=%u note=%u", i, vid, note);
         }
-    } else {
-        RX_LOG("msa", "no Smpl section — using default 22050 Hz for all");
     }
 
     g_msa.sample_count = 0;
@@ -439,14 +430,12 @@ int recvx_msa_init(const char* mlt_path) {
         if (!mono) continue;
         int decoded = psx_adpcm_decode(vag, vag_bytes, mono, max_samples);
 
-        /* Resolution order: CLI --msa-rate override → Smpl byte 0x14 →
-         * RE-series default. The CLI path lets us eyeball different rate
-         * guesses without rebuilding while we're still pinning down which
-         * Smpl field actually stores the authentic rate. */
-        int src_rate;
-        if      (g_msa.force_rate > 0) src_rate = g_msa.force_rate;
-        else if (smpl_rate[i] > 0)     src_rate = smpl_rate[i];
-        else                           src_rate = MSA_SAMPLE_RATE;
+        /* Resolution order: CLI --msa-rate override wins, else the
+         * bank-wide MSA_SAMPLE_RATE default (32000 Hz, verified by ear
+         * on COMMON.MLT). The CLI path stays for probing MULTSPQ.AFS
+         * banks once we start pulling room SE. */
+        int src_rate = (g_msa.force_rate > 0) ? g_msa.force_rate
+                                              : MSA_SAMPLE_RATE;
 
         int out_bytes = 0;
         int16_t* stereo = mono_to_stereo_resample(mono, decoded,
