@@ -69,6 +69,7 @@
 #define MSA_MAX_SAMPLES 32
 #define MSA_SE_SLOT_FIRST 2
 #define MSA_SE_SLOT_LAST  15
+#define MSA_REMAP_SIZE    256     /* covers all ListNo values in bank 0 */
 
 /* Source rate of the PSX-ADPCM VAG samples baked into COMMON.MLT. 32000
  * is what menu beeps sound correct at (verified by ear on RECVX).
@@ -96,10 +97,22 @@ static struct {
     int        force_rate;   /* CLI override; 0 = use Smpl-derived rate */
     msa_sample samples[MSA_MAX_SAMPLES];
     int        sample_count;
+    /* SeNo → sample-index override table. -1 means identity (fall through
+     * to `idx = se_no % sample_count`). Populated in recvx_msa_init with
+     * the RECVX-specific menu-SE fixups and further mutated by the CLI
+     * --se-remap flag or recvx_msa_set_remap() from other callers. */
+    int        remap[MSA_REMAP_SIZE];
 } g_msa;
 
 void recvx_msa_set_force_rate(int hz) {
     g_msa.force_rate = (hz > 0) ? hz : 0;
+}
+
+void recvx_msa_set_remap(int se_no, int sample_idx) {
+    if (se_no < 0 || se_no >= MSA_REMAP_SIZE) return;
+    g_msa.remap[se_no] = (sample_idx < 0) ? -1 : sample_idx;
+    RX_LOG("msa", "remap set: SeNo %d → sample %d",
+           se_no, g_msa.remap[se_no]);
 }
 
 /* ==========================================================================
@@ -235,6 +248,31 @@ static int16_t* mono_to_stereo_resample(const int16_t* src, int src_n,
         out[i*2 + 0] = (int16_t)s;
         out[i*2 + 1] = (int16_t)s;
     }
+    /* Declick ramp: linearly fade the first N and last N frames to zero.
+     * Without this, any sample that ends at a non-zero PCM value causes
+     * an audible "pop" when the mixer slot deactivates — the discontinuity
+     * from sample[N-1] to silence(0) is a wideband impulse. ~2ms of fade
+     * (96 frames @ 48 kHz) is inaudible as a fade but large enough to
+     * squash the click. Fade-in also covers the case where PSX-ADPCM's
+     * filter-state initial transient happens to hit a nonzero sample. */
+    int ramp = (int)dst_n / 20;     /* ~5% of length, min 16, max 128 */
+    if (ramp < 16)  ramp = 16;
+    if (ramp > 128) ramp = 128;
+    if (ramp > (int)dst_n / 2) ramp = (int)dst_n / 2;
+    for (int r = 0; r < ramp; ++r) {
+        int g_num = r;              /* 0 .. ramp-1 */
+        /* fade-in at frame r */
+        int fi_l = ((int)out[r*2 + 0]     * g_num) / ramp;
+        int fi_r = ((int)out[r*2 + 1]     * g_num) / ramp;
+        out[r*2 + 0] = (int16_t)fi_l;
+        out[r*2 + 1] = (int16_t)fi_r;
+        /* fade-out at frame (dst_n - 1 - r) */
+        int64_t fo_idx = dst_n - 1 - r;
+        int fo_l = ((int)out[fo_idx*2 + 0] * g_num) / ramp;
+        int fo_r = ((int)out[fo_idx*2 + 1] * g_num) / ramp;
+        out[fo_idx*2 + 0] = (int16_t)fo_l;
+        out[fo_idx*2 + 1] = (int16_t)fo_r;
+    }
     *out_bytes = (int)(dst_n * 2 * sizeof(int16_t));
     return out;
 }
@@ -265,6 +303,29 @@ static unsigned char* load_file(const char* path, int* out_size) {
 
 int recvx_msa_init(const char* mlt_path) {
     if (g_msa.initialized) return 0;
+
+    /* RECVX COMMON.MLT sample catalog (F1..F10 audit, user-verified):
+     *   sample 0 = BACK / cancel      (exit menu back to previous)
+     *   sample 1 = CURSOR             (up/down between menu items)
+     *   sample 2 = SELECTION          (confirm / press-start / enter-option)
+     *   sample 3 = page-flip          (multi-page documents)
+     *   sample 4 = map-show           (when map pops)
+     *   sample 5 = drop-to-dirt       (step-down SFX)
+     *   sample 6 = cell-door/bolt
+     *   sample 7 = lab door A
+     *   sample 8 = lab door B
+     *   sample 9 = heartbeat (likely boss)
+     *
+     * Correct SeNo → sample routing for menu SEs. The on-disk chain is
+     * diagonal (Sset[N].prog_id=N, Prog[N].smpl_id=N, Smpl[N].vagi_id=N),
+     * so without this table SeNo 2 plays sample 2 (SELECTION) and SeNo 3
+     * plays sample 3 (page-flip) — clearly wrong for "cursor move" and
+     * "confirm". The real CRI MANATEE runtime remaps them to sample
+     * (SeNo - 1) for SeNo>=1 (SeNo 0 stays identity). Untested SeNos
+     * (1, 4..9) pass through on identity. */
+    for (int i = 0; i < MSA_REMAP_SIZE; ++i) g_msa.remap[i] = -1;
+    g_msa.remap[2] = 1;  /* cursor up/down                          → CURSOR */
+    g_msa.remap[3] = 2;  /* confirm / press-start / enter-options   → SELECTION */
 
     int mixer_rate = recvx_adx_ensure_audio_open(MSA_DEVICE_RATE_HINT);
     if (mixer_rate <= 0) {
@@ -456,6 +517,37 @@ int recvx_msa_init(const char* mlt_path) {
     }
 
     free(buf);
+
+    /* Synthesize the menu "BACK" SE by reversing sample 2 (SELECTION). The
+     * real PS2 CRI MANATEE exposes a SE that is literally the confirm blip
+     * played backwards (user observation 2026-04-22). That sample isn't in
+     * COMMON.MLT's Vagi section as its own entry; the runtime generates it.
+     * We cache a reversed copy as sample N+1 and point SeNo 0 at it via
+     * the remap table, so back-out plays the authentic reversed-select
+     * sound instead of the "no / blocked" sound (sample 0). */
+    if (g_msa.sample_count >= 3 && g_msa.sample_count < MSA_MAX_SAMPLES) {
+        const msa_sample* src = &g_msa.samples[2];
+        int frames = src->bytes / 4;     /* 4 = stereo S16 per frame */
+        if (src->pcm && frames > 0) {
+            int16_t* rev = (int16_t*)malloc((size_t)src->bytes);
+            if (rev) {
+                const int16_t* s = src->pcm;
+                for (int f = 0; f < frames; ++f) {
+                    rev[f * 2 + 0] = s[(frames - 1 - f) * 2 + 0];
+                    rev[f * 2 + 1] = s[(frames - 1 - f) * 2 + 1];
+                }
+                int reversed_idx = g_msa.sample_count;
+                g_msa.samples[reversed_idx].pcm   = rev;
+                g_msa.samples[reversed_idx].bytes = src->bytes;
+                g_msa.sample_count++;
+                g_msa.remap[0] = reversed_idx;   /* SeNo 0 = back-out */
+                RX_LOG("msa", "synthesized reversed-SELECTION as sample %d "
+                       "(%d bytes); SeNo 0 remapped to it",
+                       reversed_idx, src->bytes);
+            }
+        }
+    }
+
     g_msa.initialized = 1;
     RX_LOG("msa", "init ok: %d samples cached @ %d Hz",
            g_msa.sample_count, g_msa.mixer_rate);
@@ -474,9 +566,21 @@ void recvx_msa_shutdown(void) {
 
 int recvx_msa_play_se(int se_no, int volume) {
     if (!g_msa.initialized || g_msa.sample_count <= 0) return -1;
-    int idx = se_no;
-    if (idx < 0) idx = -idx;
+    /* Map negative SeNo to positive then apply remap table before the
+     * final modulo, so an explicit remap of -1 (identity) still flows
+     * through to the `idx % sample_count` fallback. */
+    int abs_se = (se_no < 0) ? -se_no : se_no;
+    int idx;
+    int was_remapped = 0;
+    if (abs_se < MSA_REMAP_SIZE && g_msa.remap[abs_se] >= 0) {
+        idx = g_msa.remap[abs_se];
+        was_remapped = 1;
+    } else {
+        idx = abs_se;
+    }
     idx %= g_msa.sample_count;
+    RX_LOG("msa", "play_se: SeNo=%d vol=%d → sample %d%s",
+           se_no, volume, idx, was_remapped ? " (remapped)" : "");
 
     int slot = recvx_adx_alloc_free_slot(MSA_SE_SLOT_FIRST, MSA_SE_SLOT_LAST);
     if (slot < 0) return -1;
@@ -493,4 +597,27 @@ int recvx_msa_play_se(int se_no, int volume) {
 
     const msa_sample* s = &g_msa.samples[idx];
     return recvx_adx_slot_play_pcm(slot, s->pcm, s->bytes, vol);
+}
+
+/* Direct-by-index playback that skips the SeNo remap. Used by the F1..F10
+ * audition keybinds so the user can pin down which sample is which by ear. */
+int recvx_msa_play_sample(int sample_idx, int volume) {
+    if (!g_msa.initialized || g_msa.sample_count <= 0) return -1;
+    if (sample_idx < 0 || sample_idx >= g_msa.sample_count) return -1;
+
+    int slot = recvx_adx_alloc_free_slot(MSA_SE_SLOT_FIRST, MSA_SE_SLOT_LAST);
+    if (slot < 0) return -1;
+
+    float vol;
+    if      (volume <= 0)   vol = 100.0f / 127.0f;
+    else if (volume >= 127) vol = 1.0f;
+    else                    vol = (float)volume / 127.0f;
+
+    RX_LOG("msa", "audition: sample %d (direct, no remap)", sample_idx);
+    const msa_sample* s = &g_msa.samples[sample_idx];
+    return recvx_adx_slot_play_pcm(slot, s->pcm, s->bytes, vol);
+}
+
+int recvx_msa_sample_count(void) {
+    return g_msa.initialized ? g_msa.sample_count : 0;
 }

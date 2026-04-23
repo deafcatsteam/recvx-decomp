@@ -54,6 +54,33 @@ static const char* g_iso_path      = NULL;
 static const char* g_gamedata_path = NULL;
 static bool        g_run_game      = false;
 static int         g_msa_rate      = 0;   /* 0 = use Smpl-derived rate */
+static const char* g_se_remap_str  = NULL; /* "N:M[,N:M...]"; NULL → use msa_init defaults */
+
+/* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
+ * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
+ * as sample_idx to explicitly clear an entry (back to identity). */
+static void apply_se_remap(const char* spec) {
+    if (!spec) return;
+    const char* p = spec;
+    while (*p) {
+        while (*p == ',' || *p == ' ') ++p;
+        if (!*p) break;
+        char* endn = NULL;
+        long se = strtol(p, &endn, 10);
+        if (endn == p || *endn != ':') {
+            RX_LOG("game", "bad --se-remap token at '%s' (expected N:M)", p);
+            return;
+        }
+        p = endn + 1;
+        long smp = strtol(p, &endn, 10);
+        if (endn == p) {
+            RX_LOG("game", "bad --se-remap token at '%s' (missing sample id)", p);
+            return;
+        }
+        recvx_msa_set_remap((int)se, (int)smp);
+        p = endn;
+    }
+}
 
 static void parse_args(int argc, char** argv) {
     for (int i = 1; i < argc; ++i) {
@@ -65,14 +92,19 @@ static void parse_args(int argc, char** argv) {
             g_run_game = true;
         } else if (strcmp(argv[i], "--msa-rate") == 0 && i + 1 < argc) {
             g_msa_rate = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--se-remap") == 0 && i + 1 < argc) {
+            g_se_remap_str = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
                    "                [--gamedata path\\to\\extracted\\dir]\n"
                    "                [--game] [--msa-rate N]\n"
+                   "                [--se-remap N:M[,N:M...]]\n"
                    "  --game      run njUserInit/njUserMain task loop instead of FMV demo\n"
                    "  --gamedata  dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n"
                    "  --msa-rate  override COMMON.MLT source sample rate in Hz\n"
-                   "              (try 22050 / 24000 / 32000 / 44100 / 48000)\n");
+                   "              (try 22050 / 24000 / 32000 / 44100 / 48000)\n"
+                   "  --se-remap  remap SeNo→sample-index for COMMON.MLT menu SEs\n"
+                   "              e.g. --se-remap 0:3,2:0,3:2   (sample_idx -1 = identity)\n");
             exit(0);
         }
     }
@@ -252,6 +284,12 @@ static int run_game_loop(const recvx_backend* backend) {
         }
         if (recvx_msa_init(mlt_path) != 0) {
             RX_LOG("game", "WARN: MSA init failed — SE disabled");
+        }
+        /* Apply CLI SeNo→sample overrides AFTER init so they replace the
+         * baked RECVX menu defaults rather than get clobbered by them. */
+        if (g_se_remap_str) {
+            RX_LOG("game", "--se-remap: %s", g_se_remap_str);
+            apply_se_remap(g_se_remap_str);
         }
     }
 

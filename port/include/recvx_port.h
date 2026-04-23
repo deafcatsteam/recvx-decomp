@@ -239,9 +239,35 @@ void recvx_msa_shutdown(void);
  * to let us A/B different rate guesses without rebuilding. */
 void recvx_msa_set_force_rate(int hz);
 
+/* Override the SeNo → sample-index mapping for a single SeNo.
+ *
+ * Context: the COMMON.MLT Sset/Prog/Smpl chain is on-disk diagonal
+ * (Sset[N].prog_id=N, Prog[N].smpl_id=N, Smpl[N].vagi_id=N) but the real
+ * CRI MANATEE runtime reorders some menu SEs via logic we don't have
+ * source for. The user-audible correct mapping for RECVX menu beeps is
+ *   SeNo 0 (cancel)       → sample 3
+ *   SeNo 2 (cursor-move)  → sample 0
+ *   SeNo 3 (press-start)  → sample 2
+ * and that is baked as the default in recvx_msa_init. This API + the
+ * `--se-remap N:M,N:M,...` CLI flag let future banks (MULTSPQ, etc.)
+ * override without rebuilding.
+ *
+ * sample_idx < 0 → clear any existing remap for this SeNo (identity). */
+void recvx_msa_set_remap(int se_no, int sample_idx);
+
 /* Play system SE. se_no indexes the Sset table (0..9 for COMMON.MLT).
  * volume is PS2 convention 0..127. Returns 0 on success. */
 int  recvx_msa_play_se(int se_no, int volume);
+
+/* Audition a specific cached sample by direct index (0..sample_count-1),
+ * bypassing the SeNo remap. Used by the F1..F10 debug keybinds in the GL
+ * backend so a user can identify each sample by ear and then set the
+ * correct remap via --se-remap or recvx_msa_set_remap. Returns 0 on
+ * success, -1 if idx is out of range or MSA isn't initialized. */
+int  recvx_msa_play_sample(int sample_idx, int volume);
+
+/* Count of cached samples (from COMMON.MLT Vagi). 0 if MSA not initialized. */
+int  recvx_msa_sample_count(void);
 
 /* --------------------------------------------------------------------------
  * Gamedata directory. Set by main_pc from the --gamedata CLI flag and

@@ -128,11 +128,26 @@ static inline uint8_t alpha_ps2_to_pc(uint8_t a) {
     return (uint8_t)(x > 255 ? 255 : x);
 }
 
-/* CSM2 -> CSM1 index remap for 8-bit paletted textures. PS2 GS reads the
- * 256-entry palette in 8x2 blocks striped across 16x16; if the CLUT is
- * stored CSM1 (linear), the pixel INDEX needs bits 3 and 4 swapped before
- * lookup. Detected via ClutType bit 0x80.
- *   i = iiiBAiii ->  out = iiiABiii */
+/* CSM1 pixel-index swizzle. Applies to both 8-bit (256-entry) and 4-bit
+ * (16-entry-in-32-entry-block) paletted textures.
+ *
+ * Sony PS2 TIM2 spec (ClutType bit 7):
+ *   bit 7 = 0  → CSM1  (swizzled / GS-native VRAM layout)
+ *   bit 7 = 1  → CSM2  (linear / device-independent layout)
+ *
+ * PS2 GS stores CLUTs in a PSMCT32-block pattern regardless of logical
+ * entry count: 8 entries per half-block with a bit-3↔4 address remap
+ * between logical and physical offsets. The same swap works for both
+ * 8-bit (256 entries spanning 16 half-blocks) and 4-bit (16 entries
+ * spanning 2 half-blocks, padded to 32 physical slots) because it's
+ * really a block-addressing swizzle, not a palette-size quirk.
+ *
+ *   logical idx bits: i7 i6 i5 i4 i3 i2 i1 i0
+ *   physical offset:  i7 i6 i5 i3 i4 i2 i1 i0   ← bits 3 and 4 swap
+ *
+ * For 4-bit (nibble 0..15), only bit 3 matters: logical 0..7 stay put,
+ * logical 8..15 map to physical 16..23 (the upper half-block). Any TIM2
+ * 4-bit CLUT padded to 128 B (32 entries × 4 B) is in this layout. */
 static inline uint8_t idx_csm1_swap(uint8_t i) {
     return (uint8_t)((i & 0xE7u) | ((i & 0x08u) << 1) | ((i & 0x10u) >> 1));
 }
@@ -164,11 +179,18 @@ static int tim2_decode(const void* blob, int* out_w, int* out_h,
 
     int image_type = ph->ImageType;
     int clut_type  = ph->ClutType;
-    int csm1       = (clut_type & 0x80) != 0;  /* CLUT in linear order? */
-    int clut_fmt   = clut_type & 0x07;         /* 1=A1BGR5 2=XBGR24 3=ABGR32 */
+    /* Bit 7 of ClutType is the CSM indicator:
+     *   0 → CSM1 (swizzled, PS2 GS native layout, needs bits-3-4 index swap)
+     *   1 → CSM2 (linear, already in logical order, no swap)
+     * Earlier revisions had this inverted, which collapsed 8-bit paletted
+     * textures to outlines-only (the ADX/Capcom splashes and menu bg fills
+     * all read wrong palette entries for roughly half the index range). */
+    int csm1_swizzled = (clut_type & 0x80) == 0;
+    int clut_fmt      = clut_type & 0x07;     /* 1=A1BGR5 2=XBGR24 3=ABGR32 */
 
-    RX_LOG("tim2", "decode %dx%d imgT=%d clutT=0x%02x hdr=%u img=%u clut=%u",
+    RX_LOG("tim2", "decode %dx%d imgT=%d clutT=0x%02x (%s) hdr=%u img=%u clut=%u",
            w, h, image_type, (unsigned)ph->ClutType,
+           csm1_swizzled ? "CSM1" : "CSM2",
            (unsigned)ph->HeaderSize, (unsigned)ph->ImageSize,
            (unsigned)ph->ClutSize);
 
@@ -188,7 +210,7 @@ static int tim2_decode(const void* blob, int* out_w, int* out_h,
         }
         for (int i = 0; i < w * h; ++i) {
             uint8_t idx = img[i];
-            if (csm1) idx = idx_csm1_swap(idx);
+            if (csm1_swizzled) idx = idx_csm1_swap(idx);
             const uint8_t* pal = clut + idx * 4;
             dst[i*4+0] = pal[0];
             dst[i*4+1] = pal[1];
@@ -197,19 +219,33 @@ static int tim2_decode(const void* blob, int* out_w, int* out_h,
         }
     } else if (image_type == 4) {
         /* 4-bit paletted. Two pixels per byte, PS2 packs low nibble first
-         * (pixel 0 = low nibble, pixel 1 = high nibble). Palette is
-         * nominally 16 entries; TIM2 files sometimes pad ClutSize to 32
-         * (128 bytes @ ABGR32) — we only index 0..15 so padding is inert.
-         * No CSM bit-swap: 16-entry palettes are read linearly by the GS. */
+         * (pixel 0 = low nibble, pixel 1 = high nibble).
+         *
+         * CLUT layout: CSM1 16-entry CLUTs are stored in a 32-entry
+         * (128-byte @ ABGR32) PSMCT32 block, with the 16 "real" entries
+         * placed at physical positions 0..7 and 16..23. Positions 8..15
+         * and 24..31 are don't-care padding (zero-filled on this bank).
+         * The same bit-3↔4 swap we use for 8-bit applies: logical nibble
+         * N >= 8 reads from physical entry N+8. Skip the swap for CSM2
+         * (linear) or for CLUTs sized 64 B (16 entries, densely packed).
+         *
+         * Concrete failure this catches: the ADX CRI logo (ADV.AFS[0],
+         * 2nd TIM2 @ +0x82540). Outline pixels use nibbles 0..7 and
+         * render correctly regardless, but the solid white fills use
+         * nibbles 8..15 — without the swap those read zero-padding
+         * entries and render as transparent black, giving an empty
+         * outlined logo instead of a solid-white one. */
         if (clut_fmt != 3) {
             RX_LOG("tim2", "unsupported clut_fmt=%d for 4bpp (want ABGR32)",
                    clut_fmt);
             return 0;
         }
+        int swizzle_4bpp = csm1_swizzled && (ph->ClutSize >= 128);
         for (int i = 0; i < w * h; ++i) {
             uint8_t byte   = img[i >> 1];
             uint8_t nibble = (i & 1) ? (uint8_t)(byte >> 4)
                                      : (uint8_t)(byte & 0x0F);
+            if (swizzle_4bpp) nibble = idx_csm1_swap(nibble);
             const uint8_t* pal = clut + nibble * 4;
             dst[i*4+0] = pal[0];
             dst[i*4+1] = pal[1];
@@ -369,17 +405,41 @@ void njSetQuadTexture(int tex_id, Uint32 base_color) {
  * screen-space and u1/v1/u2/v2 already normalized by SetQuadUv2Ex. */
 void njDrawQuadTexture(QUAD* q, float z) {
     if (!q) return;
-    /* Trace: log non-BG textured quads so we can see whether the menu plate
-     * (slot 4) ever reaches the backend with sane params. Filter slot 0
-     * since warning / logo screens spam full-screen BG draws and would
-     * exhaust the cap before title even begins. */
-    static int s_trace_count = 0;
-    if (g_current_slot != 0 && s_trace_count++ < 500) {
-        RX_LOG("draw", "slot=%d screen=(%.0f,%.0f-%.0f,%.0f) "
-               "uv=(%.3f,%.3f-%.3f,%.3f) z=%.3f col=0x%08x trans=%d",
-               g_current_slot, q->x1, q->y1, q->x2, q->y2,
-               q->u1, q->v1, q->u2, q->v2,
-               z, (unsigned)g_current_color, g_current_trans);
+    /* Trace: log non-BG textured quads, deduped on (slot, UV rect) so a
+     * quad animated only via color (e.g. DisplayPressStartPlate's FadeRate
+     * pulse) logs once instead of 900 times. Mode 4 logo strips have fixed
+     * UVs too so each only logs once — leaves room for Mode 6/8/9 plates. */
+    if (g_current_slot != 0) {
+        /* Dedup key: (slot, UV rect, alpha >> 4). 16 alpha buckets per UV so
+         * a FadeRate pulse logs ~16 times instead of 900 (visible animation)
+         * or 1 (stuck at one alpha). Lets us distinguish "never animates"
+         * from "we just dedupe too aggressively". */
+        struct rec { int slot; float u1,v1,u2,v2; uint8_t abkt; };
+        static struct rec seen[128];
+        static int nseen = 0;
+        float u1=q->u1, v1=q->v1, u2=q->u2, v2=q->v2;
+        uint8_t abkt = (uint8_t)(((uint32_t)g_current_color >> 28) & 0xF);
+        int hit = 0;
+        for (int i = 0; i < nseen; ++i) {
+            if (seen[i].slot == g_current_slot &&
+                seen[i].u1 == u1 && seen[i].v1 == v1 &&
+                seen[i].u2 == u2 && seen[i].v2 == v2 &&
+                seen[i].abkt == abkt) {
+                hit = 1; break;
+            }
+        }
+        if (!hit && nseen < 128) {
+            seen[nseen].slot = g_current_slot;
+            seen[nseen].u1 = u1; seen[nseen].v1 = v1;
+            seen[nseen].u2 = u2; seen[nseen].v2 = v2;
+            seen[nseen].abkt = abkt;
+            nseen++;
+            RX_LOG("draw", "NEW slot=%d screen=(%.0f,%.0f-%.0f,%.0f) "
+                   "uv=(%.3f,%.3f-%.3f,%.3f) z=%.3f col=0x%08x trans=%d",
+                   g_current_slot, q->x1, q->y1, q->x2, q->y2,
+                   u1, v1, u2, v2,
+                   z, (unsigned)g_current_color, g_current_trans);
+        }
     }
     recvx_gfx_draw_quad(g_current_slot,
                         q->x1, q->y1, q->x2, q->y2,
@@ -387,7 +447,9 @@ void njDrawQuadTexture(QUAD* q, float z) {
                         z, g_current_color, g_current_trans);
 }
 
-/* adv.c:447/687 njDrawPolygon — vertex-colored fan (usually 4 verts). */
+/* adv.c:447/687 njDrawPolygon — vertex-colored TRIANGLE_STRIP (usually 4
+ * verts in TL-BL-TR-BR zigzag order). The PS2 GS PRIM register encodes
+ * prim=4 (TRIANGLESTRIP) in ps2_NaDraw.c; the backend renders accordingly. */
 void njDrawPolygon(NJS_POLYGON_VTX* p, Sint32 count, Sint32 trans) {
     if (!p || count <= 0) return;
     recvx_gfx_vtx vb[32];
