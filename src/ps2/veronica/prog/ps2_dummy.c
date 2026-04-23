@@ -482,432 +482,665 @@ void Ps2AddPrim2D(unsigned long prim, void* dp, unsigned int num)
     Ps2AddPrim(prim, dp, num, 0);
 }
 
-// 
-// Start address: 0x2cbca0
+// 100% matching!
 void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num)
 {
-	float zbuff_ab_vec[4];
-	float zsum;
-	unsigned int st_clip_flag;
-	unsigned int clut_flag;
-	unsigned int clip_flag;
-	//_anon0* timp;
-	unsigned long* p;
-	float zclip_ab_vec[4];
-	float near_far_vec[4];
-	float clip_vec[4];
-	// Line 1207, Address: 0x2cbca0, Func Offset: 0
-	// Line 1221, Address: 0x2cbcb0, Func Offset: 0x10
-	// Line 1207, Address: 0x2cbcb4, Func Offset: 0x14
-	// Line 1221, Address: 0x2cbcbc, Func Offset: 0x1c
-	// Line 1225, Address: 0x2cbce0, Func Offset: 0x40
-	// Line 1221, Address: 0x2cbcec, Func Offset: 0x4c
-	// Line 1225, Address: 0x2cbd08, Func Offset: 0x68
-	// Line 1226, Address: 0x2cbd10, Func Offset: 0x70
-	// Line 1228, Address: 0x2cbd20, Func Offset: 0x80
-	// Line 1229, Address: 0x2cbd34, Func Offset: 0x94
-	// Line 1230, Address: 0x2cbd44, Func Offset: 0xa4
-	// Line 1233, Address: 0x2cbd64, Func Offset: 0xc4
-	// Line 1234, Address: 0x2cbd78, Func Offset: 0xd8
-	// Line 1235, Address: 0x2cbd84, Func Offset: 0xe4
-	// Line 1236, Address: 0x2cbd90, Func Offset: 0xf0
-	// Line 1237, Address: 0x2cbd98, Func Offset: 0xf8
-	// Line 1238, Address: 0x2cbda0, Func Offset: 0x100
-	// Line 1249, Address: 0x2cbda8, Func Offset: 0x108
-	// Line 1250, Address: 0x2cbdac, Func Offset: 0x10c
-	// Line 1253, Address: 0x2cbdb4, Func Offset: 0x114
-	// Line 1256, Address: 0x2cbdb8, Func Offset: 0x118
-	// Line 1253, Address: 0x2cbdc8, Func Offset: 0x128
-	// Line 1254, Address: 0x2cbdec, Func Offset: 0x14c
-	// Line 1256, Address: 0x2cbdf4, Func Offset: 0x154
-	// Line 1257, Address: 0x2cbdfc, Func Offset: 0x15c
-	// Line 1260, Address: 0x2cbe04, Func Offset: 0x164
-	// Line 1257, Address: 0x2cbe08, Func Offset: 0x168
-	// Line 1260, Address: 0x2cbe0c, Func Offset: 0x16c
-	// Line 1268, Address: 0x2cbe1c, Func Offset: 0x17c
-	// Line 1260, Address: 0x2cbe30, Func Offset: 0x190
-	// Line 1261, Address: 0x2cbe34, Func Offset: 0x194
-	// Line 1268, Address: 0x2cbe3c, Func Offset: 0x19c
-	// Line 1261, Address: 0x2cbe44, Func Offset: 0x1a4
-	// Line 1272, Address: 0x2cbe48, Func Offset: 0x1a8
-	// Line 1268, Address: 0x2cbe4c, Func Offset: 0x1ac
-	// Line 1269, Address: 0x2cbe58, Func Offset: 0x1b8
-	// Line 1272, Address: 0x2cbe60, Func Offset: 0x1c0
-	// Line 1269, Address: 0x2cbe74, Func Offset: 0x1d4
-	// Line 1272, Address: 0x2cbe78, Func Offset: 0x1d8
-	// Line 1275, Address: 0x2cbe84, Func Offset: 0x1e4
-	// Line 1276, Address: 0x2cbe88, Func Offset: 0x1e8
-	// Line 1277, Address: 0x2cbe8c, Func Offset: 0x1ec
-	// Line 1278, Address: 0x2cbe90, Func Offset: 0x1f0
-	// Line 1279, Address: 0x2cbe94, Func Offset: 0x1f4
-	// Line 1280, Address: 0x2cbe98, Func Offset: 0x1f8
-	// Line 1282, Address: 0x2cbe9c, Func Offset: 0x1fc
-	// Line 1281, Address: 0x2cbea0, Func Offset: 0x200
-	// Line 1282, Address: 0x2cbea4, Func Offset: 0x204
-	// Line 1283, Address: 0x2cbea8, Func Offset: 0x208
-	// Line 1284, Address: 0x2cbeac, Func Offset: 0x20c
-	// Line 1285, Address: 0x2cbeb0, Func Offset: 0x210
-	// Line 1286, Address: 0x2cbeb4, Func Offset: 0x214
-	// Line 1287, Address: 0x2cbeb8, Func Offset: 0x218
-	// Line 1289, Address: 0x2cbebc, Func Offset: 0x21c
-	// Line 1290, Address: 0x2cbec0, Func Offset: 0x220
-	// Line 1291, Address: 0x2cbec4, Func Offset: 0x224
-	// Line 1293, Address: 0x2cbec8, Func Offset: 0x228
-	// Line 1294, Address: 0x2cbecc, Func Offset: 0x22c
-	// Line 1295, Address: 0x2cbed0, Func Offset: 0x230
-	// Line 1296, Address: 0x2cbed4, Func Offset: 0x234
-	// Line 1297, Address: 0x2cbed8, Func Offset: 0x238
-	// Line 1299, Address: 0x2cbedc, Func Offset: 0x23c
-	// Line 1300, Address: 0x2cbee0, Func Offset: 0x240
-	// Line 1301, Address: 0x2cbee4, Func Offset: 0x244
-	// Line 1303, Address: 0x2cbee8, Func Offset: 0x248
-	// Line 1304, Address: 0x2cbeec, Func Offset: 0x24c
-	// Line 1305, Address: 0x2cbef0, Func Offset: 0x250
-	// Line 1306, Address: 0x2cbef4, Func Offset: 0x254
-	// Line 1307, Address: 0x2cbef8, Func Offset: 0x258
-	// Line 1308, Address: 0x2cbefc, Func Offset: 0x25c
-	// Line 1309, Address: 0x2cbf00, Func Offset: 0x260
-	// Line 1311, Address: 0x2cbf08, Func Offset: 0x268
-	// Line 1313, Address: 0x2cbf0c, Func Offset: 0x26c
-	// Line 1314, Address: 0x2cbf10, Func Offset: 0x270
-	// Line 1315, Address: 0x2cbf14, Func Offset: 0x274
-	// Line 1316, Address: 0x2cbf18, Func Offset: 0x278
-	// Line 1317, Address: 0x2cbf1c, Func Offset: 0x27c
-	// Line 1318, Address: 0x2cbf20, Func Offset: 0x280
-	// Line 1319, Address: 0x2cbf24, Func Offset: 0x284
-	// Line 1320, Address: 0x2cbf28, Func Offset: 0x288
-	// Line 1321, Address: 0x2cbf2c, Func Offset: 0x28c
-	// Line 1323, Address: 0x2cbf34, Func Offset: 0x294
-	// Line 1324, Address: 0x2cbf38, Func Offset: 0x298
-	// Line 1326, Address: 0x2cbf40, Func Offset: 0x2a0
-	// Line 1327, Address: 0x2cbf44, Func Offset: 0x2a4
-	// Line 1379, Address: 0x2cbf48, Func Offset: 0x2a8
-	// Line 1436, Address: 0x2cbf5c, Func Offset: 0x2bc
-	// Line 1439, Address: 0x2cbf80, Func Offset: 0x2e0
-	// Line 1442, Address: 0x2cbf88, Func Offset: 0x2e8
-	// Line 1443, Address: 0x2cbf90, Func Offset: 0x2f0
-	// Line 1447, Address: 0x2cbf98, Func Offset: 0x2f8
-	// Func End, Address: 0x2cbfb0, Func Offset: 0x310
-	scePrintf("Ps2AddPrim3D - UNIMPLEMENTED!\n");
+    unsigned long* p;             
+    TIM2_PICTUREHEADER_EX* timp;  
+    unsigned int clip_flag;    // needs use   
+    unsigned int clut_flag;    // needs use
+    unsigned int st_clip_flag; // needs use
+    float zsum;                  
+    float zbuff_ab_vec[4] = { 0 }; 
+    static const float clip_vec[4] = { 2048.0f, 2048.0f, 0, 2047.0f };  
+    static const float near_far_vec[4] = { 1.0f, 65534.0f, 0, 0 };
+    static const float zclip_ab_vec[4] = { 0.062501907f, 0, -2048.0625f, 0 };
+    
+    zbuff_ab_vec[0] = -Ps2_zbuff_b;
+    zbuff_ab_vec[2] = -Ps2_zbuff_a;
+    zbuff_ab_vec[3] = *(float*)&num;  
+    
+    if ((prim & 0x8000000000000)) 
+    {
+        if (Ps2_now_tex == NULL) 
+        {
+            return;
+        }
+
+        if ((prim & 0x20000000000000)) 
+        {
+            if (Ps2_use_pt_flag != 0)
+            {
+                prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 1, 0, 0, 0, 0), 0, 0);
+            }
+        }
+        
+        if (!(prim & 0x20000000000000)) 
+        {
+            timp = (TIM2_PICTUREHEADER_EX*)Ps2_now_tex->texinfo.texsurface.pSurface;
+            
+            if (timp->TpFlag != 0) 
+            {
+                Ps2_tex_load_tp_cancel = 1;
+                
+                Ps2TexLoad(Ps2_now_tex);
+                
+                Ps2_tex_load_tp_cancel = 0;
+            }
+        }
+    } 
+
+    p = (unsigned long*)WORKBASE;
+    
+    D2_SyncTag();
+
+    *p++ = ((num * 3) + 3) | 0x70000000;
+    *p++ = 0;
+    
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+    
+    *p++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+    *p++ = SCE_GS_TEST_1;
+    
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+    
+    asm volatile
+    ("
+    .set noreorder
+        lqc2        vf10, 0(%3)
+        lqc2        vf13, 0(%0)
+        lqc2        vf12, 0(%1)
+        lqc2        vf11, 0(%2)
+        
+        vitof0.w    vf10, vf10
+        
+        vsub.xyzw   vf9, vf9, vf9
+        
+        lui         at, (0x3FFFF >> 16)
+        
+        ori         v0, zero,  0x8000
+    
+        ori         a0,   at, (0x3FFFF & 0xFFFF)
+        
+        ctc2        zero, vi18
+        ctc2        v0,   vi2
+    
+        viaddi      vi4, vi0, 0
+    
+        addu        v0, %6, zero
+        
+        vdiv        Q, vf0w, vf10w
+    
+    l_002CBEBC:
+        lqc2        vf4,    0(%4)
+        lqc2        vf5, 0x10(%4)
+        lqc2        vf6, 0x20(%4)
+        
+        vmtir       vi3, vf4w
+    
+        vadda.z     ACC, vf6, vf11
+        vmaddx.z    vf7, vf6, vf11x
+        
+        vsub.xy     vf7, vf6, vf13
+        
+        vclipw.xyz  vf7, vf13w        
+        
+        vadda.z     ACC, vf0, vf10
+        vmaddx.z    vf6, vf4, vf10x
+        
+        vmax.z      vf6, vf6, vf0
+        
+        vminiy.z    vf6, vf6, vf12y
+        
+        vaddz.w     vf9, vf9, vf6z
+        
+        vftoi4.xyzw vf6, vf6
+        
+        vmtir       vi5, vf6w
+    
+        cfc2        v1, vi18
+    
+        and         v1, v1, a0
+    
+        beqz        v1, l_002CBF0C
+        nop
+    
+        vior        vi3, vi3, vi2
+        
+    l_002CBF0C:
+        vior        vi5, vi5, vi3
+        viand       vi4, vi4, vi5
+    
+        vmfir.w     vf6, vi5
+        
+        sqc2        vf4,    0(%5)
+        sqc2        vf5, 0x10(%5)
+        sqc2        vf6, 0x20(%5) 
+        
+        addi        v0, v0, -1
+        addiu       %5, %5, 48
+        
+        bnez        v0, l_002CBEBC
+        
+        addiu       %4, %4, 48
+        
+        cfc2        v1, vi4
+        
+        bnez        v0, l_002CBF9C
+        nop
+    
+        vmulq.w     vf4, vf9, Q
+        
+        sqc2        vf4, 0(%5) 
+    .set reorder
+    " : : "r"(clip_vec), "r"(near_far_vec), "r"(zclip_ab_vec), "r"(zbuff_ab_vec), "r"(dp), "r"(p), "r"(num) : 
+    );
+
+    if ((prim & 0x20000000000000)) 
+    {
+        Ps2AddOT((void*)0x70000000, num, ((float*)p)[(12 * num) + 3], prim);
+    }
+    else 
+    {
+        SyncPath();
+        
+        loadImage((void*)0xF0000000); 
+    }
+    
+l_002CBF9C:
+    return;
 }
 
-// 
-// Start address: 0x2cbfb0
+// 100% matching!
 void Ps2AddPrim3DEx(unsigned long prim, void* dp, unsigned int num)
 {
-	float zbuff_ab_vec[4];
-	float zsum;
-	unsigned int st_clip_flag;
-	unsigned int clut_flag;
-	unsigned int clip_flag;
-	//_anon0* timp;
-	unsigned long* p;
-	float zclip_ab_vec[4];
-	float near_far_vec[4];
-	float clip_vec[4];
-	// Line 1450, Address: 0x2cbfb0, Func Offset: 0
-	// Line 1464, Address: 0x2cbfc0, Func Offset: 0x10
-	// Line 1450, Address: 0x2cbfc4, Func Offset: 0x14
-	// Line 1464, Address: 0x2cbfcc, Func Offset: 0x1c
-	// Line 1481, Address: 0x2cbff0, Func Offset: 0x40
-	// Line 1464, Address: 0x2cbffc, Func Offset: 0x4c
-	// Line 1481, Address: 0x2cc018, Func Offset: 0x68
-	// Line 1482, Address: 0x2cc020, Func Offset: 0x70
-	// Line 1484, Address: 0x2cc030, Func Offset: 0x80
-	// Line 1485, Address: 0x2cc044, Func Offset: 0x94
-	// Line 1487, Address: 0x2cc054, Func Offset: 0xa4
-	// Line 1490, Address: 0x2cc074, Func Offset: 0xc4
-	// Line 1491, Address: 0x2cc088, Func Offset: 0xd8
-	// Line 1492, Address: 0x2cc094, Func Offset: 0xe4
-	// Line 1493, Address: 0x2cc0a0, Func Offset: 0xf0
-	// Line 1494, Address: 0x2cc0a8, Func Offset: 0xf8
-	// Line 1495, Address: 0x2cc0b0, Func Offset: 0x100
-	// Line 1505, Address: 0x2cc0b8, Func Offset: 0x108
-	// Line 1506, Address: 0x2cc0bc, Func Offset: 0x10c
-	// Line 1509, Address: 0x2cc0c4, Func Offset: 0x114
-	// Line 1512, Address: 0x2cc0c8, Func Offset: 0x118
-	// Line 1509, Address: 0x2cc0d8, Func Offset: 0x128
-	// Line 1510, Address: 0x2cc0fc, Func Offset: 0x14c
-	// Line 1512, Address: 0x2cc104, Func Offset: 0x154
-	// Line 1513, Address: 0x2cc10c, Func Offset: 0x15c
-	// Line 1516, Address: 0x2cc114, Func Offset: 0x164
-	// Line 1513, Address: 0x2cc118, Func Offset: 0x168
-	// Line 1516, Address: 0x2cc11c, Func Offset: 0x16c
-	// Line 1529, Address: 0x2cc12c, Func Offset: 0x17c
-	// Line 1516, Address: 0x2cc140, Func Offset: 0x190
-	// Line 1517, Address: 0x2cc144, Func Offset: 0x194
-	// Line 1529, Address: 0x2cc14c, Func Offset: 0x19c
-	// Line 1517, Address: 0x2cc154, Func Offset: 0x1a4
-	// Line 1533, Address: 0x2cc158, Func Offset: 0x1a8
-	// Line 1529, Address: 0x2cc15c, Func Offset: 0x1ac
-	// Line 1530, Address: 0x2cc168, Func Offset: 0x1b8
-	// Line 1533, Address: 0x2cc170, Func Offset: 0x1c0
-	// Line 1530, Address: 0x2cc184, Func Offset: 0x1d4
-	// Line 1533, Address: 0x2cc188, Func Offset: 0x1d8
-	// Line 1536, Address: 0x2cc194, Func Offset: 0x1e4
-	// Line 1537, Address: 0x2cc198, Func Offset: 0x1e8
-	// Line 1538, Address: 0x2cc19c, Func Offset: 0x1ec
-	// Line 1539, Address: 0x2cc1a0, Func Offset: 0x1f0
-	// Line 1540, Address: 0x2cc1a4, Func Offset: 0x1f4
-	// Line 1541, Address: 0x2cc1a8, Func Offset: 0x1f8
-	// Line 1543, Address: 0x2cc1ac, Func Offset: 0x1fc
-	// Line 1542, Address: 0x2cc1b0, Func Offset: 0x200
-	// Line 1543, Address: 0x2cc1b4, Func Offset: 0x204
-	// Line 1544, Address: 0x2cc1b8, Func Offset: 0x208
-	// Line 1545, Address: 0x2cc1bc, Func Offset: 0x20c
-	// Line 1546, Address: 0x2cc1c0, Func Offset: 0x210
-	// Line 1547, Address: 0x2cc1c4, Func Offset: 0x214
-	// Line 1548, Address: 0x2cc1c8, Func Offset: 0x218
-	// Line 1550, Address: 0x2cc1cc, Func Offset: 0x21c
-	// Line 1551, Address: 0x2cc1d0, Func Offset: 0x220
-	// Line 1552, Address: 0x2cc1d4, Func Offset: 0x224
-	// Line 1554, Address: 0x2cc1d8, Func Offset: 0x228
-	// Line 1555, Address: 0x2cc1dc, Func Offset: 0x22c
-	// Line 1556, Address: 0x2cc1e0, Func Offset: 0x230
-	// Line 1557, Address: 0x2cc1e4, Func Offset: 0x234
-	// Line 1558, Address: 0x2cc1e8, Func Offset: 0x238
-	// Line 1560, Address: 0x2cc1ec, Func Offset: 0x23c
-	// Line 1561, Address: 0x2cc1f0, Func Offset: 0x240
-	// Line 1562, Address: 0x2cc1f4, Func Offset: 0x244
-	// Line 1563, Address: 0x2cc1f8, Func Offset: 0x248
-	// Line 1564, Address: 0x2cc1fc, Func Offset: 0x24c
-	// Line 1565, Address: 0x2cc200, Func Offset: 0x250
-	// Line 1566, Address: 0x2cc204, Func Offset: 0x254
-	// Line 1567, Address: 0x2cc208, Func Offset: 0x258
-	// Line 1568, Address: 0x2cc20c, Func Offset: 0x25c
-	// Line 1569, Address: 0x2cc210, Func Offset: 0x260
-	// Line 1570, Address: 0x2cc214, Func Offset: 0x264
-	// Line 1572, Address: 0x2cc21c, Func Offset: 0x26c
-	// Line 1574, Address: 0x2cc220, Func Offset: 0x270
-	// Line 1575, Address: 0x2cc224, Func Offset: 0x274
-	// Line 1576, Address: 0x2cc228, Func Offset: 0x278
-	// Line 1577, Address: 0x2cc22c, Func Offset: 0x27c
-	// Line 1578, Address: 0x2cc230, Func Offset: 0x280
-	// Line 1579, Address: 0x2cc234, Func Offset: 0x284
-	// Line 1580, Address: 0x2cc238, Func Offset: 0x288
-	// Line 1581, Address: 0x2cc23c, Func Offset: 0x28c
-	// Line 1582, Address: 0x2cc240, Func Offset: 0x290
-	// Line 1584, Address: 0x2cc248, Func Offset: 0x298
-	// Line 1585, Address: 0x2cc24c, Func Offset: 0x29c
-	// Line 1587, Address: 0x2cc254, Func Offset: 0x2a4
-	// Line 1588, Address: 0x2cc258, Func Offset: 0x2a8
-	// Line 1641, Address: 0x2cc25c, Func Offset: 0x2ac
-	// Line 1705, Address: 0x2cc270, Func Offset: 0x2c0
-	// Line 1708, Address: 0x2cc294, Func Offset: 0x2e4
-	// Line 1711, Address: 0x2cc29c, Func Offset: 0x2ec
-	// Line 1712, Address: 0x2cc2a4, Func Offset: 0x2f4
-	// Line 1716, Address: 0x2cc2ac, Func Offset: 0x2fc
-	// Func End, Address: 0x2cc2c4, Func Offset: 0x314
-	scePrintf("Ps2AddPrim3DEx - UNIMPLEMENTED!\n");
+    unsigned long* p;             
+    TIM2_PICTUREHEADER_EX* timp;  
+    unsigned int clip_flag;    // needs use   
+    unsigned int clut_flag;    // needs use
+    unsigned int st_clip_flag; // needs use
+    float zsum;                  
+    float zbuff_ab_vec[4] = { 0 }; 
+    static const float clip_vec[4] = { 2048.0f, 2048.0f, 0, 2047.0f };  
+    static const float near_far_vec[4] = { 1.0f, 65534.0f, 0, 0 };
+    static const float zclip_ab_vec[4] = { 0.062501907f, 0, -2048.0625f, 0 };
+    
+    zbuff_ab_vec[0] = -Ps2_zbuff_b;
+    zbuff_ab_vec[2] = -Ps2_zbuff_a;
+    zbuff_ab_vec[3] = *(float*)&num;  
+    
+    if ((prim & 0x8000000000000)) 
+    {
+        if (Ps2_now_tex == NULL) 
+        {
+            return;
+        }
+
+        if ((prim & 0x20000000000000)) 
+        {
+            if (Ps2_use_pt_flag != 0)
+            {
+                prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 1, 0, 0, 0, 0), 0, 0);
+            }
+        }
+        
+        if (!(prim & 0x20000000000000)) 
+        {
+            timp = (TIM2_PICTUREHEADER_EX*)Ps2_now_tex->texinfo.texsurface.pSurface;
+            
+            if (timp->TpFlag != 0) 
+            {
+                Ps2_tex_load_tp_cancel = 1;
+                
+                Ps2TexLoad(Ps2_now_tex);
+                
+                Ps2_tex_load_tp_cancel = 0;
+            }
+        }
+    } 
+
+    p = (unsigned long*)WORKBASE;
+    
+    D2_SyncTag();
+
+    *p++ = ((num * 3) + 3) | 0x70000000;
+    *p++ = 0;
+    
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+    
+    *p++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+    *p++ = SCE_GS_TEST_1;
+    
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+    
+    asm volatile
+    ("
+    .set noreorder
+        lqc2        vf10, 0(%3)
+        lqc2        vf13, 0(%0)
+        lqc2        vf12, 0(%1)
+        lqc2        vf11, 0(%2)
+        
+        vitof0.w    vf10, vf10
+        
+        vsub.xyzw   vf9, vf9, vf9
+        
+        lui         at, (0x3FFFF >> 16)
+        
+        ori         v0, zero,  0x8000
+    
+        ori         a0,   at, (0x3FFFF & 0xFFFF)
+        
+        ctc2        zero, vi18
+        ctc2        v0,   vi2
+    
+        viaddi      vi4, vi0, 0
+    
+        addu        v0, %6, zero
+        
+        vdiv        Q, vf0w, vf10w
+    
+    l_002CC1CC:
+        lqc2        vf4,    0(%4)
+        lqc2        vf5, 0x10(%4)
+        lqc2        vf6, 0x20(%4)
+        
+        vmtir       vi3, vf4w
+    
+        vadda.z     ACC, vf6, vf11
+        vmaddx.z    vf7, vf6, vf11x
+        
+        vsub.xy     vf7, vf6, vf13
+        
+        vclipw.xyz  vf7, vf13w        
+        
+        vadda.z     ACC, vf0, vf10
+        vmaddx.z    vf6, vf4, vf10x
+        
+        vmax.z      vf6, vf6, vf0
+        
+        vftoi0.xyzw vf5, vf5
+        
+        vminiy.z    vf6, vf6, vf12y
+        
+        vaddz.w     vf9, vf9, vf6z
+        
+        vftoi4.xyzw vf6, vf6
+        
+        vmtir       vi5, vf6w
+    
+        cfc2        v1, vi18
+    
+        and         v1, v1, a0
+    
+        beqz        v1, l_002CC220
+        nop
+    
+        vior        vi3, vi3, vi2
+        
+    l_002CC220:
+        vior        vi5, vi5, vi3
+        viand       vi4, vi4, vi5
+    
+        vmfir.w     vf6, vi5
+        
+        sqc2        vf4,    0(%5)
+        sqc2        vf5, 0x10(%5)
+        sqc2        vf6, 0x20(%5) 
+        
+        addi        v0, v0, -1
+        addiu       %5, %5, 48
+        
+        bnez        v0, l_002CC1CC
+        
+        addiu       %4, %4, 48
+        
+        cfc2        v1, vi4
+        
+        bnez        v0, l_002CC2B0
+        nop
+    
+        vmulq.w     vf4, vf9, Q
+        
+        sqc2        vf4, 0(%5) 
+    .set reorder
+    " : : "r"(clip_vec), "r"(near_far_vec), "r"(zclip_ab_vec), "r"(zbuff_ab_vec), "r"(dp), "r"(p), "r"(num) : 
+    );
+
+    if ((prim & 0x20000000000000)) 
+    {
+        Ps2AddOT((void*)0x70000000, num, ((float*)p)[(12 * num) + 3], prim);
+    }
+    else 
+    {
+        SyncPath();
+        
+        loadImage((void*)0xF0000000); 
+    }
+    
+l_002CC2B0:
+    return;
 }
 
-// 
-// Start address: 0x2cc2d0
+// 100% matching!
 void Ps2AddPrim3DEx1P(unsigned long prim, void* dp, unsigned int num)
 {
-	float zbuff_ab_vec[4];
-	float zsum;
-	unsigned int st_clip_flag;
-	unsigned int clut_flag;
-	unsigned int clip_flag;
-	//_anon0* timp;
-	unsigned long* p;
-	float zclip_ab_vec[4];
-	float near_far_vec[4];
-	float clip_vec[4];
-	// Line 1896, Address: 0x2cc2d0, Func Offset: 0
-	// Line 1907, Address: 0x2cc2e0, Func Offset: 0x10
-	// Line 1896, Address: 0x2cc2e4, Func Offset: 0x14
-	// Line 1907, Address: 0x2cc2ec, Func Offset: 0x1c
-	// Line 1911, Address: 0x2cc310, Func Offset: 0x40
-	// Line 1907, Address: 0x2cc31c, Func Offset: 0x4c
-	// Line 1911, Address: 0x2cc338, Func Offset: 0x68
-	// Line 1912, Address: 0x2cc340, Func Offset: 0x70
-	// Line 1914, Address: 0x2cc350, Func Offset: 0x80
-	// Line 1915, Address: 0x2cc364, Func Offset: 0x94
-	// Line 1916, Address: 0x2cc374, Func Offset: 0xa4
-	// Line 1919, Address: 0x2cc394, Func Offset: 0xc4
-	// Line 1920, Address: 0x2cc3a8, Func Offset: 0xd8
-	// Line 1921, Address: 0x2cc3b4, Func Offset: 0xe4
-	// Line 1922, Address: 0x2cc3c0, Func Offset: 0xf0
-	// Line 1923, Address: 0x2cc3c8, Func Offset: 0xf8
-	// Line 1924, Address: 0x2cc3d0, Func Offset: 0x100
-	// Line 1926, Address: 0x2cc3d4, Func Offset: 0x104
-	// Line 1928, Address: 0x2cc3dc, Func Offset: 0x10c
-	// Line 1930, Address: 0x2cc3ec, Func Offset: 0x11c
-	// Line 1929, Address: 0x2cc3f4, Func Offset: 0x124
-	// Line 1930, Address: 0x2cc3fc, Func Offset: 0x12c
-	// Line 1931, Address: 0x2cc404, Func Offset: 0x134
-	// Line 1943, Address: 0x2cc40c, Func Offset: 0x13c
-	// Line 1944, Address: 0x2cc410, Func Offset: 0x140
-	// Line 1946, Address: 0x2cc418, Func Offset: 0x148
-	// Line 1949, Address: 0x2cc41c, Func Offset: 0x14c
-	// Line 1946, Address: 0x2cc42c, Func Offset: 0x15c
-	// Line 1947, Address: 0x2cc450, Func Offset: 0x180
-	// Line 1949, Address: 0x2cc458, Func Offset: 0x188
-	// Line 1950, Address: 0x2cc460, Func Offset: 0x190
-	// Line 1953, Address: 0x2cc468, Func Offset: 0x198
-	// Line 1950, Address: 0x2cc46c, Func Offset: 0x19c
-	// Line 1953, Address: 0x2cc470, Func Offset: 0x1a0
-	// Line 1956, Address: 0x2cc480, Func Offset: 0x1b0
-	// Line 1953, Address: 0x2cc494, Func Offset: 0x1c4
-	// Line 1954, Address: 0x2cc498, Func Offset: 0x1c8
-	// Line 1956, Address: 0x2cc4a0, Func Offset: 0x1d0
-	// Line 1954, Address: 0x2cc4a8, Func Offset: 0x1d8
-	// Line 1959, Address: 0x2cc4ac, Func Offset: 0x1dc
-	// Line 1956, Address: 0x2cc4b0, Func Offset: 0x1e0
-	// Line 1957, Address: 0x2cc4bc, Func Offset: 0x1ec
-	// Line 1959, Address: 0x2cc4c4, Func Offset: 0x1f4
-	// Line 1957, Address: 0x2cc4dc, Func Offset: 0x20c
-	// Line 1959, Address: 0x2cc4e0, Func Offset: 0x210
-	// Line 1962, Address: 0x2cc4e4, Func Offset: 0x214
-	// Line 1963, Address: 0x2cc4e8, Func Offset: 0x218
-	// Line 1964, Address: 0x2cc4ec, Func Offset: 0x21c
-	// Line 1965, Address: 0x2cc4f0, Func Offset: 0x220
-	// Line 1966, Address: 0x2cc4f4, Func Offset: 0x224
-	// Line 1967, Address: 0x2cc4f8, Func Offset: 0x228
-	// Line 1969, Address: 0x2cc4fc, Func Offset: 0x22c
-	// Line 1968, Address: 0x2cc500, Func Offset: 0x230
-	// Line 1969, Address: 0x2cc504, Func Offset: 0x234
-	// Line 1970, Address: 0x2cc508, Func Offset: 0x238
-	// Line 1971, Address: 0x2cc50c, Func Offset: 0x23c
-	// Line 1972, Address: 0x2cc510, Func Offset: 0x240
-	// Line 1973, Address: 0x2cc514, Func Offset: 0x244
-	// Line 1974, Address: 0x2cc518, Func Offset: 0x248
-	// Line 1976, Address: 0x2cc51c, Func Offset: 0x24c
-	// Line 1977, Address: 0x2cc520, Func Offset: 0x250
-	// Line 1978, Address: 0x2cc524, Func Offset: 0x254
-	// Line 1980, Address: 0x2cc528, Func Offset: 0x258
-	// Line 1981, Address: 0x2cc52c, Func Offset: 0x25c
-	// Line 1982, Address: 0x2cc530, Func Offset: 0x260
-	// Line 1983, Address: 0x2cc534, Func Offset: 0x264
-	// Line 1984, Address: 0x2cc538, Func Offset: 0x268
-	// Line 1986, Address: 0x2cc53c, Func Offset: 0x26c
-	// Line 1987, Address: 0x2cc540, Func Offset: 0x270
-	// Line 1988, Address: 0x2cc544, Func Offset: 0x274
-	// Line 1989, Address: 0x2cc548, Func Offset: 0x278
-	// Line 1990, Address: 0x2cc54c, Func Offset: 0x27c
-	// Line 1991, Address: 0x2cc550, Func Offset: 0x280
-	// Line 1992, Address: 0x2cc554, Func Offset: 0x284
-	// Line 1993, Address: 0x2cc558, Func Offset: 0x288
-	// Line 1994, Address: 0x2cc55c, Func Offset: 0x28c
-	// Line 1995, Address: 0x2cc560, Func Offset: 0x290
-	// Line 1996, Address: 0x2cc564, Func Offset: 0x294
-	// Line 1998, Address: 0x2cc56c, Func Offset: 0x29c
-	// Line 2000, Address: 0x2cc570, Func Offset: 0x2a0
-	// Line 2001, Address: 0x2cc574, Func Offset: 0x2a4
-	// Line 2002, Address: 0x2cc578, Func Offset: 0x2a8
-	// Line 2003, Address: 0x2cc57c, Func Offset: 0x2ac
-	// Line 2004, Address: 0x2cc580, Func Offset: 0x2b0
-	// Line 2005, Address: 0x2cc584, Func Offset: 0x2b4
-	// Line 2006, Address: 0x2cc588, Func Offset: 0x2b8
-	// Line 2007, Address: 0x2cc58c, Func Offset: 0x2bc
-	// Line 2008, Address: 0x2cc590, Func Offset: 0x2c0
-	// Line 2010, Address: 0x2cc598, Func Offset: 0x2c8
-	// Line 2011, Address: 0x2cc59c, Func Offset: 0x2cc
-	// Line 2013, Address: 0x2cc5a4, Func Offset: 0x2d4
-	// Line 2014, Address: 0x2cc5a8, Func Offset: 0x2d8
-	// Line 2028, Address: 0x2cc5ac, Func Offset: 0x2dc
-	// Line 2029, Address: 0x2cc5bc, Func Offset: 0x2ec
-	// Line 2030, Address: 0x2cc5d0, Func Offset: 0x300
-	// Line 2031, Address: 0x2cc5e8, Func Offset: 0x318
-	// Line 2034, Address: 0x2cc5f0, Func Offset: 0x320
-	// Line 2035, Address: 0x2cc5f8, Func Offset: 0x328
-	// Line 2038, Address: 0x2cc600, Func Offset: 0x330
-	// Func End, Address: 0x2cc618, Func Offset: 0x348
-	scePrintf("Ps2AddPrim3DEx1P - UNIMPLEMENTED!\n");
+    unsigned long* p;             
+    TIM2_PICTUREHEADER_EX* timp;  
+    unsigned int clip_flag;    // needs use   
+    unsigned int clut_flag;    // needs use
+    unsigned int st_clip_flag; // needs use
+    float zsum;                  
+    float zbuff_ab_vec[4] = { 0 }; 
+    static const float clip_vec[4] = { 2048.0f, 2048.0f, 0, 2047.0f };  
+    static const float near_far_vec[4] = { 1.0f, 65534.0f, 0, 0 };
+    static const float zclip_ab_vec[4] = { 0.062501907f, 0, -2048.0625f, 0 };
+    
+    zbuff_ab_vec[0] = -Ps2_zbuff_b;
+    zbuff_ab_vec[2] = -Ps2_zbuff_a;
+    zbuff_ab_vec[3] = *(float*)&num;  
+    
+    if ((prim & 0x8000000000000)) 
+    {
+        if (Ps2_now_tex == NULL) 
+        {
+            return;
+        }
+
+        if ((prim & 0x20000000000000)) 
+        {
+            if (Ps2_use_pt_flag != 0)
+            {
+                prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 1, 0, 0, 0, 0), 0, 0);
+            }
+        } 
+        
+        if (!(prim & 0x20000000000000)) 
+        {
+            timp = (TIM2_PICTUREHEADER_EX*)Ps2_now_tex->texinfo.texsurface.pSurface;
+            
+            if (timp->TpFlag != 0) 
+            {
+                Ps2_tex_load_tp_cancel = 1;
+                
+                Ps2TexLoad(Ps2_now_tex);
+                
+                Ps2_tex_load_tp_cancel = 0;
+            }
+        } 
+        else if (Ps2_albinoid_flag != 0) 
+        {
+            Ps2_tex_load_tp_cancel = 1;
+                
+            Ps2TexLoad(Ps2_now_tex);
+            
+            Ps2_tex_load_tp_cancel = 0;
+        }
+    } 
+
+    p = (unsigned long*)WORKBASE;
+    
+    D2_SyncTag();
+
+    *p++ = ((num * 3) + 3) | 0x70000000;
+    *p++ = 0;
+    
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+    
+    *p++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+    *p++ = SCE_GS_TEST_1;
+    
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+    
+    asm volatile
+    ("
+    .set noreorder
+        lqc2        vf10, 0(%3)
+        lqc2        vf13, 0(%0)
+        lqc2        vf12, 0(%1)
+        lqc2        vf11, 0(%2)
+        
+        vitof0.w    vf10, vf10
+        
+        vsub.xyzw   vf9, vf9, vf9
+        
+        lui         at, (0x3FFFF >> 16)
+        
+        ori         v0, zero,  0x8000
+    
+        ori         a0,   at, (0x3FFFF & 0xFFFF)
+        
+        ctc2        zero, vi18
+        ctc2        v0,   vi2
+    
+        viaddi      vi4, vi0, 0
+    
+        addu        v0, %6, zero
+        
+        vdiv        Q, vf0w, vf10w
+    
+    l_002CC51C:
+        lqc2        vf4,    0(%4)
+        lqc2        vf5, 0x10(%4)
+        lqc2        vf6, 0x20(%4)
+        
+        vmtir       vi3, vf4w
+    
+        vadda.z     ACC, vf6, vf11
+        vmaddx.z    vf7, vf6, vf11x
+        
+        vsub.xy     vf7, vf6, vf13
+        
+        vclipw.xyz  vf7, vf13w        
+        
+        vadda.z     ACC, vf0, vf10
+        vmaddx.z    vf6, vf4, vf10x
+        
+        vmax.z      vf6, vf6, vf0
+        
+        vftoi0.xyzw vf5, vf5
+        
+        vminiy.z    vf6, vf6, vf12y
+        
+        vaddz.w     vf9, vf9, vf6z
+        
+        vftoi4.xyzw vf6, vf6
+        
+        vmtir       vi5, vf6w
+    
+        cfc2        v1, vi18
+    
+        and         v1, v1, a0
+    
+        beqz        v1, l_002CC570
+        nop
+    
+        vior        vi3, vi3, vi2
+        
+    l_002CC570:
+        vior        vi5, vi5, vi3
+        viand       vi4, vi4, vi5
+    
+        vmfir.w     vf6, vi5
+        
+        sqc2        vf4,    0(%5)
+        sqc2        vf5, 0x10(%5)
+        sqc2        vf6, 0x20(%5) 
+        
+        addi        v0, v0, -1
+        addiu       %5, %5, 48
+        
+        bnez        v0, l_002CC51C
+        
+        addiu       %4, %4, 48
+        
+        cfc2        v1, vi4
+        
+        bnez        v0, l_002CC600
+        nop
+    
+        vmulq.w     vf4, vf9, Q
+        
+        sqc2        vf4, 0(%5) 
+    .set reorder
+    " : : "r"(clip_vec), "r"(near_far_vec), "r"(zclip_ab_vec), "r"(zbuff_ab_vec), "r"(dp), "r"(p), "r"(num) : 
+    );
+
+    if ((Ps2_albinoid_flag == 0) && ((prim & 0x20000000000000))) 
+    {
+        Ps2AddOT((void*)0x70000000, num, Ps2AddPrimPrio, prim);
+    }
+    else 
+    {
+        SyncPath();
+        
+        loadImage((void*)0xF0000000); 
+    }
+    
+l_002CC600:
+    return;
 }
 
-// 
-// Start address: 0x2cc620
+// 100% matching!
 void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num)
 {
-	float zbuff_ab_vec[4];
-	float zsum;
-	unsigned int st_clip_flag;
-	unsigned int clip_flag;
-	unsigned long* p;
-	float zclip_ab_vec[4];
-	float near_far_vec[4];
-	float clip_vec[4];
-	// Line 2041, Address: 0x2cc620, Func Offset: 0
-	// Line 2052, Address: 0x2cc634, Func Offset: 0x14
-	// Line 2041, Address: 0x2cc63c, Func Offset: 0x1c
-	// Line 2052, Address: 0x2cc640, Func Offset: 0x20
-	// Line 2055, Address: 0x2cc660, Func Offset: 0x40
-	// Line 2052, Address: 0x2cc664, Func Offset: 0x44
-	// Line 2056, Address: 0x2cc680, Func Offset: 0x60
-	// Line 2059, Address: 0x2cc688, Func Offset: 0x68
-	// Line 2062, Address: 0x2cc68c, Func Offset: 0x6c
-	// Line 2059, Address: 0x2cc69c, Func Offset: 0x7c
-	// Line 2060, Address: 0x2cc6c0, Func Offset: 0xa0
-	// Line 2062, Address: 0x2cc6c8, Func Offset: 0xa8
-	// Line 2063, Address: 0x2cc6d0, Func Offset: 0xb0
-	// Line 2076, Address: 0x2cc6d8, Func Offset: 0xb8
-	// Line 2077, Address: 0x2cc6e4, Func Offset: 0xc4
-	// Line 2063, Address: 0x2cc6f8, Func Offset: 0xd8
-	// Line 2067, Address: 0x2cc6fc, Func Offset: 0xdc
-	// Line 2068, Address: 0x2cc708, Func Offset: 0xe8
-	// Line 2077, Address: 0x2cc710, Func Offset: 0xf0
-	// Line 2068, Address: 0x2cc718, Func Offset: 0xf8
-	// Line 2081, Address: 0x2cc71c, Func Offset: 0xfc
-	// Line 2077, Address: 0x2cc720, Func Offset: 0x100
-	// Line 2078, Address: 0x2cc72c, Func Offset: 0x10c
-	// Line 2081, Address: 0x2cc734, Func Offset: 0x114
-	// Line 2078, Address: 0x2cc74c, Func Offset: 0x12c
-	// Line 2081, Address: 0x2cc750, Func Offset: 0x130
-	// Line 2084, Address: 0x2cc754, Func Offset: 0x134
-	// Line 2085, Address: 0x2cc758, Func Offset: 0x138
-	// Line 2086, Address: 0x2cc75c, Func Offset: 0x13c
-	// Line 2087, Address: 0x2cc760, Func Offset: 0x140
-	// Line 2088, Address: 0x2cc764, Func Offset: 0x144
-	// Line 2089, Address: 0x2cc768, Func Offset: 0x148
-	// Line 2091, Address: 0x2cc76c, Func Offset: 0x14c
-	// Line 2090, Address: 0x2cc770, Func Offset: 0x150
-	// Line 2091, Address: 0x2cc774, Func Offset: 0x154
-	// Line 2092, Address: 0x2cc778, Func Offset: 0x158
-	// Line 2093, Address: 0x2cc77c, Func Offset: 0x15c
-	// Line 2094, Address: 0x2cc780, Func Offset: 0x160
-	// Line 2095, Address: 0x2cc784, Func Offset: 0x164
-	// Line 2096, Address: 0x2cc788, Func Offset: 0x168
-	// Line 2098, Address: 0x2cc78c, Func Offset: 0x16c
-	// Line 2099, Address: 0x2cc790, Func Offset: 0x170
-	// Line 2100, Address: 0x2cc794, Func Offset: 0x174
-	// Line 2102, Address: 0x2cc798, Func Offset: 0x178
-	// Line 2103, Address: 0x2cc79c, Func Offset: 0x17c
-	// Line 2104, Address: 0x2cc7a0, Func Offset: 0x180
-	// Line 2105, Address: 0x2cc7a4, Func Offset: 0x184
-	// Line 2106, Address: 0x2cc7a8, Func Offset: 0x188
-	// Line 2108, Address: 0x2cc7ac, Func Offset: 0x18c
-	// Line 2109, Address: 0x2cc7b0, Func Offset: 0x190
-	// Line 2110, Address: 0x2cc7b4, Func Offset: 0x194
-	// Line 2111, Address: 0x2cc7b8, Func Offset: 0x198
-	// Line 2112, Address: 0x2cc7bc, Func Offset: 0x19c
-	// Line 2113, Address: 0x2cc7c0, Func Offset: 0x1a0
-	// Line 2114, Address: 0x2cc7c4, Func Offset: 0x1a4
-	// Line 2115, Address: 0x2cc7c8, Func Offset: 0x1a8
-	// Line 2116, Address: 0x2cc7cc, Func Offset: 0x1ac
-	// Line 2117, Address: 0x2cc7d0, Func Offset: 0x1b0
-	// Line 2118, Address: 0x2cc7d4, Func Offset: 0x1b4
-	// Line 2120, Address: 0x2cc7dc, Func Offset: 0x1bc
-	// Line 2122, Address: 0x2cc7e0, Func Offset: 0x1c0
-	// Line 2123, Address: 0x2cc7e4, Func Offset: 0x1c4
-	// Line 2124, Address: 0x2cc7e8, Func Offset: 0x1c8
-	// Line 2125, Address: 0x2cc7ec, Func Offset: 0x1cc
-	// Line 2126, Address: 0x2cc7f0, Func Offset: 0x1d0
-	// Line 2127, Address: 0x2cc7f4, Func Offset: 0x1d4
-	// Line 2128, Address: 0x2cc7f8, Func Offset: 0x1d8
-	// Line 2129, Address: 0x2cc7fc, Func Offset: 0x1dc
-	// Line 2130, Address: 0x2cc800, Func Offset: 0x1e0
-	// Line 2132, Address: 0x2cc808, Func Offset: 0x1e8
-	// Line 2133, Address: 0x2cc80c, Func Offset: 0x1ec
-	// Line 2135, Address: 0x2cc814, Func Offset: 0x1f4
-	// Line 2136, Address: 0x2cc818, Func Offset: 0x1f8
-	// Line 2150, Address: 0x2cc81c, Func Offset: 0x1fc
-	// Line 2151, Address: 0x2cc824, Func Offset: 0x204
-	// Line 2154, Address: 0x2cc82c, Func Offset: 0x20c
-	// Func End, Address: 0x2cc844, Func Offset: 0x224
-	scePrintf("Ps2AddPrim3DMod - UNIMPLEMENTED!\n");
+    unsigned long* p;             
+    unsigned int clip_flag;      
+    unsigned int st_clip_flag;    
+    float zsum;                   
+    float zbuff_ab_vec[4] = { 0 }; 
+    static const float clip_vec[4] = { 2048.0f, 2048.0f, 0, 2047.0f };  
+    static const float near_far_vec[4] = { 1.0f, 65534.0f, 0, 0 };
+    static const float zclip_ab_vec[4] = { 0.062501907f, 0, -2048.0625f, 0 };
+    
+    zbuff_ab_vec[0] = -Ps2_zbuff_b;
+    zbuff_ab_vec[2] = -Ps2_zbuff_a;
+    zbuff_ab_vec[3] = *(float*)&num;  
+    
+    p = (unsigned long*)WORKBASE;
+    
+    D2_SyncTag();
+    
+    *p++ = ((num * 3) + 3) | 0x70000000;
+    *p++ = 0;
+    
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+    
+    *p++ = SCE_GS_SET_TEST_2(0, 0, 0, 0, 0, 0, 1, 2);
+    *p++ = SCE_GS_TEST_2;
+    
+    prim |= SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 0, 0, 0, 1, 0), 0, 0);
+    
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+    
+    asm volatile
+    ("
+    .set noreorder
+        lqc2        vf10, 0(%3)
+        lqc2        vf13, 0(%0)
+        lqc2        vf12, 0(%1)
+        lqc2        vf11, 0(%2)
+        
+        vitof0.w    vf10, vf10
+        
+        vsub.xyzw   vf9, vf9, vf9
+        
+        lui         at, (0x3FFFF >> 16)
+        
+        ori         v0, zero,  0x8000
+    
+        ori         a0,   at, (0x3FFFF & 0xFFFF)
+        
+        ctc2        zero, vi18
+        ctc2        v0,   vi2
+    
+        viaddi      vi4, vi0, 0
+    
+        addu        v0, %6, zero
+        
+        vdiv        Q, vf0w, vf10w
+    
+    l_002CC78C:
+        lqc2        vf4,    0(%4)
+        lqc2        vf5, 0x10(%4)
+        lqc2        vf6, 0x20(%4)
+        
+        vmtir       vi3, vf4w
+    
+        vadda.z     ACC, vf6, vf11
+        vmaddx.z    vf7, vf6, vf11x
+        
+        vsub.xy     vf7, vf6, vf13
+        
+        vclipw.xyz  vf7, vf13w        
+        
+        vadda.z     ACC, vf0, vf10
+        vmaddx.z    vf6, vf4, vf10x
+        
+        vmax.z      vf6, vf6, vf0
+        
+        vftoi0.xyzw vf5, vf5
+        
+        vminiy.z    vf6, vf6, vf12y
+        
+        vaddz.w     vf9, vf9, vf6z
+        
+        vftoi4.xyzw vf6, vf6
+        
+        vmtir       vi5, vf6w
+    
+        cfc2        v1, vi18
+    
+        and         v1, v1, a0
+    
+        beqz        v1, l_002CC7E0
+        nop
+    
+        vior        vi3, vi3, vi2
+        
+    l_002CC7E0:
+        vior        vi5, vi5, vi3
+        viand       vi4, vi4, vi5
+    
+        vmfir.w     vf6, vi5
+        
+        sqc2        vf4,    0(%5)
+        sqc2        vf5, 0x10(%5)
+        sqc2        vf6, 0x20(%5) 
+        
+        addi        v0, v0, -1
+        addiu       %5, %5, 48
+        
+        bnez        v0, l_002CC78C
+        
+        addiu       %4, %4, 48
+        
+        cfc2        v1, vi4
+        
+        bnez        v0, l_002CC82C
+        nop
+    
+        vmulq.w     vf4, vf9, Q
+        
+        sqc2        vf4, 0(%5) 
+    .set reorder
+    " : : "r"(clip_vec), "r"(near_far_vec), "r"(zclip_ab_vec), "r"(zbuff_ab_vec), "r"(dp), "r"(p), "r"(num) : 
+    );
+
+    SyncPath();
+    
+    loadImage((void*)0xF0000000); 
+    
+l_002CC82C:
+    return;
 }
 
 // 100% matching! 
@@ -2055,190 +2288,276 @@ void Ps2Vu1ProgSend(unsigned int prog_no)
     sceDmaSync((sceDmaChan*)0x10009000, 0, 0);
 }
 
-// 
-// Start address: 0x2ceb50
+// 100% matching!
 void Ps2AddPrim3DExI(unsigned long prim, void* dp, unsigned int num)
 {
-	float max;
-	//float max;
-	//float max;
-	float fz[4][3];
-	int j;
-	//<unknown fundamental type (0xa510)>* p128;
-	unsigned long* pp;
-	float zbuff_ab_vec[4];
-	float zsum;
-	unsigned int st_clip_flag;
-	unsigned int clut_flag;
-	unsigned int clip_flag;
-	//_anon0* timp;
-	unsigned long* p;
-	float zclip_ab_vec[4];
-	float near_far_vec[4];
-	float clip_vec[4];
-	// Line 4073, Address: 0x2ceb50, Func Offset: 0
-	// Line 4085, Address: 0x2ceb60, Func Offset: 0x10
-	// Line 4073, Address: 0x2ceb64, Func Offset: 0x14
-	// Line 4085, Address: 0x2ceb6c, Func Offset: 0x1c
-	// Line 4089, Address: 0x2ceb90, Func Offset: 0x40
-	// Line 4085, Address: 0x2ceb9c, Func Offset: 0x4c
-	// Line 4089, Address: 0x2cebb8, Func Offset: 0x68
-	// Line 4090, Address: 0x2cebc0, Func Offset: 0x70
-	// Line 4092, Address: 0x2cebd0, Func Offset: 0x80
-	// Line 4093, Address: 0x2cebe4, Func Offset: 0x94
-	// Line 4094, Address: 0x2cebf4, Func Offset: 0xa4
-	// Line 4097, Address: 0x2cec14, Func Offset: 0xc4
-	// Line 4098, Address: 0x2cec28, Func Offset: 0xd8
-	// Line 4099, Address: 0x2cec34, Func Offset: 0xe4
-	// Line 4100, Address: 0x2cec40, Func Offset: 0xf0
-	// Line 4101, Address: 0x2cec48, Func Offset: 0xf8
-	// Line 4102, Address: 0x2cec50, Func Offset: 0x100
-	// Line 4113, Address: 0x2cec58, Func Offset: 0x108
-	// Line 4114, Address: 0x2cec5c, Func Offset: 0x10c
-	// Line 4116, Address: 0x2cec64, Func Offset: 0x114
-	// Line 4119, Address: 0x2cec68, Func Offset: 0x118
-	// Line 4116, Address: 0x2cec78, Func Offset: 0x128
-	// Line 4117, Address: 0x2cec9c, Func Offset: 0x14c
-	// Line 4119, Address: 0x2ceca4, Func Offset: 0x154
-	// Line 4120, Address: 0x2cecac, Func Offset: 0x15c
-	// Line 4123, Address: 0x2cecb4, Func Offset: 0x164
-	// Line 4120, Address: 0x2cecb8, Func Offset: 0x168
-	// Line 4123, Address: 0x2cecbc, Func Offset: 0x16c
-	// Line 4126, Address: 0x2ceccc, Func Offset: 0x17c
-	// Line 4123, Address: 0x2cece0, Func Offset: 0x190
-	// Line 4124, Address: 0x2cece4, Func Offset: 0x194
-	// Line 4126, Address: 0x2cecec, Func Offset: 0x19c
-	// Line 4124, Address: 0x2cecf4, Func Offset: 0x1a4
-	// Line 4129, Address: 0x2cecf8, Func Offset: 0x1a8
-	// Line 4126, Address: 0x2cecfc, Func Offset: 0x1ac
-	// Line 4127, Address: 0x2ced08, Func Offset: 0x1b8
-	// Line 4129, Address: 0x2ced10, Func Offset: 0x1c0
-	// Line 4127, Address: 0x2ced24, Func Offset: 0x1d4
-	// Line 4129, Address: 0x2ced28, Func Offset: 0x1d8
-	// Line 4132, Address: 0x2ced34, Func Offset: 0x1e4
-	// Line 4133, Address: 0x2ced38, Func Offset: 0x1e8
-	// Line 4134, Address: 0x2ced3c, Func Offset: 0x1ec
-	// Line 4135, Address: 0x2ced40, Func Offset: 0x1f0
-	// Line 4136, Address: 0x2ced44, Func Offset: 0x1f4
-	// Line 4137, Address: 0x2ced48, Func Offset: 0x1f8
-	// Line 4139, Address: 0x2ced4c, Func Offset: 0x1fc
-	// Line 4138, Address: 0x2ced50, Func Offset: 0x200
-	// Line 4139, Address: 0x2ced54, Func Offset: 0x204
-	// Line 4140, Address: 0x2ced58, Func Offset: 0x208
-	// Line 4141, Address: 0x2ced5c, Func Offset: 0x20c
-	// Line 4142, Address: 0x2ced60, Func Offset: 0x210
-	// Line 4143, Address: 0x2ced64, Func Offset: 0x214
-	// Line 4144, Address: 0x2ced68, Func Offset: 0x218
-	// Line 4146, Address: 0x2ced6c, Func Offset: 0x21c
-	// Line 4147, Address: 0x2ced70, Func Offset: 0x220
-	// Line 4148, Address: 0x2ced74, Func Offset: 0x224
-	// Line 4150, Address: 0x2ced78, Func Offset: 0x228
-	// Line 4151, Address: 0x2ced7c, Func Offset: 0x22c
-	// Line 4152, Address: 0x2ced80, Func Offset: 0x230
-	// Line 4153, Address: 0x2ced84, Func Offset: 0x234
-	// Line 4154, Address: 0x2ced88, Func Offset: 0x238
-	// Line 4156, Address: 0x2ced8c, Func Offset: 0x23c
-	// Line 4157, Address: 0x2ced90, Func Offset: 0x240
-	// Line 4158, Address: 0x2ced94, Func Offset: 0x244
-	// Line 4159, Address: 0x2ced98, Func Offset: 0x248
-	// Line 4160, Address: 0x2ced9c, Func Offset: 0x24c
-	// Line 4161, Address: 0x2ceda0, Func Offset: 0x250
-	// Line 4162, Address: 0x2ceda4, Func Offset: 0x254
-	// Line 4163, Address: 0x2ceda8, Func Offset: 0x258
-	// Line 4164, Address: 0x2cedac, Func Offset: 0x25c
-	// Line 4165, Address: 0x2cedb0, Func Offset: 0x260
-	// Line 4166, Address: 0x2cedb4, Func Offset: 0x264
-	// Line 4168, Address: 0x2cedbc, Func Offset: 0x26c
-	// Line 4170, Address: 0x2cedc0, Func Offset: 0x270
-	// Line 4171, Address: 0x2cedc4, Func Offset: 0x274
-	// Line 4172, Address: 0x2cedc8, Func Offset: 0x278
-	// Line 4173, Address: 0x2cedcc, Func Offset: 0x27c
-	// Line 4174, Address: 0x2cedd0, Func Offset: 0x280
-	// Line 4175, Address: 0x2cedd4, Func Offset: 0x284
-	// Line 4176, Address: 0x2cedd8, Func Offset: 0x288
-	// Line 4177, Address: 0x2ceddc, Func Offset: 0x28c
-	// Line 4178, Address: 0x2cede0, Func Offset: 0x290
-	// Line 4180, Address: 0x2cede8, Func Offset: 0x298
-	// Line 4181, Address: 0x2cedec, Func Offset: 0x29c
-	// Line 4183, Address: 0x2cedf4, Func Offset: 0x2a4
-	// Line 4184, Address: 0x2cedf8, Func Offset: 0x2a8
-	// Line 4198, Address: 0x2cedfc, Func Offset: 0x2ac
-	// Line 4199, Address: 0x2cee10, Func Offset: 0x2c0
-	// Line 4200, Address: 0x2cee24, Func Offset: 0x2d4
-	// Line 4201, Address: 0x2cee34, Func Offset: 0x2e4
-	// Line 4206, Address: 0x2cee54, Func Offset: 0x304
-	// Line 4208, Address: 0x2cee6c, Func Offset: 0x31c
-	// Line 4210, Address: 0x2cee70, Func Offset: 0x320
-	// Line 4225, Address: 0x2cee78, Func Offset: 0x328
-	// Line 4210, Address: 0x2cee7c, Func Offset: 0x32c
-	// Line 4213, Address: 0x2cee80, Func Offset: 0x330
-	// Line 4211, Address: 0x2cee88, Func Offset: 0x338
-	// Line 4213, Address: 0x2cee8c, Func Offset: 0x33c
-	// Line 4211, Address: 0x2cee90, Func Offset: 0x340
-	// Line 4213, Address: 0x2cee94, Func Offset: 0x344
-	// Line 4214, Address: 0x2ceea0, Func Offset: 0x350
-	// Line 4217, Address: 0x2ceea8, Func Offset: 0x358
-	// Line 4214, Address: 0x2ceeac, Func Offset: 0x35c
-	// Line 4217, Address: 0x2ceeb0, Func Offset: 0x360
-	// Line 4218, Address: 0x2ceec4, Func Offset: 0x374
-	// Line 4220, Address: 0x2ceecc, Func Offset: 0x37c
-	// Line 4221, Address: 0x2ceeec, Func Offset: 0x39c
-	// Line 4218, Address: 0x2cef00, Func Offset: 0x3b0
-	// Line 4221, Address: 0x2cef04, Func Offset: 0x3b4
-	// Line 4223, Address: 0x2cef10, Func Offset: 0x3c0
-	// Line 4226, Address: 0x2cef18, Func Offset: 0x3c8
-	// Line 4227, Address: 0x2cef24, Func Offset: 0x3d4
-	// Line 4230, Address: 0x2cef38, Func Offset: 0x3e8
-	// Line 4227, Address: 0x2cef3c, Func Offset: 0x3ec
-	// Line 4228, Address: 0x2cef40, Func Offset: 0x3f0
-	// Line 4229, Address: 0x2cef48, Func Offset: 0x3f8
-	// Line 4230, Address: 0x2cef50, Func Offset: 0x400
-	// Line 4231, Address: 0x2cef58, Func Offset: 0x408
-	// Line 4233, Address: 0x2cef60, Func Offset: 0x410
-	// Line 4236, Address: 0x2cef78, Func Offset: 0x428
-	// Line 4233, Address: 0x2cef84, Func Offset: 0x434
-	// Line 4234, Address: 0x2cef88, Func Offset: 0x438
-	// Line 4236, Address: 0x2cef8c, Func Offset: 0x43c
-	// Line 4239, Address: 0x2cef94, Func Offset: 0x444
-	// Line 4234, Address: 0x2cef98, Func Offset: 0x448
-	// Line 4235, Address: 0x2cef9c, Func Offset: 0x44c
-	// Line 4239, Address: 0x2cefa0, Func Offset: 0x450
-	// Line 4235, Address: 0x2cefb0, Func Offset: 0x460
-	// Line 4236, Address: 0x2cefb4, Func Offset: 0x464
-	// Line 4242, Address: 0x2cefb8, Func Offset: 0x468
-	// Line 4236, Address: 0x2cefc0, Func Offset: 0x470
-	// Line 4237, Address: 0x2cefc4, Func Offset: 0x474
-	// Line 4238, Address: 0x2cefcc, Func Offset: 0x47c
-	// Line 4239, Address: 0x2cefd4, Func Offset: 0x484
-	// Line 4240, Address: 0x2cefdc, Func Offset: 0x48c
-	// Line 4241, Address: 0x2cefe4, Func Offset: 0x494
-	// Line 4242, Address: 0x2cefe8, Func Offset: 0x498
-	// Line 4243, Address: 0x2ceff0, Func Offset: 0x4a0
-	// Line 4244, Address: 0x2ceffc, Func Offset: 0x4ac
-	// Line 4248, Address: 0x2cf008, Func Offset: 0x4b8
-	// Line 4252, Address: 0x2cf038, Func Offset: 0x4e8
-	// Line 4253, Address: 0x2cf060, Func Offset: 0x510
-	// Line 4255, Address: 0x2cf078, Func Offset: 0x528
-	// Line 4257, Address: 0x2cf088, Func Offset: 0x538
-	// Line 4261, Address: 0x2cf090, Func Offset: 0x540
-	// Line 4263, Address: 0x2cf0a8, Func Offset: 0x558
-	// Line 4261, Address: 0x2cf0ac, Func Offset: 0x55c
-	// Line 4263, Address: 0x2cf0b0, Func Offset: 0x560
-	// Line 4261, Address: 0x2cf0b8, Func Offset: 0x568
-	// Line 4263, Address: 0x2cf0bc, Func Offset: 0x56c
-	// Line 4265, Address: 0x2cf0c4, Func Offset: 0x574
-	// Line 4269, Address: 0x2cf0cc, Func Offset: 0x57c
-	// Line 4270, Address: 0x2cf0f0, Func Offset: 0x5a0
-	// Line 4272, Address: 0x2cf108, Func Offset: 0x5b8
-	// Line 4277, Address: 0x2cf118, Func Offset: 0x5c8
-	// Line 4278, Address: 0x2cf134, Func Offset: 0x5e4
-	// Line 4284, Address: 0x2cf13c, Func Offset: 0x5ec
-	// Line 4287, Address: 0x2cf160, Func Offset: 0x610
-	// Line 4289, Address: 0x2cf168, Func Offset: 0x618
-	// Line 4290, Address: 0x2cf170, Func Offset: 0x620
-	// Line 4293, Address: 0x2cf178, Func Offset: 0x628
-	// Func End, Address: 0x2cf190, Func Offset: 0x640
-	scePrintf("Ps2AddPrim3DExI - UNIMPLEMENTED!\n");
+    unsigned long* p;                
+    TIM2_PICTUREHEADER_EX* timp;      
+    unsigned int clip_flag;        
+    unsigned int clut_flag;          
+    unsigned int st_clip_flag;      
+    float zsum;                    
+    float zbuff_ab_vec[4] = { -Ps2_zbuff_b, 0, -Ps2_zbuff_a, *(float*)&num };
+    unsigned long* pp;                
+    u_long128* p128;             
+    int j;                         
+    float fz[3][4];                    
+    static const float clip_vec[4] = { 2048.0f, 2048.0f, 0, 2047.0f };  
+    static const float near_far_vec[4] = { 1.0f, 65534.0f, 0, 0 };
+    static const float zclip_ab_vec[4] = { 0.062501907f, 0, -2048.0625f, 0 };
+
+    clip_flag = 0;
+    clut_flag = 0;
+    st_clip_flag = 0;
+    
+    if ((prim & 0x8000000000000)) 
+    {
+        if (Ps2_now_tex == NULL) 
+        {
+            return;
+        }
+
+        if ((prim & 0x20000000000000)) 
+        {
+            if (Ps2_use_pt_flag != 0)
+            {
+                prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 1, 0, 0, 0, 0), 0, 0);
+            }
+        }
+        
+        if (!(prim & 0x20000000000000)) 
+        {
+            timp = (TIM2_PICTUREHEADER_EX*)Ps2_now_tex->texinfo.texsurface.pSurface;
+            
+            if (timp->TpFlag != 0) 
+            {
+                Ps2_tex_load_tp_cancel = 1;
+                
+                Ps2TexLoad(Ps2_now_tex);
+                
+                Ps2_tex_load_tp_cancel = 0;
+            }
+        }
+    } 
+
+    p = (unsigned long*)WORKBASE;
+    
+    D2_SyncTag();
+
+    *p++ = DMAend | ((num * 3) + 3);
+    *p++ = 0;
+    
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+    
+    *p++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+    *p++ = SCE_GS_TEST_1;
+    
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+    
+    asm volatile
+    ("
+    .set noreorder
+        lqc2        vf10, 0(%3)
+        lqc2        vf13, 0(%0)
+        lqc2        vf12, 0(%1)
+        lqc2        vf11, 0(%2)
+        
+        vitof0.w    vf10, vf10
+        
+        vsub.xyzw   vf9, vf9, vf9
+        
+        li          v0, 0x8000
+        li          %9, 0x3FFFF
+        
+        ctc2        zero, vi18
+        ctc2        v0,   vi2
+    
+        viaddi      vi4, vi0, 0
+    
+        move        v0, %6
+        
+        vdiv        Q, vf0w, vf10w
+    
+    l_002CED6C:
+        lqc2        vf4,    0(%4)
+        lqc2        vf5, 0x10(%4)
+        lqc2        vf6, 0x20(%4)
+        
+        vmtir       vi3, vf4w
+    
+        vadda.z     ACC, vf6, vf11
+        vmaddx.z    vf7, vf6, vf11x
+        
+        vsub.xy     vf7, vf6, vf13
+        
+        vclipw.xyz  vf7, vf13w        
+        
+        vadda.z     ACC, vf0, vf10
+        vmaddx.z    vf6, vf4, vf10x
+        
+        vmax.z      vf6, vf6, vf0
+        
+        vftoi0.xyzw vf5, vf5
+        
+        vminiy.z    vf6, vf6, vf12y
+        
+        vaddz.w     vf9, vf9, vf6z
+        
+        vftoi4.xyzw vf6, vf6
+        
+        vmtir       vi5, vf6w
+    
+        cfc2        %8, vi18
+        
+        and         %7, %8, %9
+        beqz        %7, l_002CEDC0
+        nop
+    
+        vior        vi3, vi3, vi2
+        
+    l_002CEDC0:
+        vior        vi5, vi5, vi3
+        viand       vi4, vi4, vi5
+    
+        vmfir.w     vf6, vi5
+        
+        sqc2        vf4,    0(%5)
+        sqc2        vf5, 0x10(%5)
+        sqc2        vf6, 0x20(%5) 
+        
+        addi        v0, v0, -1
+        addiu       %5, %5, 48
+        
+        bnez        v0, l_002CED6C
+        
+        addiu       %4, %4, 48
+        
+        cfc2        %7, vi4
+        
+        bnez        v0, l_002CF178
+        nop
+    
+        vmulq.w     vf4, vf9, Q
+        
+        sqc2        vf4, 0(%5) 
+    .set reorder
+    " : : "r"(clip_vec), "r"(near_far_vec), "r"(zclip_ab_vec), "r"(zbuff_ab_vec), "r"(dp), "r"(p), "r"(num), "r"(clip_flag), "r"(st_clip_flag), "r"(clut_flag)  : "v0", "memory" 
+    );
+
+    if ((prim & 0x20000000000000)) 
+    {
+        if (((ViewType < 3) && (num > 3)) && ((prim & 0x3800000000000) == 0x2000000000000) && (((num * 3) - 6) < 167)) 
+        {
+            pp = (unsigned long*)WORKBASE;
+
+            *pp++ = WORKBASE + 12;
+            *pp++ = 0;
+            
+            *pp++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+            *pp++ = SCE_GIF_PACKED_AD;
+            
+            *pp++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+            *pp++ = SCE_GS_TEST_1;
+
+            prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(7, 0, 0, 0, 0, 0, 0, 0, 0), 0, 0);
+            
+            *pp++ = SCE_GIF_SET_TAG(3, 1, SCE_GIF_REGLIST, SCE_GS_SET_PRIM(SCE_GS_PRIM_TRI, 0, 0, 0, 0, 0, 0, 0, 0), 0, 3) | prim;  
+            *pp++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+            
+            p128 = (u_long128*)(WORKBASE + 64);
+            
+            for (j = num - 1; j >= 0; j--) 
+            {
+                p128[(3 * j) +  9] = p128[(3 * j) + 0];
+                p128[(3 * j) + 10] = p128[(3 * j) + 1];
+                p128[(3 * j) + 11] = p128[(3 * j) + 2];
+            }
+            
+            for (j = 0; j < (num - 2); j++) 
+            {
+                p128[0] = p128[(3 * (j + 3)) + 0];
+                p128[1] = p128[(3 * (j + 3)) + 1];
+                p128[2] = p128[(3 * (j + 3)) + 2];
+                
+                p128[3] = p128[(3 * (j + 4)) + 0];
+                p128[4] = p128[(3 * (j + 4)) + 1];
+                p128[5] = p128[(3 * (j + 4)) + 2];
+                
+                p128[6] = p128[(3 * (j + 5)) + 0];
+                p128[7] = p128[(3 * (j + 5)) + 1];
+                p128[8] = p128[(3 * (j + 5)) + 2];
+                
+                sceVu0ITOF4Vector(fz[0], (void*)&p128[2]); 
+                sceVu0ITOF4Vector(fz[1], (void*)&p128[5]); 
+                sceVu0ITOF4Vector(fz[2], (void*)&p128[8]); 
+                
+                switch (ViewType) 
+                {     
+                case 0:
+                {
+                    float max;               
+                    
+                    max = MIN(fz[0][2], fz[1][2]);
+                    
+                    if (fz[2][2] < max) 
+                    {
+                        max = fz[2][2];
+                    }
+                    
+                    Ps2AddOT((void*)0x70000000, 3, max, prim);
+                    break;
+                }
+                case 1:
+                {
+                    float max; 
+                    
+                    max = zsum = fz[0][0] + fz[0][1] + fz[0][2]; 
+                    
+                    Ps2AddOT((void*)0x70000000, 3, 0.33333334f * max, prim);
+                    break;
+                }
+                case 2:
+                {
+                    float max;                     
+                    
+                    max = fz[0][2];
+                    
+                    if (max > fz[1][2])
+                    {
+                        max = fz[0][2];
+                    }
+                    else
+                    {
+                        max = fz[1][2];
+                    } 
+                    
+                    if (fz[2][2] > max) 
+                    {
+                        max = fz[2][2];
+                    }
+                    
+                    Ps2AddOT((void*)0x70000000, 3, max, prim);
+                    break;
+                }
+                }
+            }
+            
+            return;
+        }
+        
+        Ps2AddOT((void*)0x70000000, num, ((float*)p)[(12 * num) + 3], prim);
+    }
+    else 
+    {
+        SyncPath();
+        
+        loadImage((void*)0xF0000000); 
+    }
+    
+l_002CF178:
+    return;
 }
 
 // 100% matching!

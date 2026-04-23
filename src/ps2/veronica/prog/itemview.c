@@ -1,25 +1,65 @@
+#include "../../../ps2/veronica/prog/item.h"
 #include "../../../ps2/veronica/prog/itemview.h"
+#include "../../../ps2/veronica/prog/binfunc.h"
+#include "../../../ps2/veronica/prog/dread.h"
+#include "../../../ps2/veronica/prog/fileview.h"
+#include "../../../ps2/veronica/prog/main.h"
+#include "../../../ps2/veronica/prog/message.h"
 #include "../../../ps2/veronica/prog/njplus.h"
+#include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/ps2_NaTextureFunction.h"
+#include "../../../ps2/veronica/prog/ps2_NinjaCnk.h"
+#include "../../../ps2/veronica/prog/ps2_dummy.h"
+#include "../../../ps2/veronica/prog/ps2_texture.h"
 #include "../../../ps2/veronica/prog/sub1.h"
 
-/*unsigned char(*actionprg)(_anon5*)[3];
-unsigned int* wp_;
-unsigned char flg[3];
-int ang_00[3];
-int ang_01[3];
-int ang_02[3];
-_anon32 vec_00;
-float check[16];
-float testf;*/
+static unsigned int* wp_;
+static unsigned char flg[3];
+static int ang_00[3];
+static int ang_01[3];
+static int ang_02[3];
+static NJS_POINT3 vec_00;
+static float check[16];
+static float testf;
 static NJS_VECTOR whd;
-/*unsigned int ItemViewTypeTbl[168];
-int ViewType;
-_anon33 fvwork;
-_anon6 dsptbl[0];
-_anon2 swork;
+
+unsigned char (*actionprg[3])(SITEM* si) = 
+{ 
+	MdlAction00,
+	MdlAction01,
+	MdlAction02
+};
+static unsigned int ItemViewTypeTbl[168] = 
+{
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 3, 2, 2, 
+	2, 2, 2, 2, 2, 2, 2, 2,
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2, 
+    2, 2, 2, 2, 2, 2, 2, 2 
+};
+/*int ViewType;
+FV_WORK fvwork;
+DSP_WORK dsptbl[0];
+S_WORK swork;
 _anon24* sys;
-_anon5 sitem;
-_anon32 hoseipos[0];
+SITEM sitem;
+NJS_POINT3 hoseipos[0];
 unsigned char itemflg[8][0];
 unsigned short getmestbl[0];
 _anon23 itemdata[0];
@@ -27,246 +67,354 @@ unsigned short mestbl[0];
 short c_a[6][0];
 _anon41 parts_10b[0];
 unsigned short idsettbl[0];
+*/
 
-// 
-// Start address: 0x2a9870
-void DrawSubItem(_anon2* st, _anon5* si)
+// 100% matching!
+void DrawSubItem(S_WORK* st, SITEM* si)
 {
-	_anon32 pos00;
-	_anon6* dw_a;
-	_anon33* fv;
-	_anon1* sc;
-	float testtest[16];
-	// Line 173, Address: 0x2a9870, Func Offset: 0
-	// Line 184, Address: 0x2a988c, Func Offset: 0x1c
-	// Line 187, Address: 0x2a9894, Func Offset: 0x24
-	// Line 185, Address: 0x2a9898, Func Offset: 0x28
-	// Line 187, Address: 0x2a98a0, Func Offset: 0x30
-	// Line 213, Address: 0x2a98b8, Func Offset: 0x48
-	// Line 214, Address: 0x2a98c0, Func Offset: 0x50
-	// Line 216, Address: 0x2a98d0, Func Offset: 0x60
-	// Line 218, Address: 0x2a98d8, Func Offset: 0x68
-	// Line 221, Address: 0x2a9910, Func Offset: 0xa0
-	// Line 222, Address: 0x2a9918, Func Offset: 0xa8
-	// Line 223, Address: 0x2a994c, Func Offset: 0xdc
-	// Line 224, Address: 0x2a9980, Func Offset: 0x110
-	// Line 225, Address: 0x2a99b4, Func Offset: 0x144
-	// Line 227, Address: 0x2a99bc, Func Offset: 0x14c
-	// Line 228, Address: 0x2a99c8, Func Offset: 0x158
-	// Line 229, Address: 0x2a99d4, Func Offset: 0x164
-	// Line 230, Address: 0x2a99e0, Func Offset: 0x170
-	// Line 232, Address: 0x2a99e8, Func Offset: 0x178
-	// Line 234, Address: 0x2a99f0, Func Offset: 0x180
-	// Line 235, Address: 0x2a9a00, Func Offset: 0x190
-	// Line 236, Address: 0x2a9a0c, Func Offset: 0x19c
-	// Line 237, Address: 0x2a9a18, Func Offset: 0x1a8
-	// Line 238, Address: 0x2a9a24, Func Offset: 0x1b4
-	// Line 239, Address: 0x2a9a38, Func Offset: 0x1c8
-	// Line 240, Address: 0x2a9a44, Func Offset: 0x1d4
-	// Line 241, Address: 0x2a9a50, Func Offset: 0x1e0
-	// Line 242, Address: 0x2a9a5c, Func Offset: 0x1ec
-	// Line 243, Address: 0x2a9a64, Func Offset: 0x1f4
-	// Line 244, Address: 0x2a9a70, Func Offset: 0x200
-	// Line 245, Address: 0x2a9a7c, Func Offset: 0x20c
-	// Line 249, Address: 0x2a9a88, Func Offset: 0x218
-	// Line 250, Address: 0x2a9a94, Func Offset: 0x224
-	// Line 251, Address: 0x2a9a9c, Func Offset: 0x22c
-	// Line 252, Address: 0x2a9aa8, Func Offset: 0x238
-	// Line 254, Address: 0x2a9ab0, Func Offset: 0x240
-	// Line 255, Address: 0x2a9aec, Func Offset: 0x27c
-	// Line 256, Address: 0x2a9b24, Func Offset: 0x2b4
-	// Line 258, Address: 0x2a9b60, Func Offset: 0x2f0
-	// Line 259, Address: 0x2a9b6c, Func Offset: 0x2fc
-	// Line 260, Address: 0x2a9b78, Func Offset: 0x308
-	// Line 262, Address: 0x2a9b84, Func Offset: 0x314
-	// Line 272, Address: 0x2a9b8c, Func Offset: 0x31c
-	// Line 262, Address: 0x2a9b94, Func Offset: 0x324
-	// Line 263, Address: 0x2a9bb8, Func Offset: 0x348
-	// Line 264, Address: 0x2a9be4, Func Offset: 0x374
-	// Line 272, Address: 0x2a9c0c, Func Offset: 0x39c
-	// Line 273, Address: 0x2a9c30, Func Offset: 0x3c0
-	// Line 274, Address: 0x2a9c58, Func Offset: 0x3e8
-	// Line 276, Address: 0x2a9c80, Func Offset: 0x410
-	// Line 280, Address: 0x2a9c88, Func Offset: 0x418
-	// Line 276, Address: 0x2a9c8c, Func Offset: 0x41c
-	// Line 277, Address: 0x2a9cb0, Func Offset: 0x440
-	// Line 278, Address: 0x2a9cdc, Func Offset: 0x46c
-	// Line 280, Address: 0x2a9d04, Func Offset: 0x494
-	// Line 282, Address: 0x2a9d0c, Func Offset: 0x49c
-	// Line 283, Address: 0x2a9d20, Func Offset: 0x4b0
-	// Line 285, Address: 0x2a9d2c, Func Offset: 0x4bc
-	// Line 286, Address: 0x2a9d34, Func Offset: 0x4c4
-	// Line 287, Address: 0x2a9d3c, Func Offset: 0x4cc
-	// Line 288, Address: 0x2a9d44, Func Offset: 0x4d4
-	// Line 300, Address: 0x2a9d4c, Func Offset: 0x4dc
-	// Line 301, Address: 0x2a9d54, Func Offset: 0x4e4
-	// Line 302, Address: 0x2a9d6c, Func Offset: 0x4fc
-	// Line 303, Address: 0x2a9d84, Func Offset: 0x514
-	// Line 304, Address: 0x2a9da0, Func Offset: 0x530
-	// Line 305, Address: 0x2a9db8, Func Offset: 0x548
-	// Line 307, Address: 0x2a9dc0, Func Offset: 0x550
-	// Line 309, Address: 0x2a9dc8, Func Offset: 0x558
-	// Line 310, Address: 0x2a9dd0, Func Offset: 0x560
-	// Line 312, Address: 0x2a9ddc, Func Offset: 0x56c
-	// Line 313, Address: 0x2a9de8, Func Offset: 0x578
-	// Line 314, Address: 0x2a9df4, Func Offset: 0x584
-	// Line 316, Address: 0x2a9e00, Func Offset: 0x590
-	// Line 317, Address: 0x2a9e08, Func Offset: 0x598
-	// Line 318, Address: 0x2a9e1c, Func Offset: 0x5ac
-	// Line 319, Address: 0x2a9e2c, Func Offset: 0x5bc
-	// Line 320, Address: 0x2a9e48, Func Offset: 0x5d8
-	// Line 321, Address: 0x2a9e50, Func Offset: 0x5e0
-	// Line 323, Address: 0x2a9e68, Func Offset: 0x5f8
-	// Line 325, Address: 0x2a9e74, Func Offset: 0x604
-	// Line 326, Address: 0x2a9e84, Func Offset: 0x614
-	// Line 327, Address: 0x2a9e8c, Func Offset: 0x61c
-	// Line 328, Address: 0x2a9eac, Func Offset: 0x63c
-	// Line 329, Address: 0x2a9eb8, Func Offset: 0x648
-	// Line 330, Address: 0x2a9ec0, Func Offset: 0x650
-	// Line 331, Address: 0x2a9ed4, Func Offset: 0x664
-	// Line 332, Address: 0x2a9ee8, Func Offset: 0x678
-	// Line 333, Address: 0x2a9efc, Func Offset: 0x68c
-	// Line 334, Address: 0x2a9f14, Func Offset: 0x6a4
-	// Line 335, Address: 0x2a9f1c, Func Offset: 0x6ac
-	// Line 336, Address: 0x2a9f30, Func Offset: 0x6c0
-	// Line 337, Address: 0x2a9f3c, Func Offset: 0x6cc
-	// Line 343, Address: 0x2a9f48, Func Offset: 0x6d8
-	// Line 345, Address: 0x2a9f58, Func Offset: 0x6e8
-	// Line 347, Address: 0x2a9f68, Func Offset: 0x6f8
-	// Line 349, Address: 0x2a9f74, Func Offset: 0x704
-	// Line 350, Address: 0x2a9f7c, Func Offset: 0x70c
-	// Line 351, Address: 0x2a9fa0, Func Offset: 0x730
-	// Line 352, Address: 0x2a9fac, Func Offset: 0x73c
-	// Line 353, Address: 0x2a9fb4, Func Offset: 0x744
-	// Line 354, Address: 0x2a9fcc, Func Offset: 0x75c
-	// Line 355, Address: 0x2a9fe4, Func Offset: 0x774
-	// Line 356, Address: 0x2a9ffc, Func Offset: 0x78c
-	// Line 359, Address: 0x2aa018, Func Offset: 0x7a8
-	// Line 360, Address: 0x2aa020, Func Offset: 0x7b0
-	// Line 361, Address: 0x2aa034, Func Offset: 0x7c4
-	// Line 362, Address: 0x2aa044, Func Offset: 0x7d4
-	// Line 369, Address: 0x2aa050, Func Offset: 0x7e0
-	// Line 372, Address: 0x2aa064, Func Offset: 0x7f4
-	// Line 375, Address: 0x2aa078, Func Offset: 0x808
-	// Line 377, Address: 0x2aa084, Func Offset: 0x814
-	// Line 378, Address: 0x2aa08c, Func Offset: 0x81c
-	// Line 379, Address: 0x2aa0b0, Func Offset: 0x840
-	// Line 380, Address: 0x2aa0bc, Func Offset: 0x84c
-	// Line 381, Address: 0x2aa0c4, Func Offset: 0x854
-	// Line 382, Address: 0x2aa0e0, Func Offset: 0x870
-	// Line 383, Address: 0x2aa0fc, Func Offset: 0x88c
-	// Line 384, Address: 0x2aa118, Func Offset: 0x8a8
-	// Line 387, Address: 0x2aa138, Func Offset: 0x8c8
-	// Line 388, Address: 0x2aa140, Func Offset: 0x8d0
-	// Line 389, Address: 0x2aa154, Func Offset: 0x8e4
-	// Line 390, Address: 0x2aa164, Func Offset: 0x8f4
-	// Line 398, Address: 0x2aa170, Func Offset: 0x900
-	// Line 401, Address: 0x2aa188, Func Offset: 0x918
-	// Line 404, Address: 0x2aa1a0, Func Offset: 0x930
-	// Line 406, Address: 0x2aa1ac, Func Offset: 0x93c
-	// Line 409, Address: 0x2aa1b4, Func Offset: 0x944
-	// Line 423, Address: 0x2aa1d4, Func Offset: 0x964
-	// Line 425, Address: 0x2aa1dc, Func Offset: 0x96c
-	// Line 428, Address: 0x2aa204, Func Offset: 0x994
-	// Line 429, Address: 0x2aa22c, Func Offset: 0x9bc
-	// Line 430, Address: 0x2aa234, Func Offset: 0x9c4
-	// Line 431, Address: 0x2aa23c, Func Offset: 0x9cc
-	// Line 435, Address: 0x2aa244, Func Offset: 0x9d4
-	// Line 436, Address: 0x2aa250, Func Offset: 0x9e0
-	// Line 437, Address: 0x2aa258, Func Offset: 0x9e8
-	// Line 440, Address: 0x2aa260, Func Offset: 0x9f0
-	// Func End, Address: 0x2aa280, Func Offset: 0xa10
+	NJS_MATRIX testtest; 
+    STCAM_WRK* sc; 
+    FV_WORK* fv; 
+    DSP_WORK* dw_a; 
+    NJS_POINT3 pos00;
+    
+    sc = &st_cam;
+    fv = &fvwork;
+    
+    dw_a = &dsptbl[st->itemid];
+    
+    njPushMatrix(NULL);
+    njSetMatrix(NULL, &sc->rotmat);
+    njTransposeMatrix(NULL);
+    
+    switch (st->subcsr) 
+    {
+    case 0:
+    case 1:
+        st->subcsr = 2;
+        
+        njRotateX(NULL, (int)(182.04445f * -dw_a->ax) & 0xFFFF);
+        njRotateY(NULL, (int)(182.04445f * -dw_a->ay) & 0xFFFF);
+        njRotateZ(NULL, (int)(182.04445f * -dw_a->az) & 0xFFFF);
+        break;
+    case 2:
+        njRotateX(NULL, sc->cax);
+        njRotateY(NULL, sc->cay);
+        njRotateZ(NULL, sc->caz);
+        break;
+    case 3:
+        st->subcsr = 2;
+        
+        if (st->itemid == 105) 
+        {
+            njRotateX(NULL, 50245);
+            njRotateY(NULL, 51519);
+            njRotateZ(NULL, 1457);
+        }
+        else if (st->itemid == 30) 
+        {
+            njRotateX(NULL, 50245);
+            njRotateY(NULL, 57709);
+            njRotateZ(NULL, 42235);
+        } 
+        else 
+        {
+            njRotateX(NULL, 21846);
+            njRotateY(NULL, 0);
+            njRotateZ(NULL, 0);
+        }
+    }
+    
+    njTransposeMatrix(NULL);
+    njGetMatrix(&sc->rotmat);
+    njGetMatrix(&check);
+    njPopMatrix(1);
+    
+    ang_01[0] = ang_00[0] = (int)(10430.381f * atan2f(check[6], check[10])) & 0xFFFF;
+    ang_01[0] = ang_00[1] = (int)(10430.381f * asinf(-check[2])) & 0xFFFF;
+    ang_01[0] = ang_00[2] = (int)(10430.381f * atan2f(check[1], check[0])) & 0xFFFF;
+    
+    si->mw.ang[0] = ang_00[0];
+    si->mw.ang[1] = ang_00[1];
+    si->mw.ang[2] = ang_00[2];
+    
+    ang_00[0] = ((ang_00[0] * 360) >> 16) & 0xFFFF;
+    ang_00[1] = ((ang_00[1] * 360) >> 16) & 0xFFFF;
+    ang_00[2] = ((ang_00[2] * 360) >> 16) & 0xFFFF;
+    
+    ang_02[0] = (int)(10430.381f * acosf(vec_00.x));
+    ang_02[1] = (int)(10430.381f * acosf(vec_00.y));
+    ang_02[2] = (int)(10430.381f * acosf(vec_00.z));
+    
+    ang_02[0] = ((ang_02[0] * 360) >> 16) & 0xFFFF;
+    ang_02[1] = ((ang_02[1] * 360) >> 16) & 0xFFFF;
+    ang_02[2] = ((ang_02[2] * 360) >> 16) & 0xFFFF;
+    
+    njPushMatrix(NULL);
+    njTranslate(NULL, 0, 0, 0);
+    njMultiMatrix(NULL, &sc->rotmat);
+    njPushMatrix(NULL);
+    njGetMatrix(&testtest);
+    njUnitMatrix(NULL);
+    njPushMatrix(NULL);
+                  
+    njCnkSetEasyMultiLight(1);
+    njCnkSetEasyMultiLightPoint(1, 0, 0, 12.0f);
+    njCnkSetEasyMultiLightRange(1, 4.0f, 140.0f);
+    njCnkSetEasyMultiAmbient(0.4f, 0.4f, 0.4f);
+    njCnkSetEasyMultiLightColor(1, 30.0f, 30.0f, 30.0f);
+    
+    njClearMatrix();
+    
+    njCnkSetEasyMultiLightMatrices();
+    
+    njPopMatrix(1);
+    njSetMatrix(NULL, &testtest);
+
+    njRotateX(NULL, si->mw.ax1);
+    njRotateY(NULL, si->mw.ay1);
+    njRotateZ(NULL, si->mw.az1);
+
+    njPushMatrix(NULL);
+    njTranslate(NULL, si->mw.pos.x, si->mw.pos.y, si->mw.pos.z);
+    
+    if (si->mw.rdid == 139) 
+    {
+        njScale(NULL, 0.58f, 0.58f, 0.58f);
+    }
+    else 
+    {
+        njScale(NULL, testf, testf, testf);
+    }
+    
+    njSetTexture(si->mdl.texP);
+    
+    if (si->mw.rdid == 139) 
+    {
+        njPushMatrix(NULL);
+        
+        if ((!(fvwork.afsmode & 0x20)) || (fv->filecsr == 0))
+        {
+            njPushMatrix(NULL);
+            njUnitMatrix(NULL);
+            
+            njRotateX(NULL, si->mdl.objP->child->ang[0]);
+            njRotateY(NULL, si->mdl.objP->child->ang[1]);
+            njRotateZ(NULL, si->mdl.objP->child->ang[2]);
+            
+            njCalcPoint(NULL, (NJS_POINT3*)si->mdl.objP->child->pos, &pos00);
+            
+            njPopMatrix(1);
+            njTranslate(NULL, pos00.x, pos00.y, pos00.z);
+            
+            if (fv->filecsr == 0) 
+            {
+                njRotateY(NULL, fv->ang00);
+            }
+            
+            njCnkEasyMultiDrawModel(si->mdl.objP->child->model);
+            
+            MakeTag(si->mdl.objP->child, 0);
+        }
+        
+        njPopMatrix(1);
+        njPushMatrix(NULL);
+        
+        if ((!(fvwork.afsmode & 0x20)) || (fv->filecsr == 2))
+        {
+            njPushMatrix(NULL);
+            njUnitMatrix(NULL);
+            
+            njRotateX(NULL, si->mdl.objP->child->sibling->ang[0]);
+            njRotateY(NULL, si->mdl.objP->child->sibling->ang[1]);
+            njRotateZ(NULL, si->mdl.objP->child->sibling->ang[2]);
+            
+            njCalcPoint(0, (NJS_POINT3*)si->mdl.objP->child->sibling->pos, &pos00);
+            
+            njPopMatrix(1);
+            njTranslate(NULL, pos00.x, pos00.y, pos00.z);
+            
+            if (fv->filecsr == 2) 
+            {
+                njRotateY(NULL, fv->ang00);
+            }
+            
+            njCnkEasyMultiDrawModel(si->mdl.objP->child->sibling->model);
+            
+            MakeTag(si->mdl.objP->child->sibling, 2);
+        }
+        
+        njPopMatrix(1);
+        njPushMatrix(NULL);
+        
+        if ((!(fvwork.afsmode & 0x20)) || (fv->filecsr == 1))
+        {
+            njPushMatrix(NULL);
+            njUnitMatrix(NULL);
+            
+            njRotateX(NULL, si->mdl.objP->child->sibling->sibling->ang[0]);
+            njRotateY(NULL, si->mdl.objP->child->sibling->sibling->ang[1]);
+            njRotateZ(NULL, si->mdl.objP->child->sibling->sibling->ang[2]);
+            
+            njCalcPoint(NULL, (NJS_POINT3*)si->mdl.objP->child->sibling->sibling->pos, &pos00);
+            
+            njPopMatrix(1);
+            njTranslate(NULL, pos00.x, pos00.y, pos00.z);
+            
+            if (fv->filecsr == 1)
+            {
+                njRotateY(NULL, fv->ang00);
+            }
+            
+            njCnkEasyMultiDrawModel(si->mdl.objP->child->sibling->sibling->model);
+            
+            MakeTag(si->mdl.objP->child->sibling->sibling, 1);
+        }
+        
+        njPopMatrix(1);
+    } 
+    else 
+    {
+        ViewType = ItemViewTypeTbl[st->itemid];
+        
+        njCnkEasyMultiDrawObjectI(si->mdl.objP);
+        
+        if ((st->itemid == 33) || (st->itemid == 34) || (st->itemid == 142))
+        {
+            njTranslate(NULL, 0.1f, 1.0f, 0.2f);
+            njPushMatrix(NULL);
+            
+            njCnkEasyMultiDrawObjectI(si->mdl.objP);
+            
+            njPopMatrix(1);
+        }
+    }
+    
+    njPopMatrix(1);
+    njPopMatrix(1);
+    njPopMatrix(1);
 }
 
-// 
-// Start address: 0x2aa280
+// 100% matching!
 void Model_Read_Start()
 {
-	_anon5* si;
-	// Line 448, Address: 0x2aa280, Func Offset: 0
-	// Line 444, Address: 0x2aa288, Func Offset: 0x8
-	// Line 448, Address: 0x2aa28c, Func Offset: 0xc
-	// Line 450, Address: 0x2aa298, Func Offset: 0x18
-	// Line 453, Address: 0x2aa2a4, Func Offset: 0x24
-	// Line 450, Address: 0x2aa2a8, Func Offset: 0x28
-	// Line 451, Address: 0x2aa2b4, Func Offset: 0x34
-	// Line 452, Address: 0x2aa2cc, Func Offset: 0x4c
-	// Line 453, Address: 0x2aa2e0, Func Offset: 0x60
-	// Line 454, Address: 0x2aa2f8, Func Offset: 0x78
-	// Line 455, Address: 0x2aa304, Func Offset: 0x84
-	// Line 458, Address: 0x2aa310, Func Offset: 0x90
-	// Line 459, Address: 0x2aa32c, Func Offset: 0xac
-	// Line 460, Address: 0x2aa33c, Func Offset: 0xbc
-	// Line 461, Address: 0x2aa344, Func Offset: 0xc4
-	// Line 462, Address: 0x2aa35c, Func Offset: 0xdc
-	// Line 463, Address: 0x2aa374, Func Offset: 0xf4
-	// Line 464, Address: 0x2aa394, Func Offset: 0x114
-	// Line 467, Address: 0x2aa3a8, Func Offset: 0x128
-	// Func End, Address: 0x2aa3b0, Func Offset: 0x130
+	SITEM* si;
+
+    si = &sitem;
+    
+    if ((si->mw.flg & 0x1))
+    {
+        sys->sb_rdp = si->keep;
+        sys->sb_rdid = si->mw.rdid;
+        
+        sys->sb_ppp = NULL;
+        
+        *(int*)&sys->mn_mode0 = 6;
+        
+        si->mw.flg &= ~0x1;
+        
+        si->mw.flg |= 0x2;
+    }
+    
+    if ((sys->sb_ppp != NULL) && ((si->mw.flg & 0x2))) 
+    {
+        si->mw.flg &= ~0x2;
+        
+        si->mw.mdl_p = sys->sb_mlb;
+        si->mw.tex_p = sys->sb_ppp;
+        
+        si->keep += sys->sb_rdsz;
+        
+        swork.statusflg |= 0x400;
+    }
 }
 
-// 
-// Start address: 0x2aa3b0
-void Model_Read_Set(_anon2* st)
+// 100% matching!
+void Model_Read_Set(S_WORK* st)
 {
-	_anon6* dw;
-	_anon5* si;
-	// Line 471, Address: 0x2aa3b0, Func Offset: 0
-	// Line 472, Address: 0x2aa3c4, Func Offset: 0x14
-	// Line 478, Address: 0x2aa3cc, Func Offset: 0x1c
-	// Line 480, Address: 0x2aa3e0, Func Offset: 0x30
-	// Line 481, Address: 0x2aa3ec, Func Offset: 0x3c
-	// Line 482, Address: 0x2aa3fc, Func Offset: 0x4c
-	// Line 484, Address: 0x2aa40c, Func Offset: 0x5c
-	// Line 485, Address: 0x2aa418, Func Offset: 0x68
-	// Line 484, Address: 0x2aa41c, Func Offset: 0x6c
-	// Line 485, Address: 0x2aa428, Func Offset: 0x78
-	// Line 486, Address: 0x2aa438, Func Offset: 0x88
-	// Line 487, Address: 0x2aa440, Func Offset: 0x90
-	// Line 489, Address: 0x2aa444, Func Offset: 0x94
-	// Line 490, Address: 0x2aa454, Func Offset: 0xa4
-	// Line 494, Address: 0x2aa458, Func Offset: 0xa8
-	// Line 497, Address: 0x2aa460, Func Offset: 0xb0
-	// Line 494, Address: 0x2aa464, Func Offset: 0xb4
-	// Line 497, Address: 0x2aa46c, Func Offset: 0xbc
-	// Line 499, Address: 0x2aa474, Func Offset: 0xc4
-	// Line 501, Address: 0x2aa488, Func Offset: 0xd8
-	// Line 502, Address: 0x2aa4a8, Func Offset: 0xf8
-	// Line 505, Address: 0x2aa4c4, Func Offset: 0x114
-	// Line 509, Address: 0x2aa4ec, Func Offset: 0x13c
-	// Line 510, Address: 0x2aa520, Func Offset: 0x170
-	// Line 509, Address: 0x2aa52c, Func Offset: 0x17c
-	// Line 510, Address: 0x2aa530, Func Offset: 0x180
-	// Line 511, Address: 0x2aa534, Func Offset: 0x184
-	// Line 510, Address: 0x2aa540, Func Offset: 0x190
-	// Line 511, Address: 0x2aa544, Func Offset: 0x194
-	// Line 514, Address: 0x2aa54c, Func Offset: 0x19c
-	// Line 515, Address: 0x2aa550, Func Offset: 0x1a0
-	// Line 516, Address: 0x2aa554, Func Offset: 0x1a4
-	// Line 520, Address: 0x2aa558, Func Offset: 0x1a8
-	// Line 521, Address: 0x2aa568, Func Offset: 0x1b8
-	// Line 522, Address: 0x2aa580, Func Offset: 0x1d0
-	// Line 523, Address: 0x2aa58c, Func Offset: 0x1dc
-	// Line 524, Address: 0x2aa598, Func Offset: 0x1e8
-	// Line 525, Address: 0x2aa5a0, Func Offset: 0x1f0
-	// Line 523, Address: 0x2aa5a4, Func Offset: 0x1f4
-	// Line 524, Address: 0x2aa5b0, Func Offset: 0x200
-	// Line 525, Address: 0x2aa5c4, Func Offset: 0x214
-	// Line 527, Address: 0x2aa5d4, Func Offset: 0x224
-	// Line 528, Address: 0x2aa5dc, Func Offset: 0x22c
-	// Line 529, Address: 0x2aa600, Func Offset: 0x250
-	// Line 530, Address: 0x2aa60c, Func Offset: 0x25c
-	// Line 531, Address: 0x2aa61c, Func Offset: 0x26c
-	// Line 532, Address: 0x2aa620, Func Offset: 0x270
-	// Line 530, Address: 0x2aa624, Func Offset: 0x274
-	// Line 531, Address: 0x2aa630, Func Offset: 0x280
-	// Line 533, Address: 0x2aa638, Func Offset: 0x288
-	// Line 531, Address: 0x2aa640, Func Offset: 0x290
-	// Line 532, Address: 0x2aa64c, Func Offset: 0x29c
-	// Line 533, Address: 0x2aa660, Func Offset: 0x2b0
-	// Line 536, Address: 0x2aa674, Func Offset: 0x2c4
-	// Func End, Address: 0x2aa68c, Func Offset: 0x2dc
-}*/
+    SITEM* si;
+	DSP_WORK* dw;
+    unsigned char idx; // not from DWARF
+
+    si = &sitem;
+
+    if ((swork.statusflg & 0x400)) 
+    {
+        bhMlbBinRealize(si->mw.mdl_p, &si->mdl);
+        
+        bhSetMemPvpTexture(si->mdl.texP, si->mw.tex_p, 0);
+        
+        si->keep = bhKeepObjWork(&si->mdl, si->keep);
+        
+        swork.statusflg |= 0x200000;
+        
+        swork.statusflg &= ~0x400;
+        
+        CameraInit();
+        
+        st->subcsr = 0;
+        
+        if (si->mw.rdid == 139) 
+        {
+            st->itemid = 139;
+        }
+        
+        dw = &dsptbl[st->itemid];
+        
+        FlagErase(si->mdl.objP);
+        
+        if (dw->hide != 0) 
+        {
+            MdlEvalflagsSet(dw->hide);
+        }
+        
+        if (st->itemid == 55) 
+        {
+            LighterOpen(si->mdl.objP->child->child);
+        }
+        
+        if (st->itemid == 139) 
+        {
+            FileSyu(si->mdl.objP->child);
+        }
+        
+        testf = ModelScaleSet(si, itemflg[dw->hide][3]);
+        
+        idx = itemflg[dw->hide][2];
+        
+        si->mw.pos.x = hoseipos[idx].x;
+        si->mw.pos.y = hoseipos[idx].y;
+        si->mw.pos.z = hoseipos[idx].z;
+        
+        si->mw.ax1 = 0;
+        si->mw.ay1 = 0;
+        si->mw.az1 = 0;
+    }
+    
+    if ((st->subscreenmode & 0x8))
+    {
+        if ((swork.statusflg & 0x200000)) 
+        {
+            swork.statusflg |= 0x10;
+            
+            swork.statusflg &= ~0x80;
+            swork.statusflg &= ~0x200000;
+            
+            swork.statusflg |= 0x10000;
+        }
+    } 
+    else if (((swork.statusflg & 0x8000)) && ((swork.statusflg & 0x200000))) 
+    {
+        swork.statusflg |= 0x10;
+        
+        swork.statusflg &= ~0x200000;
+        
+        swork.statusflg |= 0x10000;
+        
+        swork.statusflg &= ~0x80;
+        swork.statusflg &= ~0x8000;
+    }
+}
 
 // 100% matching!
 void CameraInit()
@@ -311,78 +459,100 @@ void CameraSet()
     njGetMatrix(&st_cam.cmat1);
 }
 
-/*// 
-// Start address: 0x2aa7e0
+// 100% matching!
 void ItemView()
 {
-	_anon2* st;
-	// Line 576, Address: 0x2aa7e0, Func Offset: 0
-	// Line 585, Address: 0x2aa7e8, Func Offset: 0x8
-	// Line 577, Address: 0x2aa7ec, Func Offset: 0xc
-	// Line 585, Address: 0x2aa7f4, Func Offset: 0x14
-	// Line 586, Address: 0x2aa804, Func Offset: 0x24
-	// Line 588, Address: 0x2aa808, Func Offset: 0x28
-	// Line 590, Address: 0x2aa834, Func Offset: 0x54
-	// Line 591, Address: 0x2aa844, Func Offset: 0x64
-	// Line 592, Address: 0x2aa848, Func Offset: 0x68
-	// Line 593, Address: 0x2aa850, Func Offset: 0x70
-	// Line 595, Address: 0x2aa854, Func Offset: 0x74
-	// Line 597, Address: 0x2aa85c, Func Offset: 0x7c
-	// Line 598, Address: 0x2aa864, Func Offset: 0x84
-	// Line 600, Address: 0x2aa86c, Func Offset: 0x8c
-	// Line 601, Address: 0x2aa874, Func Offset: 0x94
-	// Line 605, Address: 0x2aa87c, Func Offset: 0x9c
-	// Line 606, Address: 0x2aa884, Func Offset: 0xa4
-	// Line 608, Address: 0x2aa88c, Func Offset: 0xac
-	// Line 609, Address: 0x2aa894, Func Offset: 0xb4
-	// Line 611, Address: 0x2aa89c, Func Offset: 0xbc
-	// Line 612, Address: 0x2aa8a4, Func Offset: 0xc4
-	// Line 614, Address: 0x2aa8ac, Func Offset: 0xcc
-	// Line 615, Address: 0x2aa8c4, Func Offset: 0xe4
-	// Line 616, Address: 0x2aa8c8, Func Offset: 0xe8
-	// Line 617, Address: 0x2aa8d0, Func Offset: 0xf0
-	// Line 618, Address: 0x2aa8d8, Func Offset: 0xf8
-	// Line 620, Address: 0x2aa8e0, Func Offset: 0x100
-	// Line 622, Address: 0x2aa8e8, Func Offset: 0x108
-	// Line 623, Address: 0x2aa8f0, Func Offset: 0x110
-	// Line 625, Address: 0x2aa8f8, Func Offset: 0x118
-	// Line 628, Address: 0x2aa900, Func Offset: 0x120
-	// Func End, Address: 0x2aa90c, Func Offset: 0x12c
+	S_WORK* st;
+
+    st = &swork;
+    
+    if (sitem.mw.rdid == 139)
+    {
+        st->itemid = 139;
+    }
+    
+    switch (st->testmode)
+    {
+    case 0:
+        if (st->itemid == 139)
+        {
+            st->testmode = 8;
+        }
+        else 
+        {
+            st->testmode = 2;
+        }
+        
+        break;
+    case 1:
+        ItemModelChangeZoomIn();
+        break;
+    case 2:
+        ItemModelCheck();
+        break;
+    case 4:
+        ItemModelActionSet();
+        break;
+    case 5:
+        ItemModelChangeZoomOut();
+        break;
+    case 6:
+        ItemModelMessageWait();
+        break;
+    case 7:
+        if (!(sys->st_flg & 0x200))
+        {
+            st->subscreenmode = 0x80;
+            
+            FileFlagInit();
+            
+            StatusToFileView();
+            
+            GetFile();
+        }
+        
+        break;
+    case 8:
+        SelectFile();
+        break;
+    case 9:
+        SelectTag();
+        break;
+    }
 }
 
-// 
-// Start address: 0x2aa910
+// 100% matching!
 void ItemModelChangeZoomIn()
 {
-	_anon1* sc;
-	_anon2* st;
-	// Line 630, Address: 0x2aa910, Func Offset: 0
-	// Line 638, Address: 0x2aa91c, Func Offset: 0xc
-	// Line 631, Address: 0x2aa924, Func Offset: 0x14
-	// Line 633, Address: 0x2aa92c, Func Offset: 0x1c
-	// Line 639, Address: 0x2aa934, Func Offset: 0x24
-	// Line 638, Address: 0x2aa93c, Func Offset: 0x2c
-	// Line 640, Address: 0x2aa950, Func Offset: 0x40
-	// Line 639, Address: 0x2aa958, Func Offset: 0x48
-	// Line 638, Address: 0x2aa964, Func Offset: 0x54
-	// Line 640, Address: 0x2aa96c, Func Offset: 0x5c
-	// Line 642, Address: 0x2aa970, Func Offset: 0x60
-	// Line 640, Address: 0x2aa978, Func Offset: 0x68
-	// Line 641, Address: 0x2aa980, Func Offset: 0x70
-	// Line 642, Address: 0x2aa990, Func Offset: 0x80
-	// Line 643, Address: 0x2aa998, Func Offset: 0x88
-	// Line 645, Address: 0x2aa99c, Func Offset: 0x8c
-	// Line 644, Address: 0x2aa9a0, Func Offset: 0x90
-	// Line 645, Address: 0x2aa9a4, Func Offset: 0x94
-	// Line 647, Address: 0x2aa9a8, Func Offset: 0x98
-	// Line 649, Address: 0x2aa9b8, Func Offset: 0xa8
-	// Line 647, Address: 0x2aa9bc, Func Offset: 0xac
-	// Line 649, Address: 0x2aa9d8, Func Offset: 0xc8
-	// Line 647, Address: 0x2aa9dc, Func Offset: 0xcc
-	// Line 649, Address: 0x2aa9e4, Func Offset: 0xd4
-	// Line 652, Address: 0x2aa9fc, Func Offset: 0xec
-	// Line 654, Address: 0x2aaa14, Func Offset: 0x104
-	// Func End, Address: 0x2aaa24, Func Offset: 0x114
+    S_WORK* st;
+	STCAM_WRK* sc;
+
+    st = &swork;
+    sc = &st_cam;
+
+    sc->pos_0.z += 3.2f;
+    
+    st->actioncount--;
+    
+    sitem.mw.ay1 += 4095;
+    sitem.mw.az1 += 2047;
+    
+    if (st->actioncount == 0) 
+    {
+        sc->cay = 0;
+        sc->caz = 0;
+        
+        st->testmode = 2;
+        
+        *wp_ = (st->ips1 << 16) | itemdata[st->ips1].max;
+        
+        bhSetMessage(1, getmestbl[st->mesid]);
+            
+        if (st->ips1 == 85)
+        {
+            st->testmode = 7;
+        }
+    }
 }
 
 // 
@@ -397,10 +567,10 @@ void ItemModelCheck()
 	unsigned int* wp;
 	int c01;
 	int c00;
-	_anon6* dw;
-	_anon1* sc;
-	_anon5* si;
-	_anon2* st;
+	DSP_WORK* dw;
+	STCAM_WRK* sc;
+	SITEM* si;
+	S_WORK* st;
 	short at_ang;
 	// Line 656, Address: 0x2aaa30, Func Offset: 0
 	// Line 660, Address: 0x2aaa5c, Func Offset: 0x2c
@@ -537,27 +707,27 @@ void ItemModelCheck()
 	// Line 886, Address: 0x2ab0b0, Func Offset: 0x680
 	// Line 888, Address: 0x2ab0b4, Func Offset: 0x684
 	// Func End, Address: 0x2ab0e4, Func Offset: 0x6b4
+	scePrintf("ItemModelCheck - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x2ab0f0
-void ItemModelActionSet()
+// 100% matching!
+void ItemModelActionSet() 
 {
-	_anon6* dw;
-	_anon2* st;
-	// Line 891, Address: 0x2ab0f0, Func Offset: 0
-	// Line 895, Address: 0x2ab0fc, Func Offset: 0xc
-	// Line 892, Address: 0x2ab104, Func Offset: 0x14
-	// Line 895, Address: 0x2ab10c, Func Offset: 0x1c
-	// Line 897, Address: 0x2ab114, Func Offset: 0x24
-	// Line 895, Address: 0x2ab120, Func Offset: 0x30
-	// Line 899, Address: 0x2ab128, Func Offset: 0x38
-	// Line 897, Address: 0x2ab12c, Func Offset: 0x3c
-	// Line 899, Address: 0x2ab138, Func Offset: 0x48
-	// Line 900, Address: 0x2ab178, Func Offset: 0x88
-	// Line 901, Address: 0x2ab180, Func Offset: 0x90
-	// Line 903, Address: 0x2ab188, Func Offset: 0x98
-	// Func End, Address: 0x2ab198, Func Offset: 0xa8
+    S_WORK* st;
+    DSP_WORK* dw;
+
+    st = &swork;
+    
+    dw = (DSP_WORK*)&dsptbl[st->itemid];
+	
+    swork.statusflg |= 0x20000000;
+    
+    if ((actionprg - 1)[itemflg[dw->hide][1]](&sitem))
+    {
+        st->testmode = 5;
+        
+        st->actioncount = 32;
+    }
 }
 
 // 
@@ -565,10 +735,10 @@ void ItemModelActionSet()
 void ItemModelChangeZoomOut()
 {
 	int chkang;
-	_anon6* dw;
-	_anon5* si;
-	_anon1* sc;
-	_anon2* st;
+	DSP_WORK* dw;
+	SITEM* si;
+	STCAM_WRK* sc;
+	S_WORK* st;
 	// Line 906, Address: 0x2ab1a0, Func Offset: 0
 	// Line 915, Address: 0x2ab1b8, Func Offset: 0x18
 	// Line 907, Address: 0x2ab1c0, Func Offset: 0x20
@@ -631,14 +801,15 @@ void ItemModelChangeZoomOut()
 	// Line 960, Address: 0x2ab41c, Func Offset: 0x27c
 	// Line 962, Address: 0x2ab428, Func Offset: 0x288
 	// Func End, Address: 0x2ab444, Func Offset: 0x2a4
+	scePrintf("ItemModelChangeZoomOut - UNIMPLEMENTED!\n");
 }
 
 // 
 // Start address: 0x2ab450
 void ItemModelMessageWait()
 {
-	_anon6* dw;
-	_anon2* st;
+	DSP_WORK* dw;
+	S_WORK* st;
 	// Line 966, Address: 0x2ab450, Func Offset: 0
 	// Line 965, Address: 0x2ab45c, Func Offset: 0xc
 	// Line 966, Address: 0x2ab460, Func Offset: 0x10
@@ -666,137 +837,210 @@ void ItemModelMessageWait()
 	// Line 983, Address: 0x2ab538, Func Offset: 0xe8
 	// Line 987, Address: 0x2ab540, Func Offset: 0xf0
 	// Func End, Address: 0x2ab548, Func Offset: 0xf8
+	scePrintf("ItemModelMessageWait - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x2ab550
-unsigned char MdlDirChk(short* dirang, short mdlang)
+// 100% matching!
+unsigned char MdlDirChk(short* dirang, short mdlang) 
+{ 
+    int ang; // not from DWARF
+    
+    if (dirang[0] != 0) 
+    {
+        mdlang = (mdlang + dirang[0]) & 0xFFFF;
+        ang = mdlang - dirang[1];
+        
+        if ((ang & 0xFFFF) > ((short)dirang[0] * 2)) 
+        {
+            return 0;
+        }
+        
+        return 1;
+    }
+
+    return 1;
+} 
+
+// 100% matching!
+unsigned char MdlAction00(SITEM* si)
 {
-	// Line 994, Address: 0x2ab550, Func Offset: 0
-	// Line 999, Address: 0x2ab55c, Func Offset: 0xc
-	// Line 997, Address: 0x2ab560, Func Offset: 0x10
-	// Line 999, Address: 0x2ab570, Func Offset: 0x20
-	// Line 1005, Address: 0x2ab590, Func Offset: 0x40
-	// Func End, Address: 0x2ab598, Func Offset: 0x48
+    switch (swork.maincsr) 
+    {                
+    case 0:
+        swork.maincsr = 2;
+        break;
+    case 1:
+        break;
+    case 2:
+        si->mdl.objP->child->child->child->ang[0] += 1456;
+        si->mdl.objP->child->ang[0] -= 728;
+        
+        if (si->mdl.objP->child->child->child->ang[0] >= 32768) 
+        {
+            swork.maincsr = 3;
+        }
+        
+        if (si->mw.pos.y > -0.76f) 
+        {
+            si->mw.pos.y -= 0.05f;
+            
+            if (si->mw.pos.y < -0.76f) 
+            {
+                si->mw.pos.y = -0.76f;
+            }
+        }
+        
+        break;
+    case 3:
+        return 1;
+    }
+
+    return 0;
 }
 
-// 
-// Start address: 0x2ab5a0
-unsigned char MdlAction00(_anon5* si)
+// 100% matching!
+unsigned char MdlAction01(SITEM* si) 
 {
-	// Line 1009, Address: 0x2ab5a0, Func Offset: 0
-	// Line 1011, Address: 0x2ab5dc, Func Offset: 0x3c
-	// Line 1013, Address: 0x2ab5e0, Func Offset: 0x40
-	// Line 1015, Address: 0x2ab5e8, Func Offset: 0x48
-	// Line 1017, Address: 0x2ab5ec, Func Offset: 0x4c
-	// Line 1015, Address: 0x2ab5f0, Func Offset: 0x50
-	// Line 1016, Address: 0x2ab608, Func Offset: 0x68
-	// Line 1017, Address: 0x2ab61c, Func Offset: 0x7c
-	// Line 1018, Address: 0x2ab63c, Func Offset: 0x9c
-	// Line 1020, Address: 0x2ab644, Func Offset: 0xa4
-	// Line 1021, Address: 0x2ab668, Func Offset: 0xc8
-	// Line 1022, Address: 0x2ab67c, Func Offset: 0xdc
-	// Line 1026, Address: 0x2ab68c, Func Offset: 0xec
-	// Line 1028, Address: 0x2ab694, Func Offset: 0xf4
-	// Line 1030, Address: 0x2ab6a0, Func Offset: 0x100
-	// Line 1032, Address: 0x2ab6a4, Func Offset: 0x104
-	// Func End, Address: 0x2ab6ac, Func Offset: 0x10c
+    switch (swork.maincsr) 
+    {                        
+    case 0:                                         
+        swork.maincsr = 1;
+    case 1:                                         
+        if (swork.itemid == 128)
+        {                                  
+            si->mdl.objP->child->child->child->child->child->ang[0] += 1456;
+            si->mdl.objP->child->ang[0] -= 728;
+            
+            if (si->mdl.objP->child->child->child->child->child->ang[0] >= 32768) 
+            {
+                swork.maincsr = 2;
+            }
+        }
+        else if (swork.itemid == 63)
+        {  
+            si->mdl.objP->child->child->child->child->ang[0] += 1456;
+            si->mdl.objP->child->ang[0] -= 728;
+            
+            if (si->mdl.objP->child->child->child->child->ang[0] >= 32768) 
+            {
+                swork.maincsr = 2;
+            }
+        }
+        else if (swork.itemid == 129) 
+        {  
+            si->mdl.objP->child->child->child->ang[0] += 1456;
+            si->mdl.objP->child->ang[0] -= 728;
+            
+            if (si->mdl.objP->child->child->child->ang[0] >= 32768) 
+            {
+                swork.maincsr = 2;
+            }
+        }
+        else
+        {                                    
+            si->mdl.objP->child->child->child->ang[0] += 1456;
+            si->mdl.objP->child->ang[0] -= 728;
+            
+            if (si->mdl.objP->child->child->child->ang[0] >= 32768) 
+            {
+                swork.maincsr = 2;
+            }
+        }
+        
+        if (si->mw.pos.y > -0.76f) 
+        {
+            si->mw.pos.y -= 0.05f;
+            
+            if (si->mw.pos.y < -0.76f) 
+            {
+                si->mw.pos.y = -0.76f;
+            }
+        }
+
+        break;
+    case 2:                                         
+        return 1;
+    }
+
+    return 0;
 }
 
-// 
-// Start address: 0x2ab6b0
-unsigned char MdlAction01(_anon5* si)
+// 100% matching!
+unsigned char MdlAction02(SITEM* si)
 {
-	// Line 1036, Address: 0x2ab6b0, Func Offset: 0
-	// Line 1038, Address: 0x2ab6e0, Func Offset: 0x30
-	// Line 1040, Address: 0x2ab6e8, Func Offset: 0x38
-	// Line 1041, Address: 0x2ab6fc, Func Offset: 0x4c
-	// Line 1043, Address: 0x2ab700, Func Offset: 0x50
-	// Line 1041, Address: 0x2ab704, Func Offset: 0x54
-	// Line 1042, Address: 0x2ab724, Func Offset: 0x74
-	// Line 1043, Address: 0x2ab738, Func Offset: 0x88
-	// Line 1044, Address: 0x2ab760, Func Offset: 0xb0
-	// Line 1046, Address: 0x2ab768, Func Offset: 0xb8
-	// Line 1047, Address: 0x2ab77c, Func Offset: 0xcc
-	// Line 1049, Address: 0x2ab780, Func Offset: 0xd0
-	// Line 1047, Address: 0x2ab784, Func Offset: 0xd4
-	// Line 1048, Address: 0x2ab7a0, Func Offset: 0xf0
-	// Line 1049, Address: 0x2ab7b4, Func Offset: 0x104
-	// Line 1050, Address: 0x2ab7d8, Func Offset: 0x128
-	// Line 1052, Address: 0x2ab7e0, Func Offset: 0x130
-	// Line 1053, Address: 0x2ab7f4, Func Offset: 0x144
-	// Line 1055, Address: 0x2ab7f8, Func Offset: 0x148
-	// Line 1053, Address: 0x2ab7fc, Func Offset: 0x14c
-	// Line 1054, Address: 0x2ab814, Func Offset: 0x164
-	// Line 1055, Address: 0x2ab828, Func Offset: 0x178
-	// Line 1056, Address: 0x2ab848, Func Offset: 0x198
-	// Line 1058, Address: 0x2ab850, Func Offset: 0x1a0
-	// Line 1059, Address: 0x2ab858, Func Offset: 0x1a8
-	// Line 1061, Address: 0x2ab85c, Func Offset: 0x1ac
-	// Line 1059, Address: 0x2ab860, Func Offset: 0x1b0
-	// Line 1060, Address: 0x2ab878, Func Offset: 0x1c8
-	// Line 1061, Address: 0x2ab88c, Func Offset: 0x1dc
-	// Line 1062, Address: 0x2ab8ac, Func Offset: 0x1fc
-	// Line 1065, Address: 0x2ab8b8, Func Offset: 0x208
-	// Line 1066, Address: 0x2ab8dc, Func Offset: 0x22c
-	// Line 1067, Address: 0x2ab8f0, Func Offset: 0x240
-	// Line 1072, Address: 0x2ab900, Func Offset: 0x250
-	// Line 1074, Address: 0x2ab908, Func Offset: 0x258
-	// Line 1076, Address: 0x2ab914, Func Offset: 0x264
-	// Line 1077, Address: 0x2ab918, Func Offset: 0x268
-	// Func End, Address: 0x2ab920, Func Offset: 0x270
+    switch (swork.maincsr) 
+    {                   
+    case 0:
+        swork.maincsr = 1;
+    case 1:
+        si->mdl.objP->child->child->child->ang[2] += 1456;
+        si->mdl.objP->child->ang[2] -= 728;
+        
+        if (si->mdl.objP->child->child->child->ang[2] >= 32768) 
+        {
+            swork.maincsr = 2;
+        }
+        
+        if (si->mw.pos.y > -0.76f) 
+        {
+            si->mw.pos.y -= 0.05f;
+            
+            if (si->mw.pos.y < -0.76f) 
+            {
+                si->mw.pos.y = -0.76f;
+            }
+        }
+        
+        break;
+    case 2:
+        return 1;
+    }
+
+    return 0;
 }
 
-// 
-// Start address: 0x2ab920
-unsigned char MdlAction02(_anon5* si)
-{
-	// Line 1081, Address: 0x2ab920, Func Offset: 0
-	// Line 1083, Address: 0x2ab950, Func Offset: 0x30
-	// Line 1085, Address: 0x2ab958, Func Offset: 0x38
-	// Line 1087, Address: 0x2ab95c, Func Offset: 0x3c
-	// Line 1085, Address: 0x2ab960, Func Offset: 0x40
-	// Line 1086, Address: 0x2ab978, Func Offset: 0x58
-	// Line 1087, Address: 0x2ab98c, Func Offset: 0x6c
-	// Line 1088, Address: 0x2ab9ac, Func Offset: 0x8c
-	// Line 1090, Address: 0x2ab9b8, Func Offset: 0x98
-	// Line 1091, Address: 0x2ab9dc, Func Offset: 0xbc
-	// Line 1092, Address: 0x2ab9f0, Func Offset: 0xd0
-	// Line 1096, Address: 0x2aba00, Func Offset: 0xe0
-	// Line 1098, Address: 0x2aba08, Func Offset: 0xe8
-	// Line 1100, Address: 0x2aba14, Func Offset: 0xf4
-	// Line 1101, Address: 0x2aba18, Func Offset: 0xf8
-	// Func End, Address: 0x2aba20, Func Offset: 0x100
-}
-
-// 
-// Start address: 0x2aba20
+// 100% matching!
 void MdlEvalflagsSet(unsigned short evalchk)
 {
-	// Line 1108, Address: 0x2aba20, Func Offset: 0
-	// Func End, Address: 0x2aba48, Func Offset: 0x28
+	MdlHideCheck(sitem.mdl.objP, itemflg[(unsigned short)evalchk][0], 1);
 }
 
-// 
-// Start address: 0x2aba50
-void MdlHideCheck(npobj* op, unsigned char el, unsigned char chk)
+// 100% matching!
+void MdlHideCheck(NJS_CNK_OBJECT* op, unsigned char el, unsigned char chk)
 {
-	// Line 1112, Address: 0x2aba50, Func Offset: 0
-	// Line 1113, Address: 0x2aba68, Func Offset: 0x18
-	// Line 1114, Address: 0x2aba80, Func Offset: 0x30
-	// Line 1116, Address: 0x2aba84, Func Offset: 0x34
-	// Line 1117, Address: 0x2aba90, Func Offset: 0x40
-	// Line 1114, Address: 0x2aba98, Func Offset: 0x48
-	// Line 1119, Address: 0x2aba9c, Func Offset: 0x4c
-	// Line 1120, Address: 0x2ababc, Func Offset: 0x6c
-	// Line 1121, Address: 0x2abadc, Func Offset: 0x8c
-	// Line 1123, Address: 0x2abaec, Func Offset: 0x9c
-	// Line 1122, Address: 0x2abaf0, Func Offset: 0xa0
-	// Line 1123, Address: 0x2abaf4, Func Offset: 0xa4
-	// Line 1124, Address: 0x2abb04, Func Offset: 0xb4
-	// Line 1127, Address: 0x2abb1c, Func Offset: 0xcc
-	// Func End, Address: 0x2abb34, Func Offset: 0xe4
-}*/
+    if (el & chk) 
+    {
+        op->evalflags |= 0x8;
+        
+        el &= ~chk;
+        
+        chk *= 2;
+        
+        if ((el != 0) && (op->child != NULL)) 
+        {
+            MdlHideCheck(op->child, el, chk);
+        } 
+        
+        if ((el != 0) && (op->sibling != NULL))
+        {
+            MdlHideCheck(op->sibling, el, chk);
+        }
+    }
+    else if (el) 
+    {
+        chk *= 2;
+        
+        if (op->child != NULL)
+        { 
+            MdlHideCheck(op->child, el, chk);
+        }
+        
+        if (op->sibling != NULL) 
+        {
+            MdlHideCheck(op->sibling, el, chk);
+        }
+    }
+}
 
 // 100% matching!
 float ModelScaleSet(SITEM* itemmodel, int flg)
@@ -858,19 +1102,19 @@ void FileSyu(NJS_CNK_OBJECT* op)
     op->sibling->sibling->ang[1] = 32768;
 }
 
-/*// 
+// 
 // Start address: 0x2abd20
-void MakeTag(unsigned short flg)
+void MakeTag(NJS_CNK_OBJECT* param, unsigned short flg) // first parameter is not present on DWARF
 {
 	float zpos;
 	float ypos;
 	int tagcol;
 	int i;
-	_anon38 p3c;
-	_anon18 col[4];
-	_anon32 p[4];
-	_anon33* fv;
-	_anon2* st;
+	//_anon38 p3c;
+	//_anon18 col[4];
+	NJS_POINT3 p[4];
+	FV_WORK* fv;
+	S_WORK* st;
 	// Line 1254, Address: 0x2abd20, Func Offset: 0
 	// Line 1256, Address: 0x2abd3c, Func Offset: 0x1c
 	// Line 1258, Address: 0x2abd44, Func Offset: 0x24
@@ -949,4 +1193,5 @@ void MakeTag(unsigned short flg)
 	// Line 1346, Address: 0x2abf88, Func Offset: 0x268
 	// Line 1348, Address: 0x2abf94, Func Offset: 0x274
 	// Func End, Address: 0x2abfbc, Func Offset: 0x29c
-}*/
+	scePrintf("MakeTag - UNIMPLEMENTED!\n");
+}

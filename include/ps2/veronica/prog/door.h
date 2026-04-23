@@ -9,6 +9,246 @@ typedef struct _proc_wrk
     void (*procP)(void*); // offset 0x0, size 0x4
 } _proc_wrk;
 
+typedef struct FADEPROC_WORK 
+{
+    // total size: 0x34
+    int wait0;           // offset 0x0, size 0x4
+    unsigned int color0; // offset 0x4, size 0x4
+    float rate0;         // offset 0x8, size 0x4
+    float speed0;        // offset 0xC, size 0x4
+    float goal0;         // offset 0x10, size 0x4
+    int cmp0;            // offset 0x14, size 0x4
+    int wait1;           // offset 0x18, size 0x4
+    unsigned int color1; // offset 0x1C, size 0x4
+    float rate1;         // offset 0x20, size 0x4
+    float speed1;        // offset 0x24, size 0x4
+    float goal1;         // offset 0x28, size 0x4
+    int cmp1;            // offset 0x2C, size 0x4
+    int wait2;           // offset 0x30, size 0x4
+} FADEPROC_WORK;
+
+typedef struct VIEWPROC_WORK 
+{
+    // total size: 0x50
+    int wait_push;       // offset 0x0, size 0x4
+    NJS_POINT3 pos_push; // offset 0x4, size 0xC
+    int wait_pull;       // offset 0x10, size 0x4
+    NJS_POINT3 pos_pull; // offset 0x14, size 0xC
+    int ang[3];          // offset 0x20, size 0xC
+    int vew0_yaw;        // offset 0x2C, size 0x4
+    int vew0_pitch;      // offset 0x30, size 0x4
+    float vew0_speed;    // offset 0x34, size 0x4
+    float vew0_accel;    // offset 0x38, size 0x4
+    float vew0_goal_pz;  // offset 0x3C, size 0x4
+    int vew0_cmp;        // offset 0x40, size 0x4
+    int vew0_goal_dy;    // offset 0x44, size 0x4
+    int vew0_speed_dy;   // offset 0x48, size 0x4
+    int vew0_cmp_dy;     // offset 0x4C, size 0x4
+} VIEWPROC_WORK;
+
+typedef struct VIEWPROC2_WORK
+{
+    // total size: 0x5C
+    NJS_POINT3 pos_low;  // offset 0x0, size 0xC
+    NJS_POINT3 tgt_low;  // offset 0xC, size 0xC
+    int roll_low;        // offset 0x18, size 0x4
+    int yaw_low;         // offset 0x1C, size 0x4
+    int pitch_low;       // offset 0x20, size 0x4
+    float speed_low;     // offset 0x24, size 0x4
+    float accel_low;     // offset 0x28, size 0x4
+    NJS_POINT3 pos_high; // offset 0x2C, size 0xC
+    NJS_POINT3 tgt_high; // offset 0x38, size 0xC
+    int roll_high;       // offset 0x44, size 0x4
+    int yaw_high;        // offset 0x48, size 0x4
+    int pitxh_high;      // offset 0x4C, size 0x4
+    float speed_high;    // offset 0x50, size 0x4
+    float accel_high;    // offset 0x54, size 0x4
+    int wait;            // offset 0x58, size 0x4
+} VIEWPROC2_WORK;
+
+typedef struct VIEWPROC4_WORK 
+{
+    // total size: 0x38
+    NJS_POINT3 pos_low;  // offset 0x0, size 0xC
+    int ang_low[3];      // offset 0xC, size 0xC
+    NJS_POINT3 pos_high; // offset 0x18, size 0xC
+    int ang_high[3];     // offset 0x24, size 0xC
+    int wait;            // offset 0x30, size 0x4
+    int chg_vew;         // offset 0x34, size 0x4
+} VIEWPROC4_WORK;
+
+typedef struct VIEWPROC5_WORK 
+{
+    // total size: 0x5C
+    NJS_POINT3 pos_low;  // offset 0x0, size 0xC
+    int ang_low[3];      // offset 0xC, size 0xC
+    NJS_POINT3 pos_high; // offset 0x18, size 0xC
+    int ang_high[3];     // offset 0x24, size 0xC
+    int wait0;           // offset 0x30, size 0x4
+    float fde_rte0;      // offset 0x34, size 0x4
+    float fde_spd0;      // offset 0x38, size 0x4
+    float fde_gol0;      // offset 0x3C, size 0x4
+    int fde_cmp0;        // offset 0x40, size 0x4
+    int wait1;           // offset 0x44, size 0x4
+    float fde_rte1;      // offset 0x48, size 0x4
+    float fde_spd1;      // offset 0x4C, size 0x4
+    float fde_gol1;      // offset 0x50, size 0x4
+    int fde_cmp1;        // offset 0x54, size 0x4
+    int chg_vew;         // offset 0x58, size 0x4
+} VIEWPROC5_WORK;
+
+typedef struct VIEWPROC6_WORK 
+{
+    // total size: 0x58
+    NJS_POINT3 dst_pos_low;  // offset 0x0, size 0xC
+    int dst_ang_low[3];      // offset 0xC, size 0xC
+    NJS_POINT3 dst_pos_high; // offset 0x18, size 0xC
+    int dst_ang_high[3];     // offset 0x24, size 0xC
+    int wait_pos;            // offset 0x30, size 0x4
+    int wait_ang;            // offset 0x34, size 0x4
+    NJS_POINT3 pos_rte;      // offset 0x38, size 0xC
+    NJS_POINT3 ang_rte;      // offset 0x44, size 0xC
+    int total_time;          // offset 0x50, size 0x4
+    int chg_vew;             // offset 0x54, size 0x4
+} VIEWPROC6_WORK;
+
+typedef struct VIEWPROC7_WORK
+{
+    // total size: 0x50
+    int wait_push;       // offset 0x0, size 0x4
+    NJS_POINT3 pos_push; // offset 0x4, size 0xC
+    int wait_pull;       // offset 0x10, size 0x4
+    NJS_POINT3 pos_pull; // offset 0x14, size 0xC
+    int ang[3];          // offset 0x20, size 0xC
+    int vew0_yaw;        // offset 0x2C, size 0x4
+    int vew0_pitch;      // offset 0x30, size 0x4
+    float vew0_speed;    // offset 0x34, size 0x4
+    float vew0_accel;    // offset 0x38, size 0x4
+    float vew0_goal_pz;  // offset 0x3C, size 0x4
+    int vew0_cmp;        // offset 0x40, size 0x4
+    int vew0_goal_dy;    // offset 0x44, size 0x4
+    int vew0_speed_dy;   // offset 0x48, size 0x4
+    int vew0_cmp_dy;     // offset 0x4C, size 0x4
+} VIEWPROC7_WORK;
+
+typedef struct DOORPROC1_WORK 
+{
+    // total size: 0x50
+    int nob_first;       // offset 0x0, size 0x4
+    int nob_speed;       // offset 0x4, size 0x4
+    int nob_accel;       // offset 0x8, size 0x4
+    int nob_goal;        // offset 0xC, size 0x4
+    int nob_cmp;         // offset 0x10, size 0x4
+    int dor0_wait;       // offset 0x14, size 0x4
+    int dor0_first;      // offset 0x18, size 0x4
+    int dor0_speed;      // offset 0x1C, size 0x4
+    int dor0_accel;      // offset 0x20, size 0x4
+    int dor0_goal_speed; // offset 0x24, size 0x4
+    int dor0_cmp;        // offset 0x28, size 0x4
+    int dor1_wait;       // offset 0x2C, size 0x4
+    int dor1_speed;      // offset 0x30, size 0x4
+    int dor1_accel;      // offset 0x34, size 0x4
+    int dor1_goal_angle; // offset 0x38, size 0x4
+    int dor1_cmp;        // offset 0x3C, size 0x4
+    int dor1_decel;      // offset 0x40, size 0x4
+    int wait;            // offset 0x44, size 0x4
+    int snd_wait;        // offset 0x48, size 0x4
+    int snd_wait1;       // offset 0x4C, size 0x4
+} DOORPROC1_WORK;
+
+typedef struct DOORPROC2_WORK 
+{
+    // total size: 0x1C
+    int wait;     // offset 0x0, size 0x4
+    int snd_wait; // offset 0x4, size 0x4
+    int yaw;      // offset 0x8, size 0x4
+    int pitch;    // offset 0xC, size 0x4
+    float speed;  // offset 0x10, size 0x4
+    float decel;  // offset 0x14, size 0x4
+    float goal;   // offset 0x18, size 0x4
+} DOORPROC2_WORK;
+
+typedef struct DOORPROC3_WORK 
+{
+    // total size: 0x40
+    int nob_wait;     // offset 0x0, size 0x4
+    int nob_first;    // offset 0x4, size 0x4
+    int nob_speed;    // offset 0x8, size 0x4
+    int nob_accel;    // offset 0xC, size 0x4
+    int nob_goal;     // offset 0x10, size 0x4
+    int nob_cmp;      // offset 0x14, size 0x4
+    int dor0_wait;    // offset 0x18, size 0x4
+    int dor0_yaw;     // offset 0x1C, size 0x4
+    int dor0_pitch;   // offset 0x20, size 0x4
+    float dor0_speed; // offset 0x24, size 0x4
+    float dor0_accel; // offset 0x28, size 0x4
+    int dor0_cmp;     // offset 0x2C, size 0x4
+    float dor0_goal;  // offset 0x30, size 0x4
+    int wait;         // offset 0x34, size 0x4
+    int snd_wait;     // offset 0x38, size 0x4
+    int type;         // offset 0x3C, size 0x4
+} DOORPROC3_WORK;
+
+typedef struct DOORPROC4_WORK
+{
+    // total size: 0x30
+    float pos_y_low;  // offset 0x0, size 0x4
+    int yaw_low;      // offset 0x4, size 0x4
+    int pitch_low;    // offset 0x8, size 0x4
+    float pos_y_high; // offset 0xC, size 0x4
+    int yaw_high;     // offset 0x10, size 0x4
+    int pitch_high;   // offset 0x14, size 0x4
+    int wait;         // offset 0x18, size 0x4
+    int snd_wait;     // offset 0x1C, size 0x4
+    float speed;      // offset 0x20, size 0x4
+    float accel;      // offset 0x24, size 0x4
+    float goal;       // offset 0x28, size 0x4
+    int cmp;          // offset 0x2C, size 0x4
+} DOORPROC4_WORK;
+
+typedef struct DOORPROC5_WORK 
+{
+    // total size: 0x34
+    int dor0_wait;       // offset 0x0, size 0x4
+    int dor0_first;      // offset 0x4, size 0x4
+    int dor0_speed;      // offset 0x8, size 0x4
+    int dor0_accel;      // offset 0xC, size 0x4
+    int dor0_goal_speed; // offset 0x10, size 0x4
+    int dor0_cmp;        // offset 0x14, size 0x4
+    int dor1_wait;       // offset 0x18, size 0x4
+    int dor1_speed;      // offset 0x1C, size 0x4
+    int dor1_accel;      // offset 0x20, size 0x4
+    int dor1_goal_angle; // offset 0x24, size 0x4
+    int dor1_cmp;        // offset 0x28, size 0x4
+    int dor1_decel;      // offset 0x2C, size 0x4
+    int snd_wait;        // offset 0x30, size 0x4
+} DOORPROC5_WORK;
+
+typedef struct DOORPROC7_WORK 
+{
+    // total size: 0x50
+    int nob_first;       // offset 0x0, size 0x4
+    int nob_speed;       // offset 0x4, size 0x4
+    int nob_accel;       // offset 0x8, size 0x4
+    int nob_goal;        // offset 0xC, size 0x4
+    int nob_cmp;         // offset 0x10, size 0x4
+    int dor0_wait;       // offset 0x14, size 0x4
+    int dor0_first;      // offset 0x18, size 0x4
+    int dor0_speed;      // offset 0x1C, size 0x4
+    int dor0_accel;      // offset 0x20, size 0x4
+    int dor0_goal_speed; // offset 0x24, size 0x4
+    int dor0_cmp;        // offset 0x28, size 0x4
+    int dor1_wait;       // offset 0x2C, size 0x4
+    int dor1_speed;      // offset 0x30, size 0x4
+    int dor1_accel;      // offset 0x34, size 0x4
+    int dor1_goal_angle; // offset 0x38, size 0x4
+    int dor1_cmp;        // offset 0x3C, size 0x4
+    int dor1_decel;      // offset 0x40, size 0x4
+    int wait;            // offset 0x44, size 0x4
+    int snd_wait;        // offset 0x48, size 0x4
+    int snd_wait1;       // offset 0x4C, size 0x4
+} DOORPROC7_WORK;
+
 typedef struct LIGHTPROC_WORK
 {
     // total size: 0x7C
@@ -141,7 +381,7 @@ void LightProc1(_door_wrk* dwP);
 void LightProc2(_door_wrk* dwP);
 int CompareSint32(int val_a, int cmp_typ, int val_b);
 static int CompareFloat(float val_a, int cmp_typ, float val_b);
-/*void VectorMove(_anon12* posP, int yaw, int pitch, float speed);*/
+static void VectorMove(NJS_POINT3* posP, int yaw, int pitch, float speed);
 static void LightSubAmb(_door_wrk* dwP, NJS_POINT3* ambP, NJS_POINT3* offP);
 static void LightSubPnt(_door_wrk* dwP, int lgt_no, LGT_WRK* ldP, NJS_POINT3* rteP);
 void ryExcuteFade(float pri, int col, float rate);
