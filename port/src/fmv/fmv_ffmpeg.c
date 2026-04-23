@@ -30,7 +30,13 @@
 #define ISO_SECTOR_SIZE 2048
 
 struct recvx_fmv {
+    /* I/O source — exactly one of these is non-NULL.
+     *   iso != NULL: read via iso_read_sectors(iso, file_lba + sector, ...)
+     *   fp  != NULL: read via fread on a loose file (gamedata/MOVIE/MV_*.PSS)
+     * file_cursor is bytes from the start of the logical file (not sector).
+     * file_size is the total payload size in bytes. */
     recvx_iso_t*       iso;
+    FILE*              fp;          /* NULL unless opened via recvx_fmv_open_loose */
     uint32_t           file_lba;
     uint32_t           file_size;   /* bytes */
     int64_t            file_cursor; /* bytes from file start */
@@ -88,7 +94,13 @@ struct recvx_fmv {
     double             cur_pts_s; /* PTS of last decoded video frame, seconds */
 };
 
-/* --- I/O glue between libavformat and the ISO reader ------------------ */
+/* --- I/O glue between libavformat and the underlying source ------------
+ *
+ * Dual-source: reads from the global ISO if f->iso is set, else from the
+ * loose FILE* f->fp. The audio walker (pump_pss_audio) also calls
+ * iso_read_packet directly with a temporarily-swapped file_cursor, so the
+ * dispatcher has to live in this one helper instead of being split into
+ * two read callbacks. */
 
 static int iso_read_packet(void* opaque, uint8_t* buf, int buf_size) {
     recvx_fmv_t* f = (recvx_fmv_t*)opaque;
@@ -96,7 +108,16 @@ static int iso_read_packet(void* opaque, uint8_t* buf, int buf_size) {
     int64_t remaining = (int64_t)f->file_size - f->file_cursor;
     if (buf_size > remaining) buf_size = (int)remaining;
 
-    /* Align down to sector, read enough sectors, copy the window. */
+    if (f->fp) {
+        /* Loose-file path: simple pread-equivalent via fseek+fread. */
+        if (fseek(f->fp, (long)f->file_cursor, SEEK_SET) != 0) return AVERROR(EIO);
+        size_t got = fread(buf, 1, (size_t)buf_size, f->fp);
+        if (got == 0) return AVERROR_EOF;
+        f->file_cursor += (int64_t)got;
+        return (int)got;
+    }
+
+    /* ISO path: align down to sector, read enough sectors, copy the window. */
     int64_t start_off = f->file_cursor;
     int64_t end_off   = start_off + buf_size;
     uint32_t first_s  = (uint32_t)(start_off / ISO_SECTOR_SIZE);
@@ -267,6 +288,117 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
     return f;
 }
 
+/* Open a loose .PSS file from the host filesystem (used for
+ * gamedata/MOVIE/MV_NNN.PSS playback from the game task state machine).
+ * Shares the full demux/decode/audio path with recvx_fmv_open; only the
+ * I/O source changes. */
+recvx_fmv_t* recvx_fmv_open_loose(const char* fs_path) {
+    FILE* fp = fopen(fs_path, "rb");
+    if (!fp) {
+        RX_LOG("fmv", "cannot open loose %s", fs_path);
+        return NULL;
+    }
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
+    long sz = ftell(fp);
+    if (sz <= 0) { fclose(fp); return NULL; }
+    rewind(fp);
+
+    recvx_fmv_t* f = (recvx_fmv_t*)calloc(1, sizeof(*f));
+    f->fp        = fp;
+    f->file_size = (uint32_t)sz;
+    f->video_idx = -1;
+
+    const int io_bufsz = 64 * 1024;
+    f->avio_buf = (unsigned char*)av_malloc(io_bufsz);
+    f->avio     = avio_alloc_context(f->avio_buf, io_bufsz, 0, f,
+                                     iso_read_packet, NULL, iso_seek);
+    if (!f->avio) { recvx_fmv_close(f); return NULL; }
+
+    f->aud_cap = 512 * 1024;
+    f->aud_buf = (uint8_t*)malloc(f->aud_cap);
+
+    f->fmt = avformat_alloc_context();
+    f->fmt->pb = f->avio;
+    f->fmt->probesize            = 20 * 1024 * 1024;
+    f->fmt->max_analyze_duration = 30 * AV_TIME_BASE;
+    const AVInputFormat* ifmt = av_find_input_format("mpeg");
+
+    if (avformat_open_input(&f->fmt, NULL, ifmt, NULL) != 0) {
+        RX_LOG("fmv", "avformat_open_input failed for %s", fs_path);
+        recvx_fmv_close(f);
+        return NULL;
+    }
+    if (avformat_find_stream_info(f->fmt, NULL) < 0) {
+        RX_LOG("fmv", "no stream info in %s", fs_path);
+        recvx_fmv_close(f);
+        return NULL;
+    }
+    av_dump_format(f->fmt, 0, fs_path, 0);
+
+    f->audio_idx = -1;
+    for (unsigned i = 0; i < f->fmt->nb_streams; ++i) {
+        AVStream* st = f->fmt->streams[i];
+        AVCodecParameters* par = st->codecpar;
+        if (par->codec_type == AVMEDIA_TYPE_VIDEO && f->video_idx < 0) f->video_idx = (int)i;
+        if (par->codec_type == AVMEDIA_TYPE_AUDIO && f->audio_idx < 0) f->audio_idx = (int)i;
+    }
+    if (f->video_idx < 0) { recvx_fmv_close(f); return NULL; }
+
+    AVCodecParameters* vpar = f->fmt->streams[f->video_idx]->codecpar;
+    const AVCodec* dec = avcodec_find_decoder(vpar->codec_id);
+    if (!dec) { recvx_fmv_close(f); return NULL; }
+    f->vdec = avcodec_alloc_context3(dec);
+    avcodec_parameters_to_context(f->vdec, vpar);
+    if (avcodec_open2(f->vdec, dec, NULL) < 0) {
+        recvx_fmv_close(f);
+        return NULL;
+    }
+
+    f->width  = f->vdec->width;
+    f->height = f->vdec->height;
+    f->sws = sws_getContext(f->width, f->height, f->vdec->pix_fmt,
+                            f->width, f->height, AV_PIX_FMT_RGBA,
+                            SWS_BILINEAR, NULL, NULL, NULL);
+    f->pkt        = av_packet_alloc();
+    f->dec_frame  = av_frame_alloc();
+    f->rgba_frame = av_frame_alloc();
+    f->rgba_frame->format = AV_PIX_FMT_RGBA;
+    f->rgba_frame->width  = f->width;
+    f->rgba_frame->height = f->height;
+    av_image_alloc(f->rgba_frame->data, f->rgba_frame->linesize,
+                   f->width, f->height, AV_PIX_FMT_RGBA, 16);
+
+    if (f->audio_idx >= 0) {
+        AVCodecParameters* apar = f->fmt->streams[f->audio_idx]->codecpar;
+        const AVCodec* adec = avcodec_find_decoder(apar->codec_id);
+        if (adec) {
+            f->adec = avcodec_alloc_context3(adec);
+            avcodec_parameters_to_context(f->adec, apar);
+            if (avcodec_open2(f->adec, adec, NULL) == 0) {
+                f->audio_rate = f->adec->sample_rate;
+                AVChannelLayout out_layout = AV_CHANNEL_LAYOUT_STEREO;
+                AVChannelLayout in_layout  = f->adec->ch_layout;
+                swr_alloc_set_opts2(&f->swr,
+                    &out_layout, AV_SAMPLE_FMT_S16, f->audio_rate,
+                    &in_layout,  f->adec->sample_fmt, f->adec->sample_rate,
+                    0, NULL);
+                if (swr_init(f->swr) < 0) {
+                    swr_free(&f->swr);
+                    avcodec_free_context(&f->adec);
+                } else {
+                    f->adec_frame = av_frame_alloc();
+                }
+            } else {
+                avcodec_free_context(&f->adec);
+            }
+        }
+    }
+
+    RX_LOG("fmv", "opened (loose) %s: %dx%d codec=%s",
+           fs_path, f->width, f->height, avcodec_get_name(vpar->codec_id));
+    return f;
+}
+
 void recvx_fmv_set_audio_sink(recvx_fmv_t* f, recvx_fmv_audio_sink sink, void* opaque) {
     if (!f) return;
     f->audio_sink    = sink;
@@ -294,6 +426,7 @@ void recvx_fmv_close(recvx_fmv_t* f) {
         av_freep(&f->avio->buffer);
         avio_context_free(&f->avio);
     }
+    if (f->fp) { fclose(f->fp); f->fp = NULL; }
     free(f);
 }
 

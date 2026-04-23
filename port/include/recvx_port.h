@@ -82,6 +82,9 @@ void         recvx_iso_debug_listdir(recvx_iso_t* iso, const char* dir_path);
 typedef struct recvx_fmv recvx_fmv_t;
 
 recvx_fmv_t* recvx_fmv_open(const char* iso_path);
+/* Loose-file variant for gamedata/MOVIE/MV_NNN.PSS during game-task FMV
+ * calls. Future work can fold both behind a single path with "ISO:" prefix. */
+recvx_fmv_t* recvx_fmv_open_loose(const char* fs_path);
 void         recvx_fmv_close(recvx_fmv_t* fmv);
 bool         recvx_fmv_advance(recvx_fmv_t* fmv); /* false when finished */
 /* Pointer to the current RGBA frame + its dimensions. Valid after a

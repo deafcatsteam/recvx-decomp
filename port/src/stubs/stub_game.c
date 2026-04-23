@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* ----------------------------------------------------------------------
  * Globals referenced from main.c / system.c whose owners aren't compiled.
@@ -179,20 +180,137 @@ void ExecSoundSystemMonitor(void)                 {}
  * RequestReadIsoFile / GetIsoFileSize are implemented in
  * port/src/afs/afs_mount.c — they are NOT stubs, they back real AFS reads.
  * ---------------------------------------------------------------------- */
-/* FMV stubs: no playback yet. Return "skip" codes so ADV state machines
- * treat the movie as finished immediately and advance to the next Mode.
- * - WaitPrePlayMovie: 0=ready, 1=waiting, 2/3=skip/error → use 3 to skip
- * - PlayMovieMain:    0=playing, 1/2/3=done → use 3 so Mode 9 exits too
- * PlayStartMovieEx signature is (MovieNo, MovieType, PauseFlag) per sdfunc.h.
- * Stub mismatch would silently drop the 3rd arg on x64; fix the proto.
- */
-int  PlayStartMovieEx(int no, int type, int pause) {
-    (void)no; (void)type; (void)pause;
+/* FMV playback — game-side entry points.
+ *
+ * The real PS2 flow (sdfunc.c PlayStartMovieEx → ps2_sfd_mw.c) hands a
+ * .PSS stream through CRI Sofdec. Our port routes the same call chain
+ * into recvx_fmv_open_loose → recvx_fmv_advance, then blits each frame
+ * via backend->draw_rgba. Audio is pushed to the same SDL sink the ADX
+ * mixer uses.
+ *
+ * Return-code contract (matches the decomp's case labels in adv.c /
+ * system.c):
+ *   WaitPrePlayMovie : 0=ready, 1=waiting, 2/3=skip/error
+ *   PlayMovieMain    : 0=playing, 1..3=done (any non-zero ends mode 9)
+ * PlayStartMovieEx signature is (MovieNo, MovieType, PauseFlag).
+ *
+ * Render layering: the 2D gfx queue is empty during FMV modes (task
+ * hands off entirely to the movie path), so backend->draw_rgba inside
+ * PlayMovieMain paints the current frame between begin_frame and
+ * end_frame of the enclosing game loop iteration — no overdraw.
+ *
+ * Pacing: PlayMovieMain drains video frames until fmv PTS catches up to
+ * wall-clock elapsed since playback start, then blits the latest. Same
+ * pattern as run_fmv_demo in main_pc.c. */
+
+static recvx_fmv_t*   g_movie_fmv;
+static uint32_t       g_movie_start_ms;
+static int            g_movie_done;       /* 1 once EOF reached */
+static int            g_movie_pending;    /* 1 between Start and first advance */
+
+static uint32_t stub_now_ms(void) {
+    return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
+}
+
+static void stub_fmv_audio_sink(void* opaque, int rate,
+                                const void* pcm, int bytes) {
+    const recvx_backend* b = (const recvx_backend*)opaque;
+    if (b && b->audio_init)  b->audio_init(rate);
+    if (b && b->audio_queue) b->audio_queue(pcm, bytes);
+}
+
+int PlayStartMovieEx(int no, int type, int pause) {
+    (void)type; (void)pause;
+    /* Tear down any previous stream. */
+    if (g_movie_fmv) {
+        recvx_fmv_close(g_movie_fmv);
+        g_movie_fmv = NULL;
+    }
+    g_movie_done    = 0;
+    g_movie_pending = 0;
+
+    const char* gd = recvx_gamedata_dir();
+    if (!gd) {
+        RX_LOG("fmv", "PlayStartMovieEx: no gamedata dir set — skip movie %d", no);
+        g_movie_done = 1;
+        return 0;
+    }
+    char path[512];
+    snprintf(path, sizeof path, "%s/MOVIE/MV_%03d.PSS", gd, no);
+    RX_LOG("fmv", "PlayStartMovieEx: opening %s (type=%d pause=%d)",
+           path, type, pause);
+
+    g_movie_fmv = recvx_fmv_open_loose(path);
+    if (!g_movie_fmv) {
+        RX_LOG("fmv", "open failed — skip");
+        g_movie_done = 1;
+        return 0;
+    }
+    const recvx_backend* be = recvx_backend_current();
+    if (be) {
+        recvx_fmv_set_audio_sink(g_movie_fmv, stub_fmv_audio_sink, (void*)be);
+    }
+    g_movie_start_ms = stub_now_ms();
+    g_movie_pending  = 1;
     return 0;
 }
-int  PlayStopMovieEx(void)               { return 0; }
-int  WaitPrePlayMovie(void)              { return 3; }
-int  PlayMovieMain(void)                 { return 3; }
+
+int PlayStopMovieEx(void) {
+    if (g_movie_fmv) {
+        recvx_fmv_close(g_movie_fmv);
+        g_movie_fmv = NULL;
+    }
+    g_movie_done    = 0;
+    g_movie_pending = 0;
+    return 0;
+}
+
+int WaitPrePlayMovie(void) {
+    /* Caller (adv.c mode 8) keeps polling until we return non-1. The
+     * loose-file path is synchronous so we can declare "ready" as soon as
+     * Start succeeded. Return 3 (skip) if no FMV is alive. */
+    if (g_movie_done)  return 3;
+    if (!g_movie_fmv)  return 3;
+    return 0;
+}
+
+int PlayMovieMain(void) {
+    if (g_movie_done)   return 1;
+    if (!g_movie_fmv)   return 1;
+
+    /* Wall-clock-paced frame drain. Advance until FMV PTS meets or
+     * exceeds elapsed time, so dropped/slow frames still stay roughly
+     * in sync instead of slipping further behind each tick. */
+    double elapsed_s = (double)(stub_now_ms() - g_movie_start_ms) / 1000.0;
+    if (g_movie_pending) {
+        /* First advance primes the first frame. */
+        if (!recvx_fmv_advance(g_movie_fmv)) {
+            recvx_fmv_close(g_movie_fmv);
+            g_movie_fmv     = NULL;
+            g_movie_done    = 1;
+            return 1;
+        }
+        g_movie_pending = 0;
+    } else {
+        while (recvx_fmv_pts_s(g_movie_fmv) < elapsed_s) {
+            if (!recvx_fmv_advance(g_movie_fmv)) {
+                recvx_fmv_close(g_movie_fmv);
+                g_movie_fmv     = NULL;
+                g_movie_done    = 1;
+                return 1;
+            }
+        }
+    }
+
+    const recvx_backend* be = recvx_backend_current();
+    if (be && be->draw_rgba) {
+        be->draw_rgba(recvx_fmv_pixels(g_movie_fmv),
+                      recvx_fmv_width(g_movie_fmv),
+                      recvx_fmv_height(g_movie_fmv));
+    }
+    return 0;
+}
+
 void mwPlySetDispMode(int m)             { (void)m; }
 
 /* ----------------------------------------------------------------------
