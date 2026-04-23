@@ -318,7 +318,11 @@ void mwPlySetDispMode(int m)             { (void)m; }
  * ---------------------------------------------------------------------- */
 int  ItemTaskCheck(void)    { return 0; }
 int  StatusMain(void)       { return 0; }
-void ControlTypewriter(void){}
+/* ControlTypewriter is implemented in port/src/game_texture_stubs.c so it
+ * can access the real SYS_WORK struct (requires KATANA types.h prelude).
+ * Needed to skip the text-scroll intro and jump straight to MV_000.PSS
+ * after NEW GAME is selected, since bup_00.c (TypewriterMode[] dispatcher)
+ * isn't compiled yet. */
 int  ControlRanking(void)   { return 0; }
 void Expand(void)           {}
 void AllItemInit(void)      {}
@@ -414,10 +418,16 @@ void bhSetFontTexture(void* p) {
 }
 void bhReleaseFreeMemory(void* p)                  { (void)p; }
 
-/* Memory card — always report "no card" so title screen skips VM path. */
+/* Memory card — simulate a card present on port/slot 0 so NEW GAME is
+ * selectable at the title menu. Real save/load still stubbed; this just
+ * unblocks the FindFirstVmDrive() >= 0 check in adv.c CheckButton so the
+ * user can reach the NEW GAME → TitleCall(3) transition that eventually
+ * plays the opening FMV. Return value 2 = "PS2 memcard type detected" per
+ * the decomp's CheckConnectVmDrive convention. */
 void* CreateMemoryCard(void* pCard)                { (void)pCard; return pCard; }
 int   GetMcSelectPortType(void* pCard, unsigned int port) {
-    (void)pCard;(void)port; return 0;
+    (void)pCard;
+    return (port == 0) ? 2 : 0;
 }
 int   CheckMcSelectPortInfoState(unsigned int port){ (void)port; return 0; }
 
