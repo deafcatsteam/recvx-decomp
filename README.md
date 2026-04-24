@@ -42,9 +42,7 @@ Run with:
 
 ## Status
 
-- ✅ Title screen + menus
-- ✅ Audio (BGM, SFX, voice)
-- ✅ Texture loading
+- ✅ Title screen + options
 - ⚠️ FMV playback (in progress)
 - ⚠️ Game logic (partial decompilation)
 
