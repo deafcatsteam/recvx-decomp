@@ -1,40 +1,63 @@
-# RECVX PC Port
+# Resident Evil: Code Veronica X - PC Port
 
-PC port of *Resident Evil: Code Veronica X* built on top of the [recvx-decomp](https://github.com/fmil95/recvx-decomp) project.
+PC port of *Resident Evil: Code Veronica X* (PS2) using the [recvx-decomp](https://github.com/fmil95/recvx-decomp) decompilation.
 
-## Status
+![Screenshot placeholder](https://via.placeholder.com/800x600)
 
-Phase 0 — skeleton. Compiles port stubs only. Game source not yet wired in.
+## Quick Start
 
-## Requirements
+### Requirements
 
-- Visual Studio 2022 with C++ "Desktop development" workload (MSVC x64)
+- Visual Studio 2022 (MSVC x64)
 - CMake 3.20+
-- [vcpkg](https://github.com/microsoft/vcpkg) with `VCPKG_ROOT` env var set
-- A copy of *Resident Evil: Code Veronica X* (USA, SLUS-20184) ISO
+- [vcpkg](https://github.com/microsoft/vcpkg) with `VCPKG_ROOT` environment variable
+- Copy of Resident Evil: Code Veronica X USA (SLUS-20184) ISO
 
-## Build
+### Build
 
-From any shell (regular PowerShell / cmd is fine; CMake finds MSVC via the VS generator):
-
-```
+```bash
 cd port
 cmake --preset x64-vcpkg
 cmake --build build --config Debug
 ```
 
-The preset uses `$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake` as the toolchain and installs SDL2 automatically via `vcpkg.json`.
+Run with:
+```bash
+./build/Debug/recvx_pc.exe --iso path/to/recvx.iso --game
+```
 
-Place the ISO at `build/Debug/recvx.iso` (or pass `--iso path\to\file.iso`) before launching.
+## Controls
 
-## Layout
+| Input | Action |
+|-------|--------|
+| **Z** | Action / Confirm |
+| **X** | Cancel |
+| **Arrow Keys** | Move / Select |
+| **S** | Menu |
+| **A** | Aim (Combat) |
+| **Q / W** | L1 / R1 |
+| **E / R** | L2 / R2 |
+| **Enter** | Start |
+| **Backspace** | Select |
 
-- `port/src/main_pc.c` — entry point, SDL2 window, calls `njUserInit` / `njUserMain` loop
-- `port/src/backend/` — renderer/audio/input backends (GL3.3 first; Vulkan slot reserved)
-- `port/src/stubs/` — PS2 SDK / Sega Ninja / KATANA / CRI shims that satisfy the decomp's link references
-- `port/src/iso/` — ISO9660 reader + `sceCd*` shim
-- `port/src/fmv/` — FFmpeg-backed Sofdec replacement
-- `port/include/` — port-only headers
-- `port/cmake/` — CMake helpers
+## Status
 
-The port deliberately keeps the renderer behind an abstract backend interface so a Vulkan backend can be added later without touching game code.
+- ✅ Title screen + menus
+- ✅ Audio (BGM, SFX, voice)
+- ✅ Texture loading
+- ⚠️ FMV playback (in progress)
+- ⚠️ Game logic (partial decompilation)
+
+## Credits
+
+- **Decompilation**: [fmil95/recvx-decomp](https://github.com/fmil95/recvx-decomp)
+- **Sofdec/CRI reverse engineering**: recvx-decomp contributors
+- **PC port**: This branch
+- **Frameworks**: SDL2, OpenGL, FFmpeg
+- **Original game**: Capcom
+
+## References
+
+- [recvx-decomp](https://github.com/fmil95/recvx-decomp) — PS2 decompilation & KATANA/CRI docs
+- [PCSX2](https://pcsx2.net/) — PS2 emulation reference
+- FFmpeg libavformat/libavcodec — video/audio decode
