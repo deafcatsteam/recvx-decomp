@@ -285,15 +285,18 @@ int PlayMovieMain(void) {
     if (g_movie_pending) {
         /* First advance primes the first frame. */
         if (!recvx_fmv_advance(g_movie_fmv)) {
+            RX_LOG("fmv", "PlayMovieMain: first advance failed");
             recvx_fmv_close(g_movie_fmv);
             g_movie_fmv     = NULL;
             g_movie_done    = 1;
             return 1;
         }
+        RX_LOG("fmv", "PlayMovieMain: first advance OK, pts=%.3f", recvx_fmv_pts_s(g_movie_fmv));
         g_movie_pending = 0;
     } else {
         while (recvx_fmv_pts_s(g_movie_fmv) < elapsed_s) {
             if (!recvx_fmv_advance(g_movie_fmv)) {
+                RX_LOG("fmv", "PlayMovieMain: advance EOF");
                 recvx_fmv_close(g_movie_fmv);
                 g_movie_fmv     = NULL;
                 g_movie_done    = 1;
@@ -303,8 +306,15 @@ int PlayMovieMain(void) {
     }
 
     const recvx_backend* be = recvx_backend_current();
+    const void* pix = recvx_fmv_pixels(g_movie_fmv);
     if (be && be->draw_rgba) {
-        be->draw_rgba(recvx_fmv_pixels(g_movie_fmv),
+        if (!pix) {
+            RX_LOG("fmv", "PlayMovieMain: no pixels! w=%d h=%d pts=%.3f",
+                   recvx_fmv_width(g_movie_fmv),
+                   recvx_fmv_height(g_movie_fmv),
+                   recvx_fmv_pts_s(g_movie_fmv));
+        }
+        be->draw_rgba(pix,
                       recvx_fmv_width(g_movie_fmv),
                       recvx_fmv_height(g_movie_fmv));
     }

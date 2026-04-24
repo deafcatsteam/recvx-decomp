@@ -110,9 +110,19 @@ static int iso_read_packet(void* opaque, uint8_t* buf, int buf_size) {
 
     if (f->fp) {
         /* Loose-file path: simple pread-equivalent via fseek+fread. */
-        if (fseek(f->fp, (long)f->file_cursor, SEEK_SET) != 0) return AVERROR(EIO);
+        if (fseek(f->fp, (long)f->file_cursor, SEEK_SET) != 0) {
+            RX_LOG("fmv", "fseek failed at offset %lld", (long long)f->file_cursor);
+            return AVERROR(EIO);
+        }
         size_t got = fread(buf, 1, (size_t)buf_size, f->fp);
-        if (got == 0) return AVERROR_EOF;
+        if (got == 0) {
+            if (feof(f->fp)) {
+                RX_LOG("fmv", "fread EOF at cursor %lld (want %d bytes)", (long long)f->file_cursor, buf_size);
+            } else {
+                RX_LOG("fmv", "fread error at cursor %lld (want %d bytes)", (long long)f->file_cursor, buf_size);
+            }
+            return AVERROR_EOF;
+        }
         f->file_cursor += (int64_t)got;
         return (int)got;
     }
@@ -242,6 +252,12 @@ recvx_fmv_t* recvx_fmv_open(const char* iso_path) {
     f->sws = sws_getContext(f->width, f->height, f->vdec->pix_fmt,
                             f->width, f->height, AV_PIX_FMT_RGBA,
                             SWS_BILINEAR, NULL, NULL, NULL);
+    if (!f->sws) {
+        RX_LOG("fmv", "sws_getContext failed for %dx%d %s→RGBA",
+               f->width, f->height, av_get_pix_fmt_name(f->vdec->pix_fmt));
+        recvx_fmv_close(f);
+        return NULL;
+    }
     f->pkt        = av_packet_alloc();
     f->dec_frame  = av_frame_alloc();
     f->rgba_frame = av_frame_alloc();
@@ -301,6 +317,7 @@ recvx_fmv_t* recvx_fmv_open_loose(const char* fs_path) {
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); return NULL; }
     long sz = ftell(fp);
     if (sz <= 0) { fclose(fp); return NULL; }
+    RX_LOG("fmv", "loose file %s: %ld bytes", fs_path, sz);
     rewind(fp);
 
     recvx_fmv_t* f = (recvx_fmv_t*)calloc(1, sizeof(*f));
@@ -359,6 +376,12 @@ recvx_fmv_t* recvx_fmv_open_loose(const char* fs_path) {
     f->sws = sws_getContext(f->width, f->height, f->vdec->pix_fmt,
                             f->width, f->height, AV_PIX_FMT_RGBA,
                             SWS_BILINEAR, NULL, NULL, NULL);
+    if (!f->sws) {
+        RX_LOG("fmv", "sws_getContext failed for %dx%d %s→RGBA",
+               f->width, f->height, av_get_pix_fmt_name(f->vdec->pix_fmt));
+        recvx_fmv_close(f);
+        return NULL;
+    }
     f->pkt        = av_packet_alloc();
     f->dec_frame  = av_frame_alloc();
     f->rgba_frame = av_frame_alloc();
@@ -656,7 +679,13 @@ bool recvx_fmv_advance(recvx_fmv_t* f) {
     if (f->audio_idx < 0) pump_pss_audio(f);
     while (1) {
         int r = av_read_frame(f->fmt, f->pkt);
-        if (r < 0) { f->eof = 1; return false; }
+        if (r < 0) {
+            if (r != AVERROR_EOF) {
+                RX_LOG("fmv", "av_read_frame error: %d (pts=%.2f)", r, f->cur_pts_s);
+            }
+            f->eof = 1;
+            return false;
+        }
         if (f->pkt->stream_index == f->audio_idx && f->adec) {
             if (avcodec_send_packet(f->adec, f->pkt) == 0) {
                 drain_audio(f);
@@ -681,11 +710,16 @@ bool recvx_fmv_advance(recvx_fmv_t* f) {
                 AVRational tb = f->fmt->streams[f->video_idx]->time_base;
                 f->cur_pts_s = (double)pts * av_q2d(tb);
             }
-            sws_scale(f->sws,
+            int sws_result = sws_scale(f->sws,
                       (const uint8_t* const*)f->dec_frame->data,
                       f->dec_frame->linesize,
                       0, f->height,
                       f->rgba_frame->data, f->rgba_frame->linesize);
+            if (sws_result <= 0) {
+                RX_LOG("fmv", "sws_scale failed: %d (fmt=%s)", sws_result,
+                       av_get_pix_fmt_name(f->dec_frame->format));
+                return true;
+            }
             f->have_frame = 1;
             return true;
         }
