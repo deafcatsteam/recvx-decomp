@@ -2,7 +2,7 @@
 
 PC port of *Resident Evil: Code Veronica X* (PS2) using the [recvx-decomp](https://github.com/fmil95/recvx-decomp) decompilation.
 
-![Screenshot placeholder](https://via.placeholder.com/800x600)
+<img width="643" height="510" alt="image" src="https://github.com/user-attachments/assets/540c7629-e15c-4684-bb2c-9a33e7cd47ba" />
 
 ## Quick Start
 
