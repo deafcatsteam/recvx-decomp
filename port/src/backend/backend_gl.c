@@ -206,10 +206,11 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
     glDisable(GL_SCISSOR_TEST);
     glDisable(GL_STENCIL_TEST);
 
-    /* DIAGNOSTIC: draw solid red half-quad on the LEFT half before the FMV
-     * texture quad. If we see red but no FMV, texturing/upload is broken.
-     * If we see black, rendering pipeline itself is broken. Remove once
-     * FMV display is verified working. */
+    /* DIAGNOSTIC: draw solid red on screen LEFT half (untextured), FMV
+     * textured quad in RIGHT half only. Symptoms:
+     *   - red on left + FMV on right → fixed
+     *   - red on left + black on right → texture upload/sampling is the bug
+     *   - all black → rendering pipeline broken (state corruption?) */
     glDisable(GL_TEXTURE_2D);
     glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
     glBegin(GL_QUADS);
@@ -225,10 +226,10 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
     glColor4f(1, 1, 1, 1);
 
     glBegin(GL_QUADS);
-    glTexCoord2f(0, 1); glVertex2f(-1, -1);
-    glTexCoord2f(1, 1); glVertex2f( 1, -1);
-    glTexCoord2f(1, 0); glVertex2f( 1,  1);
-    glTexCoord2f(0, 0); glVertex2f(-1,  1);
+    glTexCoord2f(0, 1); glVertex2f(0, -1);     /* right-half only */
+    glTexCoord2f(1, 1); glVertex2f(1, -1);
+    glTexCoord2f(1, 0); glVertex2f(1,  1);
+    glTexCoord2f(0, 0); glVertex2f(0,  1);
     glEnd();
 
     glDisable(GL_TEXTURE_2D);
