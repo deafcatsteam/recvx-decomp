@@ -1340,6 +1340,7 @@ int Adv_FirstWarningMessage()
     case 18:
         ap->Timer--;
 
+#ifdef RECVX_PC_PORT
         /* PC port: Start-press fast-forwards past remaining warning
          * logos. Setting Count to the entry before the TexNoDef[] -1
          * sentinel makes mode 19's Count++ land on -1 and exit the task.
@@ -1350,6 +1351,7 @@ int Adv_FirstWarningMessage()
             ap->Count = 1;
             ap->Timer = -1.0f;
         }
+#endif
 
         if (ap->Timer < 0)
         {
@@ -1501,33 +1503,45 @@ int Adv_CapcomLogo()
         
         break; 
     case 9:
-        switch (PlayMovieMain(0)) 
-        { 
+#ifdef RECVX_PC_PORT
+        /* PC port: Start-press skips the opening FMV cinematic. Mirrors
+         * the existing mode-6 short-circuit (line ~1474) that lets the
+         * Capcom logo fade-out be cancelled with Start. */
+        if (Pad[ap->PortId].press & 0x800)
+        {
+            PlayStopMovieEx(0);
+            ap->Mode = -1;
+            break;
+        }
+#endif
+
+        switch (PlayMovieMain(0))
+        {
         case 1:
         case 2:
         case 3:
-            ap->Mode = -1; 
+            ap->Mode = -1;
             break;
         case 0:
             break;
         }
-        
+
         break;
     }
 
     if (ap->Mode == -1)
-    { 
+    {
         AdvEasyReleaseTexture();
-        
+
         ap->Mode = 0;
-        
-        ap->Active = 0; 
-        
-        ReturnCode = 1; 
+
+        ap->Active = 0;
+
+        ReturnCode = 1;
     }
-    
-    return ReturnCode; 
-} 
+
+    return ReturnCode;
+}
 
 // 100% matching!
 void ResetFlushPlate() 
