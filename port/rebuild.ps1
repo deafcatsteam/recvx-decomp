@@ -23,4 +23,10 @@ cmake --preset x64-vcpkg 2>&1 | Tee-Object configure.txt
 Write-Host "-- Building $Config --"
 cmake --build build --config $Config 2>&1 | Tee-Object build-errors.txt
 
-Write-Host "-- Done. Errors/warnings in build-errors.txt --"
+$exe = "build\$Config\recvx_pc.exe"
+if (Test-Path $exe) {
+    Write-Host "-- Build OK: $exe --" -ForegroundColor Green
+    Write-Host "-- Run with: .\run.ps1   (mirrors output to runtime.log) --"
+} else {
+    Write-Host "-- BUILD FAILED: $exe missing. See build-errors.txt --" -ForegroundColor Red
+}
