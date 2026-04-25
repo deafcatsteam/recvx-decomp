@@ -1338,19 +1338,30 @@ int Adv_FirstWarningMessage()
         AdvDwawOnePicture(TexNoDef[ap->Count]); 
         break; 
     case 18:
-        ap->Timer--; 
-        
-        if (ap->Timer < 0) 
-        { 
-            RequestAdvFade(3, GetSamurai(50));
-            
-            ap->Mode = 19; 
+        ap->Timer--;
+
+        /* PC port: Start-press fast-forwards past remaining warning
+         * logos. Setting Count to the entry before the TexNoDef[] -1
+         * sentinel makes mode 19's Count++ land on -1 and exit the task.
+         * Forcing Timer < 0 falls through to the existing fade-out path
+         * so the transition still looks intentional. */
+        if (Pad[ap->PortId].press & 0x800)
+        {
+            ap->Count = 1;
+            ap->Timer = -1.0f;
         }
-        
-        AdvEasySetTextureList(0); 
-        
-        AdvDwawOnePicture(TexNoDef[ap->Count]); 
-        break; 
+
+        if (ap->Timer < 0)
+        {
+            RequestAdvFade(3, GetSamurai(50));
+
+            ap->Mode = 19;
+        }
+
+        AdvEasySetTextureList(0);
+
+        AdvDwawOnePicture(TexNoDef[ap->Count]);
+        break;
     case 19:
         if (CheckAdvFade() == 0) 
         { 
