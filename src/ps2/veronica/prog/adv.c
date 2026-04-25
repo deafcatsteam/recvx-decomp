@@ -923,44 +923,65 @@ int AdvGetCurrentPort()
 
 // 100% matching!
 int CheckConnectVmDrive(int param, int SlotNo) // first parameter is not present on the debugging symbols
-{ 
+{
     MEMORYCARDSTATE McDrive;
     MEMORYCARDSTATE* pMcDrive;
-    
-    pMcDrive = CreateMemoryCard(&McDrive); 
-    
+
+    pMcDrive = CreateMemoryCard(&McDrive);
+
+#ifdef RECVX_PC_PORT
+    {
+        int t = GetMcSelectPortType(pMcDrive, SlotNo - 1);
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("game", "CheckConnectVmDrive: pMc=%p slot=%d port=%d type=%d",
+                  pMcDrive, SlotNo, SlotNo - 1, t);
+        if (t == 2)
+        {
+            return ((SlotNo % 6) - 1) + ((SlotNo / 6) * 2);
+        }
+        return -1;
+    }
+#else
     if (GetMcSelectPortType(pMcDrive, SlotNo - 1) == 2)
     {
-        return ((SlotNo % 6) - 1) + ((SlotNo / 6) * 2); 
+        return ((SlotNo % 6) - 1) + ((SlotNo / 6) * 2);
     }
 
     return -1;
+#endif
 } 
 
 // 100% matching!
-int FindFirstVmDrive() 
-{ 
+int FindFirstVmDrive()
+{
     int j;
     int DriveNo;
 
-    for (j = 1; ; ) 
-    { 
-        DriveNo = CheckConnectVmDrive(0, j); 
-        
-        if (DriveNo >= 0) 
-        { 
+    for (j = 1; ; )
+    {
+        DriveNo = CheckConnectVmDrive(0, j);
+
+#ifdef RECVX_PC_PORT
+        {
+            extern void recvx_log(const char* tag, const char* fmt, ...);
+            recvx_log("game", "FindFirstVmDrive: CheckConnectVmDrive(0,%d)=%d", j, DriveNo);
+        }
+#endif
+
+        if (DriveNo >= 0)
+        {
             return DriveNo;
-        } 
-        
+        }
+
         j++;
-        
-        if (j >= 3) 
+
+        if (j >= 3)
         {
             break;
         }
     }
-        
-    return -1; 
+
+    return -1;
 }
 
 // 100% matching! 
