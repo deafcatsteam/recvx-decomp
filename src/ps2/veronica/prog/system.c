@@ -356,7 +356,16 @@ void bhSysCallFirstmovie()
     
     njSetBackColor(0x00000000, 0x00000000, 0x00000000);
     
-    switch (Adv_BioCvTitle()) 
+    int rc = Adv_BioCvTitle();
+#ifdef RECVX_PC_PORT
+    static int last_rc = -999;
+    if (rc != last_rc) {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("game", "bhSysCallFirstmovie: Adv_BioCvTitle returned %d", rc);
+        last_rc = rc;
+    }
+#endif
+    switch (rc)
     {
     case 1:
         sys->ss_flg |= 0x400200;

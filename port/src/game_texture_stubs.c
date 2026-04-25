@@ -528,6 +528,12 @@ extern SYS_WORK* sys;
  * its deps compile, delete this function and the real typewriter text
  * scroll will play before the FMV as on PS2. */
 void ControlTypewriter(void) {
+    static int call_count = 0;
+    call_count++;
+    if (call_count <= 3 || (call_count % 60) == 0) {
+        RX_LOG("game", "ControlTypewriter called (count=%d, tk_flg=0x%08x, ts_flg=0x%08x, typ_md0=%d)",
+               call_count, sys->tk_flg, sys->ts_flg, *(int*)&sys->typ_md0);
+    }
     static int fired = 0;
     if (fired) return;
     fired = 1;
