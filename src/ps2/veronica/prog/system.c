@@ -411,14 +411,40 @@ void bhSysCallTitle()
     sys->tk_flg = 0x300020; 
 } 
 
-// 100% matching! 
-void bhSysCallOpening() 
-{ 
-    njFogDisable(); 
-    
-    njSetBackColor(0x00000000, 0x00000000, 0x00000000);  
-    
-    bhFirstGameStart(); 
+// 100% matching!
+void bhSysCallOpening()
+{
+    njFogDisable();
+
+    njSetBackColor(0x00000000, 0x00000000, 0x00000000);
+
+    bhFirstGameStart();
+
+#ifdef RECVX_PC_PORT
+    /* PC port: bhFirstGameStart sets ts_flg = 0x3DF80 which suspends the
+     * Movie task (bit 12). On real PS2 the typewriter scroll in bup_00.c
+     * runs first and eventually unsuspends Movie via cb_flg | 0x4000000
+     * → bhSysCallEvent's `ts_flg &= ~0x1000` path. Until that chain is
+     * compiled, kick MV_000.PSS directly so the user sees the post-NEW-GAME
+     * cinematic instead of a black screen. */
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        static int mv000_kicked = 0;
+        if (!mv000_kicked) {
+            mv000_kicked = 1;
+            sys->mvi_no  = 0;
+            sys->mvi_tp  = 0;
+            sys->mvi_md  = 0;
+            sys->mvi_tsb = sys->ts_flg;       /* restored at mvi_md=6 */
+            sys->mvi_spb = sys->sp_flg;
+            sys->ts_flg &= ~0x1000;           /* unsuspend Movie task */
+            sys->ts_flg |= 0x7CF00;            /* match real Event-task setup */
+            recvx_log("game",
+                "bhSysCallOpening port-shortcut: kicked MV_000 (tk=0x%08x ts=0x%08x)",
+                sys->tk_flg, sys->ts_flg);
+        }
+    }
+#endif
 } 
 
 // 100% matching! 
