@@ -201,6 +201,11 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
     glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
 
     glDisable(GL_DEPTH_TEST);
+    /* recvx_gfx_begin_2d enabled GL_SRC_ALPHA blending. FMV frames from
+     * sws_scale() YUV→RGBA can have alpha=0, making the textured quad
+     * invisible against the black-cleared backbuffer. The FMV is opaque
+     * by definition — disable blend so the texture writes through. */
+    glDisable(GL_BLEND);
     glEnable(GL_TEXTURE_2D);
     glColor4f(1, 1, 1, 1);
 
