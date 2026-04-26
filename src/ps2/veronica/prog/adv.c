@@ -689,19 +689,36 @@ void AdvEasyDrawWindow(NJS_POINT3* tlp, NJS_POINT3* brp, unsigned int WindowColo
 
 // 100% matching!
 void AdvEasyDrawTexture(int TexNo, unsigned int BaseColor, QUAD* qp, float PosZ, int TransFlag)
-{ 
-    if (TransFlag != 0) 
-    { 
-        ((TIM2_PICTUREHEADER_EX*)Ps2_current_texmemlist->texinfo.texsurface.pSurface)->ClutChange |= 0x8000; 
+{
+#ifdef RECVX_PC_PORT
+    /* The PS2 game flips a CLUT-changed bit on the *previous* texture's
+     * TIM2 header before switching to TexNo. That works because every
+     * draw on real hardware leaves Ps2_current_texmemlist pointing at the
+     * last bound texture, so it's never NULL in normal play. On our
+     * port the global is NULL the very first time AdvEasyDrawTexture
+     * runs (boot path doesn't pre-bind anything). The ClutChange marker
+     * is meaningless to our pre-decoded RGBA pipeline anyway, so just
+     * skip the write when the chain isn't valid. */
+    if (TransFlag != 0
+        && Ps2_current_texmemlist
+        && Ps2_current_texmemlist->texinfo.texsurface.pSurface)
+    {
+        ((TIM2_PICTUREHEADER_EX*)Ps2_current_texmemlist->texinfo.texsurface.pSurface)->ClutChange |= 0x8000;
     }
-    
-    njQuadTextureStart(TransFlag); 
-    
-    njSetQuadTexture(TexNo, BaseColor); 
-    
-    njDrawQuadTexture(qp, PosZ); 
-    
-    njQuadTextureEnd(); 
+#else
+    if (TransFlag != 0)
+    {
+        ((TIM2_PICTUREHEADER_EX*)Ps2_current_texmemlist->texinfo.texsurface.pSurface)->ClutChange |= 0x8000;
+    }
+#endif
+
+    njQuadTextureStart(TransFlag);
+
+    njSetQuadTexture(TexNo, BaseColor);
+
+    njDrawQuadTexture(qp, PosZ);
+
+    njQuadTextureEnd();
 } 
 
 // 100% matching!
