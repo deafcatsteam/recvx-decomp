@@ -278,6 +278,18 @@ int PlayMovieMain(void) {
     if (g_movie_done)   return 1;
     if (!g_movie_fmv)   return 1;
 
+    /* PC port: Start press skips the movie. Returning 1 ends mode 9 of
+     * Adv_CapcomLogo and case 4 of bhSysCallMovie just like a natural
+     * EOF would. */
+    extern uint32_t recvx_input_buttons(void);
+    if (recvx_input_buttons() & 0x800u) {
+        RX_LOG("fmv", "PlayMovieMain: Start-press skip");
+        recvx_fmv_close(g_movie_fmv);
+        g_movie_fmv  = NULL;
+        g_movie_done = 1;
+        return 1;
+    }
+
     /* Wall-clock-paced frame drain. Advance until FMV PTS meets or
      * exceeds elapsed time, so dropped/slow frames still stay roughly
      * in sync instead of slipping further behind each tick. */

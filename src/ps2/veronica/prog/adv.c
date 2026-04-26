@@ -929,26 +929,12 @@ int CheckConnectVmDrive(int param, int SlotNo) // first parameter is not present
 
     pMcDrive = CreateMemoryCard(&McDrive);
 
-#ifdef RECVX_PC_PORT
-    {
-        int t = GetMcSelectPortType(pMcDrive, SlotNo - 1);
-        extern void recvx_log(const char* tag, const char* fmt, ...);
-        recvx_log("game", "CheckConnectVmDrive: pMc=%p slot=%d port=%d type=%d",
-                  pMcDrive, SlotNo, SlotNo - 1, t);
-        if (t == 2)
-        {
-            return ((SlotNo % 6) - 1) + ((SlotNo / 6) * 2);
-        }
-        return -1;
-    }
-#else
     if (GetMcSelectPortType(pMcDrive, SlotNo - 1) == 2)
     {
         return ((SlotNo % 6) - 1) + ((SlotNo / 6) * 2);
     }
 
     return -1;
-#endif
 } 
 
 // 100% matching!
@@ -960,13 +946,6 @@ int FindFirstVmDrive()
     for (j = 1; ; )
     {
         DriveNo = CheckConnectVmDrive(0, j);
-
-#ifdef RECVX_PC_PORT
-        {
-            extern void recvx_log(const char* tag, const char* fmt, ...);
-            recvx_log("game", "FindFirstVmDrive: CheckConnectVmDrive(0,%d)=%d", j, DriveNo);
-        }
-#endif
 
         if (DriveNo >= 0)
         {

@@ -201,49 +201,23 @@ static void gl_draw_rgba(const void* pixels, int w, int h) {
     glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
 
     glDisable(GL_DEPTH_TEST);
+    /* recvx_gfx_begin_2d enabled GL_SRC_ALPHA blending. FMV frames from
+     * sws_scale() YUV→RGBA can have alpha=0, making the textured quad
+     * invisible against the black-cleared backbuffer. The FMV is opaque
+     * by definition — disable blend so the texture writes through. */
     glDisable(GL_BLEND);
-    glDisable(GL_ALPHA_TEST);
-    glDisable(GL_SCISSOR_TEST);
-    glDisable(GL_STENCIL_TEST);
-
-    /* DIAGNOSTIC: draw solid red on screen LEFT half (untextured), FMV
-     * textured quad in RIGHT half only. Symptoms:
-     *   - red on left + FMV on right → fixed
-     *   - red on left + black on right → texture upload/sampling is the bug
-     *   - all black → rendering pipeline broken (state corruption?) */
-    glDisable(GL_TEXTURE_2D);
-    glColor4f(1.0f, 0.0f, 0.0f, 1.0f);
-    glBegin(GL_QUADS);
-    glVertex2f(-1.0f, -1.0f);
-    glVertex2f( 0.0f, -1.0f);
-    glVertex2f( 0.0f,  1.0f);
-    glVertex2f(-1.0f,  1.0f);
-    glEnd();
-
-    /* Modulate texture by white so RGB passes through unchanged. */
     glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
     glEnable(GL_TEXTURE_2D);
     glColor4f(1, 1, 1, 1);
 
     glBegin(GL_QUADS);
-    glTexCoord2f(0, 1); glVertex2f(0, -1);     /* right-half only */
-    glTexCoord2f(1, 1); glVertex2f(1, -1);
-    glTexCoord2f(1, 0); glVertex2f(1,  1);
-    glTexCoord2f(0, 0); glVertex2f(0,  1);
+    glTexCoord2f(0, 1); glVertex2f(-1, -1);
+    glTexCoord2f(1, 1); glVertex2f( 1, -1);
+    glTexCoord2f(1, 0); glVertex2f( 1,  1);
+    glTexCoord2f(0, 0); glVertex2f(-1,  1);
     glEnd();
 
     glDisable(GL_TEXTURE_2D);
-
-    /* Catch GL errors from the upload/draw path, log once per occurrence
-     * (GL only reports one error code at a time per driver state). */
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        static GLenum last_err = GL_NO_ERROR;
-        if (err != last_err) {
-            RX_LOG("backend_gl", "gl_draw_rgba GL error 0x%04x", err);
-            last_err = err;
-        }
-    }
 }
 
 static void gl_audio_init(int sample_rate) {

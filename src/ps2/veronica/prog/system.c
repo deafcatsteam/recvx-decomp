@@ -1229,16 +1229,33 @@ void bhSysCallMovie()
         break;
     case 6:
         sys->bcl_ct = 1;
-        
+
         sys->gm_flg |= 0x8000;
-        
+
         if ((sys->st_flg & 0x2))
         {
-            njFogEnable(); 
+            njFogEnable();
         }
-        
+
         sys->sp_flg = sys->mvi_spb;
         sys->ts_flg = sys->mvi_tsb;
+
+#ifdef RECVX_PC_PORT
+        /* PC port: after our kicked MV_000 finishes, the real PS2 path
+         * would let the typewriter/event scripts unsuspend Game and start
+         * gameplay. Until that chain is compiled, clear the suspends on
+         * Game/Event/Map/Typewriter/Option so bhSysCallGame can run and
+         * we at least try to render something in-game. mvi_md advances
+         * past 6 so this hook only fires once per kicked movie. */
+        {
+            extern void recvx_log(const char* tag, const char* fmt, ...);
+            sys->ts_flg = 0;
+            sys->mvi_md = 7;
+            recvx_log("game",
+                "bhSysCallMovie case 6 done — port-unsuspending all tasks (tk=0x%08x ts=0x%08x)",
+                sys->tk_flg, sys->ts_flg);
+        }
+#endif
         break;
     }
 }
