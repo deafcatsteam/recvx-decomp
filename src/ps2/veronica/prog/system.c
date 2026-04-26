@@ -1114,7 +1114,7 @@ void bhSysCallMovie()
             sys->mvi_flg = 0;
         }
         
-        sys->memp = (unsigned char*)(((int)sys->memp + 63) & ~0x3F);
+        sys->memp = (unsigned char*)(((uintptr_t)sys->memp + 63) & ~(uintptr_t)0x3F);
         sys->mvi_memp = sys->memp;
         
         sys->mvi_md++;
@@ -1379,8 +1379,8 @@ void bhSysCallMonitor()
         switch (sys->mn_md1) 
         {
         case 0:
-            sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
-            
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
+
             sys->sdm_flg = 0xE;
             
             if (!(sys->ss_flg & 0x400000)) 
@@ -1432,7 +1432,7 @@ void bhSysCallMonitor()
         case 3:
             if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, 1) != 0)) 
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->sys_partid, 1, sys->memp);
                 
@@ -1470,7 +1470,7 @@ void bhSysCallMonitor()
         case 6:
             if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, sys->ply_id + 10 + (sys->costume * 4)) != 0)) 
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->sys_partid, sys->ply_id + 10 + (sys->costume * 4), sys->memp);
                 
@@ -1490,7 +1490,7 @@ void bhSysCallMonitor()
         case 8:
             if (GetInsideFileSize(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20)) != 0) 
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20), sys->memp);
                 
@@ -1620,7 +1620,7 @@ void bhSysCallMonitor()
         case 0:
             if ((GetReadFileStatus() != 1) && (GetInsideFileSize(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20)) != 0)) 
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20), sys->memp);
                 
@@ -1680,8 +1680,8 @@ void bhSysCallMonitor()
                     {
                         bhInitReadRDT();
                         
-                        sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64); 
-                        sys->rdtp = (unsigned char*)ALIGN_DOWN((int)sys->endp - sz, 64); 
+                        sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64); 
+                        sys->rdtp = (unsigned char*)ALIGN_DOWN((uintptr_t)sys->endp - sz, (uintptr_t)64);
                         
                         RequestReadIsoFile(sys->mes, sys->rdtp);
                         
@@ -1812,7 +1812,7 @@ void bhSysCallMonitor()
             case 4:
                 if ((GetReadFileStatus() != 1) && (GetInsideFileSize(sys->sys_partid, sys->ply_id + 10 + (sys->costume * 4)) != 0)) 
                 {
-                    sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                    sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                     
                     RequestReadInsideFile(sys->sys_partid, sys->ply_id + 10 + (sys->costume * 4), sys->memp);
                     
@@ -1840,7 +1840,7 @@ void bhSysCallMonitor()
                 
                 if (GetInsideFileSize(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20)) != 0) 
                 {
-                    sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                    sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                     
                     RequestReadInsideFile(sys->sys_partid, plp->wpnr_no + ((sys->ply_id * 30) + 20), sys->memp);
                     
@@ -2011,7 +2011,7 @@ void bhSysCallMonitor()
             {
                 sys->sbs_sp = sys->memp;
                 
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 if (rom->mdl.texP != NULL) 
                 {
@@ -2027,7 +2027,7 @@ void bhSysCallMonitor()
         case 1:
             if (GetInsideFileSize(sys->itm_partid, 145) != 0)
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->itm_partid, 145, sys->memp);
                 
@@ -2119,7 +2119,7 @@ void bhSysCallMonitor()
                 
                 if ((*(int*)datp & 0x80000000)) 
                 { 
-                    datp = (unsigned char*)ALIGN_UP((int)(datp + 4), 32); 
+                    datp = (unsigned char*)ALIGN_UP((uintptr_t)(datp + 4), (uintptr_t)32); 
                 } 
                 else 
                 { 
@@ -2143,8 +2143,8 @@ void bhSysCallMonitor()
             }
 
             sys->sbs_sp = sys->memp;
-            
-            sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
             
             if (rom->mdl.texP != NULL)
             {
@@ -2157,7 +2157,7 @@ void bhSysCallMonitor()
         case 1: 
             if (GetInsideFileSize(sys->sys_partid, 2) != 0) 
             {
-                sys->memp = (unsigned char*)ALIGN_UP((int)sys->memp, 64);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadInsideFile(sys->sys_partid, 2, sys->memp);
                 
