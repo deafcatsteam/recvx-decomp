@@ -19,6 +19,64 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <dbghelp.h>
+#pragma comment(lib, "dbghelp.lib")
+
+/* Crash handler — captures the offending RIP plus a 16-frame stack trace
+ * with symbol names so we can pinpoint where in the decomp/port the
+ * unhandled exception fired. Output goes to the same recvx_log stream the
+ * rest of the runtime log uses. */
+static LONG WINAPI crash_filter(EXCEPTION_POINTERS* ep) {
+    DWORD code = ep->ExceptionRecord->ExceptionCode;
+    void* addr = ep->ExceptionRecord->ExceptionAddress;
+    RX_LOG("crash", "*** unhandled exception 0x%08lx at %p ***", code, addr);
+
+    if (code == EXCEPTION_ACCESS_VIOLATION && ep->ExceptionRecord->NumberParameters >= 2) {
+        ULONG_PTR op = ep->ExceptionRecord->ExceptionInformation[0];
+        ULONG_PTR badaddr = ep->ExceptionRecord->ExceptionInformation[1];
+        RX_LOG("crash", "  access violation: %s 0x%p",
+               op == 0 ? "read"  :
+               op == 1 ? "write" :
+               op == 8 ? "exec"  : "?", (void*)badaddr);
+    }
+
+    HANDLE proc = GetCurrentProcess();
+    SymInitialize(proc, NULL, TRUE);
+    SymSetOptions(SYMOPT_LOAD_LINES | SYMOPT_DEFERRED_LOADS);
+
+    void* frames[16];
+    USHORT n = CaptureStackBackTrace(0, 16, frames, NULL);
+    char buf[sizeof(SYMBOL_INFO) + 256];
+    SYMBOL_INFO* sym = (SYMBOL_INFO*)buf;
+    sym->SizeOfStruct = sizeof(SYMBOL_INFO);
+    sym->MaxNameLen   = 255;
+    IMAGEHLP_LINE64 line; line.SizeOfStruct = sizeof(IMAGEHLP_LINE64);
+
+    for (USHORT i = 0; i < n; ++i) {
+        DWORD64 disp = 0;
+        const char* name = "?";
+        if (SymFromAddr(proc, (DWORD64)frames[i], &disp, sym)) name = sym->Name;
+        DWORD line_disp = 0;
+        if (SymGetLineFromAddr64(proc, (DWORD64)frames[i], &line_disp, &line)) {
+            RX_LOG("crash", "  [%2d] %p %s+0x%llx (%s:%lu)",
+                   i, frames[i], name, (unsigned long long)disp,
+                   line.FileName ? line.FileName : "?", line.LineNumber);
+        } else {
+            RX_LOG("crash", "  [%2d] %p %s+0x%llx",
+                   i, frames[i], name, (unsigned long long)disp);
+        }
+    }
+    SymCleanup(proc);
+
+    /* fflush stdout/stderr so the runtime.log captures the crash report. */
+    fflush(stdout);
+    fflush(stderr);
+    return EXCEPTION_EXECUTE_HANDLER;  /* terminate, don't pop the WER dialog */
+}
+#endif
+
 /* From the decomp — declared here to avoid pulling KATANA headers into
  * the port target. Signatures match ninjapad.h. */
 extern void         njUserInit(void);
@@ -374,6 +432,9 @@ static int run_game_loop(const recvx_backend* backend) {
 }
 
 int main(int argc, char** argv) {
+#ifdef _WIN32
+    SetUnhandledExceptionFilter(crash_filter);
+#endif
     parse_args(argc, argv);
     RX_LOG("boot", "RECVX PC port — phase 5 scaffold");
     RX_LOG("boot", "ISO path: %s", g_iso_path);
