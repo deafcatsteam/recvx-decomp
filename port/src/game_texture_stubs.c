@@ -518,38 +518,9 @@ extern SYS_WORK* sys;
 
 /* bhSysCallTypewriter → ControlTypewriter → TypewriterMode[sys->typ_md0]()
  * on real PS2. TypewriterMode[] is defined in bup_00.c which we don't
- * compile yet, so on our port the typewriter task would run forever with
- * no visible effect. Instead we intercept at this entry point and
- * transition tk_flg directly to the Movie task with mvi_no=0 so the
- * game's bhSysCallMovie path plays MV_000.PSS next.
- *
- * Same pattern can be re-used later for any other intro step we need to
- * shortcut until the full decomp source chain is in. Once bup_00.c and
- * its deps compile, delete this function and the real typewriter text
- * scroll will play before the FMV as on PS2. */
+ * compile yet, so on our port we just stub this to a no-op. The link
+ * order requires *some* definition; bup_00.c will provide the real one
+ * once its dependency chain compiles. */
 void ControlTypewriter(void) {
-    static int call_count = 0;
-    call_count++;
-    if (call_count <= 3 || (call_count % 60) == 0) {
-        RX_LOG("game", "ControlTypewriter called (count=%d, tk_flg=0x%08x, ts_flg=0x%08x, typ_md0=%d)",
-               call_count, sys->tk_flg, sys->ts_flg, *(int*)&sys->typ_md0);
-    }
-    static int fired = 0;
-    if (fired) return;
-    fired = 1;
-
-    /* tk_flg bits (see main.c bhSysTaskJumpTab ordering):
-     *   0x0000_0040 = Pad       (index 6)
-     *   0x0000_1000 = Movie     (index 12)
-     *   0x0000_8000 = Typewriter (index 15) — clearing this stops re-entry
-     *   0x0010_0000 = Monitor     (always on)
-     *   0x0020_0000 = SndMonitor  (always on) */
-    sys->mvi_no = 0;                 /* MOVIE/MV_000.PSS */
-    sys->mvi_tp = 0;
-    sys->mvi_md = 0;                 /* bhSysCallMovie starts from case 0 */
-    sys->tk_flg = 0x00301040u;       /* Monitor + SndMonitor + Pad + Movie */
-
-    RX_LOG("game",
-           "ControlTypewriter shortcut: skipping text scroll, "
-           "triggering Movie task with mvi_no=0 (MV_000.PSS)");
+    /* Intentional no-op. */
 }
