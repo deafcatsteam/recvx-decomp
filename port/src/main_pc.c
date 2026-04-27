@@ -130,6 +130,7 @@ static int         g_play_movie    = -1;  /* >=0: open MOVIE/MV_NNN.PSS and play
 static bool        g_list_afs      = false;
 static int         g_dump_afs      = -1;  /* 0..6: extract every entry of AFS partition N */
 static const char* g_dump_afs_dir  = NULL; /* output dir for --dump-afs */
+static int         g_gallery       = -1;  /* 0..6: visual TIM2 viewer over partition N */
 
 /* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
  * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
@@ -177,6 +178,8 @@ static void parse_args(int argc, char** argv) {
             g_dump_afs = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--dump-afs-dir") == 0 && i + 1 < argc) {
             g_dump_afs_dir = argv[++i];
+        } else if (strcmp(argv[i], "--gallery") == 0 && i + 1 < argc) {
+            g_gallery = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
                    "                [--gamedata path\\to\\extracted\\dir]\n"
@@ -194,7 +197,9 @@ static void parse_args(int argc, char** argv) {
                    "  --list-afs    print TOC of every AFS partition (BGM1, VOICE1, ADV, ...)\n"
                    "  --dump-afs N  extract every entry of partition N to disk:\n"
                    "                  0=BGM1 1=VOICE1 2=MULTSPQ1 3=ADV 4=ITEM1 5=MRY 6=SYSTEM\n"
-                   "  --dump-afs-dir  output dir for --dump-afs (default: ./afs-dump)\n");
+                   "  --dump-afs-dir  output dir for --dump-afs (default: ./afs-dump)\n"
+                   "  --gallery N   open visual TIM2 viewer over AFS partition N\n"
+                   "                arrows / Z-X keys / mouse-click side arrows to navigate\n");
             exit(0);
         }
     }
@@ -614,9 +619,12 @@ int main(int argc, char** argv) {
     const recvx_backend* backend = recvx_backend_gl();
     if (!backend) backend = recvx_backend_null();
 
+    /* 1280x720 default — game runs at logical 640x480 internally and is
+     * stretched horizontally by glViewport into the 16:9 backbuffer.
+     * Gallery mode draws at native 1280x720 to match bg_viewer.png. */
     recvx_backend_config cfg = {
-        .width = 640,
-        .height = 480,
+        .width = 1280,
+        .height = 720,
         .fullscreen = false,
         .vsync = true,
         .window_title = "Resident Evil: Code Veronica X (PC port)",
@@ -635,6 +643,10 @@ int main(int argc, char** argv) {
     int rc;
     if (g_run_game) {
         rc = run_game_loop(backend);
+    } else if (g_gallery >= 0) {
+        extern int run_gallery(const recvx_backend* backend, int part,
+                               const char* gamedata_dir);
+        rc = run_gallery(backend, g_gallery, g_gamedata_path);
     } else {
         int mid = (g_play_movie >= 0) ? g_play_movie : 0;
         rc = run_fmv_demo(backend, iso, mid);

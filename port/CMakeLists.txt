@@ -43,6 +43,8 @@ set(RECVX_GAME_INC   ${RECVX_INCLUDE}/ps2/veronica/prog)
 # SDL2 + FFmpeg are expected from vcpkg or system. Phase 0 makes them OPTIONAL
 # so the skeleton still configures on a bare machine.
 find_package(SDL2 CONFIG QUIET)
+find_package(SDL2_image CONFIG QUIET)
+find_package(SDL2_ttf CONFIG QUIET)
 find_package(OpenGL QUIET)
 
 # vcpkg FFMPEG port exposes these as components of a single CONFIG package.
@@ -172,7 +174,7 @@ endif()
 # Once Phase 1 lands we will swap in src/ps2/veronica/prog/*.c as a game lib
 # and replace the loop with njUserInit/njUserMain/njUserExit.
 # ----------------------------------------------------------------------------
-add_executable(recvx_pc src/main_pc.c)
+add_executable(recvx_pc src/main_pc.c src/gallery.c)
 target_link_libraries(recvx_pc PRIVATE
     recvx_backend
     recvx_iso
@@ -184,6 +186,14 @@ target_link_libraries(recvx_pc PRIVATE
 target_include_directories(recvx_pc PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+if(SDL2_image_FOUND)
+    target_link_libraries(recvx_pc PRIVATE $<IF:$<TARGET_EXISTS:SDL2_image::SDL2_image>,SDL2_image::SDL2_image,SDL2_image::SDL2_image-static>)
+    target_compile_definitions(recvx_pc PRIVATE RECVX_HAVE_SDL2_IMAGE=1)
+endif()
+if(SDL2_ttf_FOUND)
+    target_link_libraries(recvx_pc PRIVATE $<IF:$<TARGET_EXISTS:SDL2_ttf::SDL2_ttf>,SDL2_ttf::SDL2_ttf,SDL2_ttf::SDL2_ttf-static>)
+    target_compile_definitions(recvx_pc PRIVATE RECVX_HAVE_SDL2_TTF=1)
+endif()
 
 set_target_properties(recvx_pc PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}

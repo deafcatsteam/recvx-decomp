@@ -1,0 +1,495 @@
+/*
+ * gallery.c — visual TIM2 viewer over an AFS partition.
+ *
+ * Renders bg_viewer.png as a fixed UI background and each TIM2 entry of the
+ * selected partition centered in the blue display area, with the entry's
+ * "<partition>/NNNN" label rendered underneath in white using font.otf.
+ *
+ * Navigation:
+ *   ← / →           prev / next entry
+ *   Z (Cross)       next entry
+ *   X (Circle)      prev entry
+ *   ESC             quit
+ *   Mouse click     left half = prev, right half = next (rough hit boxes
+ *                   over the bg's painted arrows; tune later)
+ *
+ * Window: 1280x720, native — bg_viewer.png is exactly 1280x720 so no
+ * scaling. The blue display area, arrow click rects, and text strip are
+ * hardcoded percentages of the bg, defined as BG_* constants below.
+ *
+ * Skipped on non-TIM2 entries — partition listings include ADX, raw, etc.
+ * The entry counter advances over them but renders a placeholder label.
+ */
+
+#include "recvx_port.h"
+#include "recvx_afs.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#if defined(RECVX_HAVE_SDL2) && defined(RECVX_HAVE_GL)
+#include <SDL.h>
+#include <SDL_opengl.h>
+
+#ifdef RECVX_HAVE_SDL2_IMAGE
+#include <SDL_image.h>
+#endif
+
+#ifdef RECVX_HAVE_SDL2_TTF
+#include <SDL_ttf.h>
+#endif
+
+/* AFS partition filenames — must match main_pc.c's g_afs_filename order. */
+static const char* k_afs_filename[7] = {
+    "BGM1.AFS", "VOICE1.AFS", "MULTSPQ1.AFS", "ADV.AFS",
+    "ITEM1.AFS", "MRY.AFS", "SYSTEM.AFS"
+};
+
+/* Hardcoded layout in 1280x720 bg_viewer.png coordinates. Tune these once
+ * we have the asset on screen. */
+#define BG_W            1280
+#define BG_H             720
+/* Blue display rectangle — where the TIM2 texture renders. */
+#define BLUE_X           340
+#define BLUE_Y           315
+#define BLUE_W           830
+#define BLUE_H           305
+/* Painted arrows on the bg — clickable hit boxes. */
+#define ARROW_L_X        325
+#define ARROW_L_Y        240
+#define ARROW_W           60
+#define ARROW_H           50
+#define ARROW_R_X       1180
+#define ARROW_R_Y        240
+/* Caption strip beneath the blue rectangle. */
+#define LABEL_X          345
+#define LABEL_Y          635
+#define LABEL_W          820
+#define LABEL_H           45
+
+/* TIM2 picture header — local copy so gallery doesn't pull in PS2 SDK
+ * headers. Layout matches Sony's TIM2 1.0 spec. */
+#pragma pack(push, 1)
+typedef struct {
+    uint32_t TotalSize;
+    uint32_t ClutSize;
+    uint32_t ImageSize;
+    uint16_t HeaderSize;
+    uint16_t ImageColors;
+    uint8_t  ImageType;
+    uint8_t  MipMapTextures;
+    uint8_t  ClutType;
+    uint8_t  ImageType2;
+    uint16_t ImageWidth;
+    uint16_t ImageHeight;
+    uint64_t GsTex0;
+    uint64_t GsTex1;
+    uint32_t GsRegs;
+    uint32_t GsTexClut;
+} tim2_pic_hdr;
+#pragma pack(pop)
+
+#define TIM2_MAX_W   1024
+#define TIM2_MAX_H   1024
+
+static uint8_t g_tim2_scratch[TIM2_MAX_W * TIM2_MAX_H * 4];
+
+static inline uint8_t alpha_ps2_to_pc(uint8_t a) {
+    int x = (int)a * 2;
+    return (uint8_t)(x > 255 ? 255 : x);
+}
+static inline uint8_t idx_csm1_swap(uint8_t i) {
+    return (uint8_t)((i & 0xE7u) | ((i & 0x08u) << 1) | ((i & 0x10u) >> 1));
+}
+
+/* Decode a TIM2 blob into RGBA8. Tries both EX-headered (128B prefix
+ * before "TIM2" magic at +0) and bare layouts. Returns 1 on success. */
+static int gallery_tim2_decode(const void* blob, uint32_t blob_size,
+                               int* out_w, int* out_h, uint8_t** out_pixels) {
+    const uint8_t* pp = (const uint8_t*)blob;
+    if (!pp || blob_size < 0x40) return 0;
+
+    /* Magic at offset 0 means raw TIM2; not the in-game EX layout. */
+    int hdr_off = 0;
+    if (pp[0] != 'T' || pp[1] != 'I' || pp[2] != 'M' || pp[3] != '2') {
+        /* Try EX header — game blobs prepend 128B incl. "TIM2" */
+        if (blob_size > 128 && pp[0] == 'T' && pp[1] == 'I' &&
+            pp[2] == 'M' && pp[3] == '2') {
+            hdr_off = 128;
+        } else {
+            return 0;
+        }
+    }
+    /* Picture header sits at hdr_off + 16 (after the TIM2 file header)
+     * for the bare format, or at 128 directly for EX. */
+    if (hdr_off == 0) {
+        /* Bare TIM2: 16-byte file hdr (magic+version+pic_count+pad), then pic hdr */
+        hdr_off = 16;
+    }
+    const tim2_pic_hdr* ph = (const tim2_pic_hdr*)(pp + hdr_off);
+    int w = (int)ph->ImageWidth;
+    int h = (int)ph->ImageHeight;
+    if (w <= 0 || h <= 0 || w > TIM2_MAX_W || h > TIM2_MAX_H) return 0;
+
+    const uint8_t* img  = pp + hdr_off + ph->HeaderSize;
+    const uint8_t* clut = img + ph->ImageSize;
+
+    /* Bounds check against blob end. */
+    if ((size_t)(clut + ph->ClutSize - pp) > (size_t)blob_size) return 0;
+
+    int image_type    = ph->ImageType;
+    int csm1_swizzled = (ph->ClutType & 0x80) == 0;
+    int clut_fmt      = ph->ClutType & 0x07;
+    uint8_t* dst = g_tim2_scratch;
+
+    if (image_type == 3) {
+        for (int i = 0; i < w * h; ++i) {
+            dst[i*4+0] = img[i*4+0];
+            dst[i*4+1] = img[i*4+1];
+            dst[i*4+2] = img[i*4+2];
+            dst[i*4+3] = alpha_ps2_to_pc(img[i*4+3]);
+        }
+    } else if (image_type == 5) {
+        if (clut_fmt != 3) return 0;
+        for (int i = 0; i < w * h; ++i) {
+            uint8_t idx = img[i];
+            if (csm1_swizzled) idx = idx_csm1_swap(idx);
+            const uint8_t* pal = clut + idx * 4;
+            dst[i*4+0] = pal[0]; dst[i*4+1] = pal[1];
+            dst[i*4+2] = pal[2]; dst[i*4+3] = alpha_ps2_to_pc(pal[3]);
+        }
+    } else if (image_type == 4) {
+        if (clut_fmt != 3) return 0;
+        int swizzle_4bpp = csm1_swizzled && (ph->ClutSize >= 128);
+        for (int i = 0; i < w * h; ++i) {
+            uint8_t byte   = img[i >> 1];
+            uint8_t nibble = (i & 1) ? (uint8_t)(byte >> 4)
+                                     : (uint8_t)(byte & 0x0F);
+            if (swizzle_4bpp) nibble = idx_csm1_swap(nibble);
+            const uint8_t* pal = clut + nibble * 4;
+            dst[i*4+0] = pal[0]; dst[i*4+1] = pal[1];
+            dst[i*4+2] = pal[2]; dst[i*4+3] = alpha_ps2_to_pc(pal[3]);
+        }
+    } else {
+        return 0;
+    }
+
+    *out_w = w; *out_h = h; *out_pixels = dst;
+    return 1;
+}
+
+/* Upload an RGBA buffer as a GL texture, returning the texture name.
+ * Caller frees with glDeleteTextures. */
+static GLuint gallery_make_tex(const void* rgba, int w, int h) {
+    GLuint id = 0;
+    glGenTextures(1, &id);
+    glBindTexture(GL_TEXTURE_2D, id);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+    return id;
+}
+
+#ifdef RECVX_HAVE_SDL2_IMAGE
+static GLuint gallery_load_png(const char* path, int* out_w, int* out_h) {
+    SDL_Surface* s = IMG_Load(path);
+    if (!s) {
+        RX_LOG("gallery", "IMG_Load(%s) failed: %s", path, IMG_GetError());
+        return 0;
+    }
+    SDL_Surface* rgba = SDL_ConvertSurfaceFormat(s, SDL_PIXELFORMAT_ABGR8888, 0);
+    SDL_FreeSurface(s);
+    if (!rgba) return 0;
+    GLuint id = gallery_make_tex(rgba->pixels, rgba->w, rgba->h);
+    *out_w = rgba->w; *out_h = rgba->h;
+    SDL_FreeSurface(rgba);
+    return id;
+}
+#endif
+
+#ifdef RECVX_HAVE_SDL2_TTF
+static TTF_Font* gallery_load_font(const char* path, int pt_size) {
+    TTF_Font* f = TTF_OpenFont(path, pt_size);
+    if (!f) RX_LOG("gallery", "TTF_OpenFont(%s) failed: %s", path, TTF_GetError());
+    return f;
+}
+
+/* Render an UTF-8 string to a fresh GL texture (white text, transparent
+ * background). Caller frees the GL texture. Returns 0 on failure. */
+static GLuint gallery_text_to_tex(TTF_Font* f, const char* text,
+                                  int* out_w, int* out_h) {
+    if (!f || !text) return 0;
+    SDL_Color white = { 255, 255, 255, 255 };
+    SDL_Surface* surf = TTF_RenderUTF8_Blended(f, text, white);
+    if (!surf) { RX_LOG("gallery", "TTF_Render: %s", TTF_GetError()); return 0; }
+    SDL_Surface* rgba = SDL_ConvertSurfaceFormat(surf, SDL_PIXELFORMAT_ABGR8888, 0);
+    SDL_FreeSurface(surf);
+    if (!rgba) return 0;
+    GLuint id = gallery_make_tex(rgba->pixels, rgba->w, rgba->h);
+    *out_w = rgba->w; *out_h = rgba->h;
+    SDL_FreeSurface(rgba);
+    return id;
+}
+#endif
+
+/* Draw a textured quad at (x,y) with size (w,h), multiplied by `tint`. */
+static void gallery_draw_quad(GLuint tex, int x, int y, int w, int h,
+                              float r, float g, float b, float a) {
+    glBindTexture(GL_TEXTURE_2D, tex);
+    glColor4f(r, g, b, a);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0, 0); glVertex2f((float)x,         (float)y);
+    glTexCoord2f(1, 0); glVertex2f((float)(x + w),   (float)y);
+    glTexCoord2f(1, 1); glVertex2f((float)(x + w),   (float)(y + h));
+    glTexCoord2f(0, 1); glVertex2f((float)x,         (float)(y + h));
+    glEnd();
+}
+
+int run_gallery(const recvx_backend* backend, int part,
+                const char* gamedata_dir) {
+    if (part < 0 || part > 6) {
+        fprintf(stderr, "--gallery: partition must be 0..6\n");
+        return 1;
+    }
+
+#ifdef RECVX_HAVE_SDL2_IMAGE
+    if (IMG_Init(IMG_INIT_PNG) == 0) {
+        RX_LOG("gallery", "IMG_Init failed: %s", IMG_GetError());
+    }
+#endif
+#ifdef RECVX_HAVE_SDL2_TTF
+    if (TTF_Init() != 0) {
+        RX_LOG("gallery", "TTF_Init failed: %s", TTF_GetError());
+    }
+#endif
+
+    /* Resolve asset paths — try several CWDs the user might launch from:
+     *   ./build/Debug/recvx_pc.exe   (cwd = port/)
+     *   ./recvx_pc.exe               (cwd = port/build/Debug/)
+     *   ./port/build/...             (cwd = repo root) */
+    static const char* k_bg_paths[] = {
+        "src/custom/bg_viewer.png",
+        "../../src/custom/bg_viewer.png",
+        "port/src/custom/bg_viewer.png",
+        "../port/src/custom/bg_viewer.png",
+        NULL
+    };
+    static const char* k_font_paths[] = {
+        "src/custom/font.otf",
+        "../../src/custom/font.otf",
+        "port/src/custom/font.otf",
+        "../port/src/custom/font.otf",
+        NULL
+    };
+
+    /* --- Load assets --- */
+    int bg_w = 0, bg_h = 0;
+    GLuint bg_tex = 0;
+#ifdef RECVX_HAVE_SDL2_IMAGE
+    for (int i = 0; k_bg_paths[i] && !bg_tex; ++i) {
+        bg_tex = gallery_load_png(k_bg_paths[i], &bg_w, &bg_h);
+        if (bg_tex) RX_LOG("gallery", "bg loaded from %s (%dx%d)",
+                           k_bg_paths[i], bg_w, bg_h);
+    }
+#endif
+    if (!bg_tex) {
+        RX_LOG("gallery", "WARN: bg_viewer.png not loaded — running plain");
+    }
+
+#ifdef RECVX_HAVE_SDL2_TTF
+    TTF_Font* font = NULL;
+    for (int i = 0; k_font_paths[i] && !font; ++i) {
+        font = gallery_load_font(k_font_paths[i], 22);
+        if (font) RX_LOG("gallery", "font loaded from %s", k_font_paths[i]);
+    }
+#else
+    void* font = NULL;
+#endif
+
+    /* --- Open AFS partition --- */
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", gamedata_dir, k_afs_filename[part]);
+    recvx_afs_t* afs = recvx_afs_open(path);
+    if (!afs) {
+        fprintf(stderr, "gallery: could not open %s\n", path);
+        return 1;
+    }
+    unsigned n = recvx_afs_count(afs);
+    RX_LOG("gallery", "%s: %u entries — entering viewer", k_afs_filename[part], n);
+
+    /* --- Decode every entry once into a per-entry GL texture cache.
+     * Lazy might be safer for huge partitions (BGM has 121 ADX entries
+     * none of which decode anyway), but the upfront cost is small. */
+    GLuint* tex   = (GLuint*)calloc(n, sizeof(GLuint));
+    int*    tex_w = (int*)   calloc(n, sizeof(int));
+    int*    tex_h = (int*)   calloc(n, sizeof(int));
+    int decoded = 0;
+    for (unsigned i = 0; i < n; ++i) {
+        uint32_t sz = recvx_afs_entry_size(afs, i);
+        if (sz < 32) continue;
+        uint8_t* buf = (uint8_t*)malloc(sz);
+        if (!buf) continue;
+        uint32_t got = recvx_afs_read(afs, i, buf);
+        if (got == sz) {
+            int w = 0, h = 0;
+            uint8_t* pix = NULL;
+            if (gallery_tim2_decode(buf, sz, &w, &h, &pix)) {
+                tex[i]   = gallery_make_tex(pix, w, h);
+                tex_w[i] = w;
+                tex_h[i] = h;
+                decoded++;
+            }
+        }
+        free(buf);
+    }
+    RX_LOG("gallery", "decoded %d/%u TIM2 textures", decoded, n);
+
+    /* --- Find first non-empty entry to start at. */
+    unsigned cur = 0;
+    while (cur < n && tex[cur] == 0) cur++;
+    if (cur == n) {
+        RX_LOG("gallery", "no decodable TIM2 textures in this partition");
+    }
+
+    /* --- Render loop --- */
+    int quit = 0;
+    while (backend->pump_events() && !quit) {
+        /* Poll SDL directly for arrow keys + mouse — backend->pump_events
+         * has already drained the queue but didn't expose these. We're
+         * a one-off mode so a second poll loop is fine. */
+        SDL_Event ev;
+        while (SDL_PollEvent(&ev)) {
+            if (ev.type == SDL_QUIT) quit = 1;
+            if (ev.type == SDL_KEYDOWN) {
+                SDL_Keycode k = ev.key.keysym.sym;
+                if (k == SDLK_ESCAPE) quit = 1;
+                if (k == SDLK_LEFT  || k == SDLK_x) {
+                    do {
+                        if (cur == 0) cur = n - 1; else cur--;
+                    } while (n > 0 && tex[cur] == 0 && cur != 0);
+                }
+                if (k == SDLK_RIGHT || k == SDLK_z) {
+                    do {
+                        cur = (cur + 1) % n;
+                    } while (n > 0 && tex[cur] == 0 && cur != 0);
+                }
+            }
+            if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_LEFT) {
+                /* Map window coords (might be window-resized) back to
+                 * 1280x720 logical via current viewport. SDL gives client
+                 * pixels which == backbuffer pixels for our default. */
+                int mx = ev.button.x;
+                if (mx < BG_W / 2) {
+                    do { if (cur == 0) cur = n - 1; else cur--; }
+                    while (n > 0 && tex[cur] == 0 && cur != 0);
+                } else {
+                    do { cur = (cur + 1) % n; }
+                    while (n > 0 && tex[cur] == 0 && cur != 0);
+                }
+            }
+        }
+
+        backend->begin_frame();
+
+        /* 1280x720 ortho — top-left origin so PNG/text coords are screen
+         * pixels. Z range -1..1 covers our flat 2D draws. */
+        glMatrixMode(GL_PROJECTION); glLoadIdentity();
+        glOrtho(0.0, (double)BG_W, (double)BG_H, 0.0, -1.0, 1.0);
+        glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
+
+        glDisable(GL_DEPTH_TEST);
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glEnable(GL_TEXTURE_2D);
+        glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+
+        /* --- Background --- */
+        if (bg_tex) {
+            gallery_draw_quad(bg_tex, 0, 0, BG_W, BG_H, 1, 1, 1, 1);
+        } else {
+            /* Solid blue field as fallback. */
+            glDisable(GL_TEXTURE_2D);
+            glColor4f(0.07f, 0.10f, 0.30f, 1.0f);
+            glBegin(GL_QUADS);
+            glVertex2f(0, 0); glVertex2f(BG_W, 0);
+            glVertex2f(BG_W, BG_H); glVertex2f(0, BG_H);
+            glEnd();
+            glEnable(GL_TEXTURE_2D);
+        }
+
+        /* --- Texture in blue area, fit-aspect --- */
+        if (cur < n && tex[cur]) {
+            int tw = tex_w[cur], th = tex_h[cur];
+            float sx = (float)BLUE_W / (float)tw;
+            float sy = (float)BLUE_H / (float)th;
+            float s  = sx < sy ? sx : sy;
+            int rw = (int)(tw * s);
+            int rh = (int)(th * s);
+            int rx = BLUE_X + (BLUE_W - rw) / 2;
+            int ry = BLUE_Y + (BLUE_H - rh) / 2;
+            gallery_draw_quad(tex[cur], rx, ry, rw, rh, 1, 1, 1, 1);
+        }
+
+        /* --- Caption --- */
+#ifdef RECVX_HAVE_SDL2_TTF
+        if (font) {
+            char caption[256];
+            uint32_t entry_size = (cur < n) ? recvx_afs_entry_size(afs, cur) : 0;
+            if (cur < n && tex[cur]) {
+                snprintf(caption, sizeof caption, "%s / %04u   %dx%d   %u B",
+                         k_afs_filename[part], cur,
+                         tex_w[cur], tex_h[cur], entry_size);
+            } else if (cur < n) {
+                snprintf(caption, sizeof caption, "%s / %04u   (not a TIM2)   %u B",
+                         k_afs_filename[part], cur, entry_size);
+            } else {
+                snprintf(caption, sizeof caption, "(empty)");
+            }
+            int tw = 0, th = 0;
+            GLuint t = gallery_text_to_tex(font, caption, &tw, &th);
+            if (t) {
+                /* Center in the label strip, vertical-center too. */
+                int rx = LABEL_X + (LABEL_W - tw) / 2;
+                int ry = LABEL_Y + (LABEL_H - th) / 2;
+                gallery_draw_quad(t, rx, ry, tw, th, 1, 1, 1, 1);
+                glDeleteTextures(1, &t);
+            }
+        }
+#endif
+
+        glDisable(GL_TEXTURE_2D);
+        glDisable(GL_BLEND);
+        backend->end_frame();
+    }
+
+    /* --- Cleanup --- */
+    for (unsigned i = 0; i < n; ++i) {
+        if (tex[i]) glDeleteTextures(1, &tex[i]);
+    }
+    free(tex); free(tex_w); free(tex_h);
+    if (bg_tex) glDeleteTextures(1, &bg_tex);
+#ifdef RECVX_HAVE_SDL2_TTF
+    if (font) TTF_CloseFont(font);
+    TTF_Quit();
+#endif
+#ifdef RECVX_HAVE_SDL2_IMAGE
+    IMG_Quit();
+#endif
+    recvx_afs_close(afs);
+    return 0;
+}
+
+#else /* SDL2 / GL not available */
+
+int run_gallery(const recvx_backend* backend, int part,
+                const char* gamedata_dir) {
+    (void)backend; (void)part; (void)gamedata_dir;
+    fprintf(stderr, "gallery: SDL2 + OpenGL required, neither was compiled in.\n");
+    return 1;
+}
+
+#endif
