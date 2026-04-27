@@ -50,23 +50,31 @@ static const char* k_afs_filename[7] = {
  * we have the asset on screen. */
 #define BG_W            1280
 #define BG_H             720
-/* Blue display rectangle — where the TIM2 texture renders. */
-#define BLUE_X           340
-#define BLUE_Y           315
-#define BLUE_W           830
-#define BLUE_H           305
-/* Painted arrows on the bg — clickable hit boxes. */
-#define ARROW_L_X        325
-#define ARROW_L_Y        240
-#define ARROW_W           60
-#define ARROW_H           50
-#define ARROW_R_X       1180
-#define ARROW_R_Y        240
-/* Caption strip beneath the blue rectangle. */
-#define LABEL_X          345
-#define LABEL_Y          635
-#define LABEL_W          820
-#define LABEL_H           45
+/* Blue display rectangle — where the TIM2 texture renders. Coords were
+ * read off bg_viewer.png via the screenshot grid: blue field spans
+ * roughly x=190..830, y=185..495 in the 1280x720 native bg. */
+#define BLUE_X           195
+#define BLUE_Y           190
+#define BLUE_W           635
+#define BLUE_H           300
+/* Painted arrow click hit boxes — generous rectangles around the small
+ * green ◄ ► icons baked into the bg, ~mid-height of the blue rect. */
+#define ARROW_W           80
+#define ARROW_H           70
+#define ARROW_L_X        185
+#define ARROW_L_Y        310
+#define ARROW_R_X        730
+#define ARROW_R_Y        310
+/* Black info strip beneath the blue rectangle. Caption is anchored to
+ * the top-left corner per user direction (avoids visual conflict with
+ * the "EMPTY" placeholder centered there in the bg art). */
+#define LABEL_X          175
+#define LABEL_Y          528
+#define LABEL_W          735
+#define LABEL_H          150
+#define LABEL_TEXT_X     LABEL_X + 18
+#define LABEL_TEXT_Y     LABEL_Y + 14
+#define LABEL_LINE_H     26
 
 /* TIM2 picture header — local copy that matches RECVX's `TIM2_PICTUREHEADER`
  * in include/ps2/veronica/prog/types.h. Note the ClutType / ImageType swap
@@ -274,10 +282,11 @@ static void gallery_draw_quad(GLuint tex, int x, int y, int w, int h,
     glEnd();
 }
 
+/* part == -1 means scan ALL partitions; 0..6 means a specific one. */
 int run_gallery(const recvx_backend* backend, int part,
                 const char* gamedata_dir) {
-    if (part < 0 || part > 6) {
-        fprintf(stderr, "--gallery: partition must be 0..6\n");
+    if (part > 6) {
+        fprintf(stderr, "--gallery: partition must be -1 (all) or 0..6\n");
         return 1;
     }
 
@@ -335,85 +344,116 @@ int run_gallery(const recvx_backend* backend, int part,
     void* font = NULL;
 #endif
 
-    /* --- Open AFS partition --- */
-    char path[512];
-    snprintf(path, sizeof path, "%s/%s", gamedata_dir, k_afs_filename[part]);
-    recvx_afs_t* afs = recvx_afs_open(path);
-    if (!afs) {
-        fprintf(stderr, "gallery: could not open %s\n", path);
-        return 1;
-    }
-    unsigned n = recvx_afs_count(afs);
-    RX_LOG("gallery", "%s: %u entries — entering viewer", k_afs_filename[part], n);
+    /* --- Build slide list ----------------------------------------------
+     * RECVX's ADV.AFS / ITEM1.AFS / etc. wrap multiple TIM2 textures
+     * inside ADV resource packs (entry header = u32 size + entry table
+     * + payload). Raw TIM2 magic isn't at offset 0 of the AFS entry —
+     * it's at one of N inner offsets. So instead of trying to decode
+     * each AFS entry as a single TIM2, we SCAN every entry for the
+     * 4-byte "TIM2" magic and decode each occurrence as its own slide.
+     * Dud entries (audio, msg tables, raw data) just produce zero hits. */
+    typedef struct {
+        int       afs_part;      /* 0..6 partition index */
+        unsigned  afs_idx;       /* entry within partition */
+        unsigned  sub_idx;       /* TIM2 index within that entry */
+        uint32_t  byte_offset;   /* offset of TIM2 magic within entry */
+        uint32_t  entry_size;    /* byte size of containing AFS entry */
+        int       w, h;
+        GLuint    tex;
+    } slide_t;
 
-    /* --- Decode every entry once into a per-entry GL texture cache.
-     * Lazy might be safer for huge partitions (BGM has 121 ADX entries
-     * none of which decode anyway), but the upfront cost is small. */
-    GLuint* tex   = (GLuint*)calloc(n, sizeof(GLuint));
-    int*    tex_w = (int*)   calloc(n, sizeof(int));
-    int*    tex_h = (int*)   calloc(n, sizeof(int));
-    int decoded = 0;
-    for (unsigned i = 0; i < n; ++i) {
-        uint32_t sz = recvx_afs_entry_size(afs, i);
-        if (sz < 32) continue;
-        uint8_t* buf = (uint8_t*)malloc(sz);
-        if (!buf) continue;
-        uint32_t got = recvx_afs_read(afs, i, buf);
-        if (got == sz) {
-            int w = 0, h = 0;
-            uint8_t* pix = NULL;
-            if (gallery_tim2_decode(buf, sz, &w, &h, &pix)) {
-                tex[i]   = gallery_make_tex(pix, w, h);
-                tex_w[i] = w;
-                tex_h[i] = h;
-                decoded++;
-            }
+    slide_t* slides     = NULL;
+    int      slide_cap  = 0;
+    int      slide_n    = 0;
+    int      part_first = (part >= 0) ? part : 0;
+    int      part_last  = (part >= 0) ? part : 6;
+
+    for (int p = part_first; p <= part_last; ++p) {
+        char path[512];
+        snprintf(path, sizeof path, "%s/%s", gamedata_dir, k_afs_filename[p]);
+        recvx_afs_t* a = recvx_afs_open(path);
+        if (!a) {
+            RX_LOG("gallery", "skip partition %d (%s): not openable", p, k_afs_filename[p]);
+            continue;
         }
-        free(buf);
-    }
-    RX_LOG("gallery", "decoded %d/%u TIM2 textures", decoded, n);
+        unsigned n = recvx_afs_count(a);
+        int part_hits = 0;
+        for (unsigned i = 0; i < n; ++i) {
+            uint32_t sz = recvx_afs_entry_size(a, i);
+            if (sz < 64) continue;
+            uint8_t* buf = (uint8_t*)malloc(sz);
+            if (!buf) continue;
+            if (recvx_afs_read(a, i, buf) != sz) { free(buf); continue; }
 
-    /* --- Find first non-empty entry to start at. */
-    unsigned cur = 0;
-    while (cur < n && tex[cur] == 0) cur++;
-    if (cur == n) {
-        RX_LOG("gallery", "no decodable TIM2 textures in this partition");
+            /* Scan for "TIM2" magic at every 4-byte boundary. ADV resource
+             * packs align inner pointers to 4 bytes, and bare TIM2 entries
+             * have magic at offset 0 — both covered. */
+            unsigned sub = 0;
+            for (uint32_t off = 0; off + 0x40 < sz; off += 4) {
+                if (buf[off]   != 'T' || buf[off+1] != 'I' ||
+                    buf[off+2] != 'M' || buf[off+3] != '2') continue;
+                int w = 0, h = 0;
+                uint8_t* pix = NULL;
+                if (!gallery_tim2_decode(buf + off, sz - off, &w, &h, &pix)) continue;
+                if (slide_n == slide_cap) {
+                    slide_cap = slide_cap ? slide_cap * 2 : 64;
+                    slides = (slide_t*)realloc(slides, slide_cap * sizeof(slide_t));
+                }
+                slide_t* s = &slides[slide_n++];
+                s->afs_part    = p;
+                s->afs_idx     = i;
+                s->sub_idx     = sub++;
+                s->byte_offset = off;
+                s->entry_size  = sz;
+                s->w           = w;
+                s->h           = h;
+                s->tex         = gallery_make_tex(pix, w, h);
+                part_hits++;
+            }
+            free(buf);
+        }
+        RX_LOG("gallery", "%-13s: %u entries, %d TIM2 slides",
+               k_afs_filename[p], n, part_hits);
+        recvx_afs_close(a);
     }
+
+    RX_LOG("gallery", "total slides: %d", slide_n);
+    if (slide_n == 0) {
+        RX_LOG("gallery", "no decodable TIM2 textures found");
+    }
+
+    int cur = 0;
 
     /* --- Render loop --- */
     int quit = 0;
     while (backend->pump_events() && !quit) {
-        /* Poll SDL directly for arrow keys + mouse — backend->pump_events
-         * has already drained the queue but didn't expose these. We're
-         * a one-off mode so a second poll loop is fine. */
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) quit = 1;
-            if (ev.type == SDL_KEYDOWN) {
+            if (ev.type == SDL_KEYDOWN && slide_n > 0) {
                 SDL_Keycode k = ev.key.keysym.sym;
                 if (k == SDLK_ESCAPE) quit = 1;
-                if (k == SDLK_LEFT  || k == SDLK_x) {
-                    do {
-                        if (cur == 0) cur = n - 1; else cur--;
-                    } while (n > 0 && tex[cur] == 0 && cur != 0);
-                }
-                if (k == SDLK_RIGHT || k == SDLK_z) {
-                    do {
-                        cur = (cur + 1) % n;
-                    } while (n > 0 && tex[cur] == 0 && cur != 0);
-                }
+                if (k == SDLK_LEFT  || k == SDLK_x)
+                    cur = (cur - 1 + slide_n) % slide_n;
+                if (k == SDLK_RIGHT || k == SDLK_z)
+                    cur = (cur + 1) % slide_n;
             }
-            if (ev.type == SDL_MOUSEBUTTONDOWN && ev.button.button == SDL_BUTTON_LEFT) {
-                /* Map window coords (might be window-resized) back to
-                 * 1280x720 logical via current viewport. SDL gives client
-                 * pixels which == backbuffer pixels for our default. */
+            if (ev.type == SDL_MOUSEBUTTONDOWN &&
+                ev.button.button == SDL_BUTTON_LEFT && slide_n > 0) {
                 int mx = ev.button.x;
-                if (mx < BG_W / 2) {
-                    do { if (cur == 0) cur = n - 1; else cur--; }
-                    while (n > 0 && tex[cur] == 0 && cur != 0);
+                int my = ev.button.y;
+                /* Hit-box on the painted ◄ ► arrows. */
+                if (mx >= ARROW_L_X && mx <= ARROW_L_X + ARROW_W &&
+                    my >= ARROW_L_Y && my <= ARROW_L_Y + ARROW_H) {
+                    cur = (cur - 1 + slide_n) % slide_n;
+                } else if (mx >= ARROW_R_X && mx <= ARROW_R_X + ARROW_W &&
+                           my >= ARROW_R_Y && my <= ARROW_R_Y + ARROW_H) {
+                    cur = (cur + 1) % slide_n;
+                } else if (mx < BG_W / 2) {
+                    /* Half-screen fallback for clicks outside arrow boxes. */
+                    cur = (cur - 1 + slide_n) % slide_n;
                 } else {
-                    do { cur = (cur + 1) % n; }
-                    while (n > 0 && tex[cur] == 0 && cur != 0);
+                    cur = (cur + 1) % slide_n;
                 }
             }
         }
@@ -447,41 +487,49 @@ int run_gallery(const recvx_backend* backend, int part,
         }
 
         /* --- Texture in blue area, fit-aspect --- */
-        if (cur < n && tex[cur]) {
-            int tw = tex_w[cur], th = tex_h[cur];
-            float sx = (float)BLUE_W / (float)tw;
-            float sy = (float)BLUE_H / (float)th;
-            float s  = sx < sy ? sx : sy;
-            int rw = (int)(tw * s);
-            int rh = (int)(th * s);
+        if (slide_n > 0) {
+            const slide_t* s = &slides[cur];
+            float sx = (float)BLUE_W / (float)s->w;
+            float sy = (float)BLUE_H / (float)s->h;
+            float k  = sx < sy ? sx : sy;
+            int rw = (int)(s->w * k);
+            int rh = (int)(s->h * k);
             int rx = BLUE_X + (BLUE_W - rw) / 2;
             int ry = BLUE_Y + (BLUE_H - rh) / 2;
-            gallery_draw_quad(tex[cur], rx, ry, rw, rh, 1, 1, 1, 1);
+            gallery_draw_quad(s->tex, rx, ry, rw, rh, 1, 1, 1, 1);
         }
 
-        /* --- Caption --- */
+        /* --- Caption: multi-line, anchored to top-left of black strip --- */
 #ifdef RECVX_HAVE_SDL2_TTF
         if (font) {
-            char caption[256];
-            uint32_t entry_size = (cur < n) ? recvx_afs_entry_size(afs, cur) : 0;
-            if (cur < n && tex[cur]) {
-                snprintf(caption, sizeof caption, "%s / %04u   %dx%d   %u B",
-                         k_afs_filename[part], cur,
-                         tex_w[cur], tex_h[cur], entry_size);
-            } else if (cur < n) {
-                snprintf(caption, sizeof caption, "%s / %04u   (not a TIM2)   %u B",
-                         k_afs_filename[part], cur, entry_size);
+            char lines[4][256];
+            int  nlines = 0;
+            if (slide_n > 0) {
+                const slide_t* s = &slides[cur];
+                snprintf(lines[nlines++], 256,
+                         "%d / %d   %s / %04u   sub %u",
+                         cur + 1, slide_n,
+                         k_afs_filename[s->afs_part], s->afs_idx, s->sub_idx);
+                snprintf(lines[nlines++], 256,
+                         "size: %dx%d   offset: 0x%X   entry: %u B",
+                         s->w, s->h, s->byte_offset, s->entry_size);
+                snprintf(lines[nlines++], 256,
+                         "path: %s/%s @ entry %u",
+                         gamedata_dir, k_afs_filename[s->afs_part], s->afs_idx);
+                snprintf(lines[nlines++], 256,
+                         "<-/X prev   ->/Z next   ESC quit");
             } else {
-                snprintf(caption, sizeof caption, "(empty)");
+                snprintf(lines[nlines++], 256, "(no TIM2 textures found)");
             }
-            int tw = 0, th = 0;
-            GLuint t = gallery_text_to_tex(font, caption, &tw, &th);
-            if (t) {
-                /* Center in the label strip, vertical-center too. */
-                int rx = LABEL_X + (LABEL_W - tw) / 2;
-                int ry = LABEL_Y + (LABEL_H - th) / 2;
-                gallery_draw_quad(t, rx, ry, tw, th, 1, 1, 1, 1);
-                glDeleteTextures(1, &t);
+            for (int i = 0; i < nlines; ++i) {
+                int tw = 0, th = 0;
+                GLuint t = gallery_text_to_tex(font, lines[i], &tw, &th);
+                if (t) {
+                    gallery_draw_quad(t, LABEL_TEXT_X,
+                                      LABEL_TEXT_Y + i * LABEL_LINE_H,
+                                      tw, th, 1, 1, 1, 1);
+                    glDeleteTextures(1, &t);
+                }
             }
         }
 #endif
@@ -492,10 +540,10 @@ int run_gallery(const recvx_backend* backend, int part,
     }
 
     /* --- Cleanup --- */
-    for (unsigned i = 0; i < n; ++i) {
-        if (tex[i]) glDeleteTextures(1, &tex[i]);
+    for (int i = 0; i < slide_n; ++i) {
+        if (slides[i].tex) glDeleteTextures(1, &slides[i].tex);
     }
-    free(tex); free(tex_w); free(tex_h);
+    free(slides);
     if (bg_tex) glDeleteTextures(1, &bg_tex);
 #ifdef RECVX_HAVE_SDL2_TTF
     if (font) TTF_CloseFont(font);
@@ -504,7 +552,6 @@ int run_gallery(const recvx_backend* backend, int part,
 #ifdef RECVX_HAVE_SDL2_IMAGE
     IMG_Quit();
 #endif
-    recvx_afs_close(afs);
     return 0;
 }
 
