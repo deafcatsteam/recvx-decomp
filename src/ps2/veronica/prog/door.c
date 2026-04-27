@@ -1,36 +1,42 @@
 #include "../../../ps2/veronica/prog/door.h"
+#include "../../../ps2/veronica/prog/binfunc.h"
 #include "../../../ps2/veronica/prog/main.h"
 #include "../../../ps2/veronica/prog/njplus.h"
-#include "../../../ps2/veronica/prog/ps2_dummy.h"
+#include "../../../ps2/veronica/prog/ps2_NaDraw2D.h"
 #include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/ps2_NaSystem.h"
 #include "../../../ps2/veronica/prog/ps2_NaTextureFunction.h"
 #include "../../../ps2/veronica/prog/ps2_NaView.h"
 #include "../../../ps2/veronica/prog/ps2_NinjaCnk.h"
+#include "../../../ps2/veronica/prog/ps2_dummy.h"
+#include "../../../ps2/veronica/prog/ps2_texture.h"
 #include "../../../ps2/veronica/prog/sdfunc.h"
+
+#pragma optimization_level 4
 
 _door_wrk DoorWrk;
 
-const _proc_wrk FadeProcTbl[2] = 
+static const _proc_wrk FadeProcTbl[2] = 
 { 
 	NULL, (void*)FadeProc1 
 }; 
-const _proc_wrk ViewProcTbl[8] = 
+static const _proc_wrk ViewProcTbl[8] = 
 { 
 	NULL, (void*)ViewProc1, (void*)ViewProc2, (void*)ViewProc3, (void*)ViewProc4, (void*)ViewProc5, (void*)ViewProc6, (void*)ViewProc7 
 };  
-const _proc_wrk DoorProcTbl[8] = 
+static const _proc_wrk DoorProcTbl[8] = 
 { 
 	NULL, (void*)DoorProc1, (void*)DoorProc2, (void*)DoorProc3, (void*)DoorProc4, (void*)DoorProc5, (void*)DoorProc6, (void*)DoorProc7 
 };  
-const _proc_wrk LightProcTbl[3] = 
+static const _proc_wrk LightProcTbl[3] = 
 { 
 	NULL, (void*)LightProc1, (void*)LightProc2 
 };
-const _proc_wrk PuruProcTbl[2] = 
+static const _proc_wrk PuruProcTbl[2] = 
 { 
 	NULL, (void*)PuruProc1 
 };
-const int PruSndTbl[1] = { 10 };
+static const int PruSndTbl[1] = { 10 };
 
 // 100% matching!
 void bhInitDoor()
@@ -54,144 +60,289 @@ void bhInitDoor()
     dwP->lgt_amb_off = amb_ini;
 }
 
-// 
-// Start address: 0x2aecf0
-int bhReadDoorData()
+// 100% matching!
+int bhReadDoorData() 
 {
-	int* pacP;
-	int next;
-	int status;
-	//_door_wrk* dwP;
-	int code;
-	// Line 223, Address: 0x2aecf0, Func Offset: 0
-	// Line 229, Address: 0x2aed04, Func Offset: 0x14
-	// Line 226, Address: 0x2aed08, Func Offset: 0x18
-	// Line 229, Address: 0x2aed10, Func Offset: 0x20
-	// Line 273, Address: 0x2aed3c, Func Offset: 0x4c
-	// Line 274, Address: 0x2aed4c, Func Offset: 0x5c
-	// Line 289, Address: 0x2aed68, Func Offset: 0x78
-	// Line 291, Address: 0x2aed70, Func Offset: 0x80
-	// Line 299, Address: 0x2aed7c, Func Offset: 0x8c
-	// Line 300, Address: 0x2aed84, Func Offset: 0x94
-	// Line 302, Address: 0x2aed98, Func Offset: 0xa8
-	// Line 306, Address: 0x2aeda0, Func Offset: 0xb0
-	// Line 313, Address: 0x2aeda8, Func Offset: 0xb8
-	// Line 315, Address: 0x2aedbc, Func Offset: 0xcc
-	// Line 319, Address: 0x2aedc0, Func Offset: 0xd0
-	// Line 316, Address: 0x2aedc4, Func Offset: 0xd4
-	// Line 317, Address: 0x2aedc8, Func Offset: 0xd8
-	// Line 319, Address: 0x2aedcc, Func Offset: 0xdc
-	// Line 320, Address: 0x2aedd4, Func Offset: 0xe4
-	// Line 322, Address: 0x2aede0, Func Offset: 0xf0
-	// Line 323, Address: 0x2aede8, Func Offset: 0xf8
-	// Line 324, Address: 0x2aedec, Func Offset: 0xfc
-	// Line 326, Address: 0x2aedf8, Func Offset: 0x108
-	// Line 328, Address: 0x2aedfc, Func Offset: 0x10c
-	// Line 326, Address: 0x2aee00, Func Offset: 0x110
-	// Line 329, Address: 0x2aee04, Func Offset: 0x114
-	// Line 330, Address: 0x2aee08, Func Offset: 0x118
-	// Line 334, Address: 0x2aee10, Func Offset: 0x120
-	// Line 340, Address: 0x2aee18, Func Offset: 0x128
-	// Line 342, Address: 0x2aee20, Func Offset: 0x130
-	// Line 343, Address: 0x2aee30, Func Offset: 0x140
-	// Line 344, Address: 0x2aee38, Func Offset: 0x148
-	// Line 346, Address: 0x2aee3c, Func Offset: 0x14c
-	// Line 348, Address: 0x2aee48, Func Offset: 0x158
-	// Line 350, Address: 0x2aee54, Func Offset: 0x164
-	// Line 352, Address: 0x2aee60, Func Offset: 0x170
-	// Line 354, Address: 0x2aee6c, Func Offset: 0x17c
-	// Line 356, Address: 0x2aee74, Func Offset: 0x184
-	// Line 358, Address: 0x2aee80, Func Offset: 0x190
-	// Line 362, Address: 0x2aee88, Func Offset: 0x198
-	// Line 363, Address: 0x2aeea0, Func Offset: 0x1b0
-	// Line 373, Address: 0x2aeea4, Func Offset: 0x1b4
-	// Func End, Address: 0x2aeebc, Func Offset: 0x1cc
-	scePrintf("bhReadDoorData - UNIMPLEMENTED!\n");
+    int code;  
+    _door_wrk* dwP;
+    int status;    
+    int next; 
+    int* pacP;    
+
+    code = 0;
+    
+    dwP = &DoorWrk;
+    
+    status = dwP->dmo_mode; 
+
+    switch (status) 
+    {                
+    case 0:                                  
+        dwP->prti_no = sys->dor_partid;
+        
+        if (RequestReadInsideFile(dwP->prti_no, dwP->dmo_typ + 71, dwP->dmo_bufP) != 0)
+        {
+            code = -1; 
+            break;
+        }
+        
+        dwP->dmo_mode++;
+    case 1:                                  
+        pacP = dwP->dmo_bufP;
+        
+        status = GetReadFileStatus();
+        
+        if (status == -1) 
+        {                
+            code = -1; 
+            break;
+        } 
+        else if (status == 0)
+        {
+            DeletePartition(dwP->prti_no);
+            
+            if ((int)*pacP++ == 0x4341504D) 
+            {
+                next = *pacP;
+                
+                pacP = (int*)((int)pacP + next);
+                
+                next = *pacP++;
+                
+                if (next != -1) 
+                {
+                    bhMlbBinRealize(pacP, &dwP->dor_mdl);
+                    
+                    pacP = (int*)((int)pacP + next);
+                    
+                    next = *pacP++;
+                    
+                    if (next != -1) 
+                    {
+                        dwP->tex_pacP = pacP;
+                        
+                        pacP = (int*)((int)pacP + next);
+                        
+                        next = *pacP++;
+                        
+                        if (next != -1) 
+                        {
+                            RequestDoorSoundBank(*pacP);
+                            
+                            pacP = (int*)((int)pacP + next);
+                            
+                            next = *pacP++;
+                            
+                            if (next != -1) 
+                            {
+                                dwP->dmo_prmP = pacP;
+                                dwP->dmo_mode = 2; 
+                                
+                                code = 2; 
+                                break;
+                            }
+                            
+                            code = -6; 
+                            break;
+                        }
+                        
+                        code = -5; 
+                        break;
+                    }
+                    
+                    code = -4; 
+                    break;
+                }
+                
+                code = -3; 
+                break;
+            }
+            
+            code = -2; 
+            break;
+        }       
+        
+        code = 0; 
+        break;
+    case 2:                                        
+        if (CheckTransEndSoundBank(status) == 0)
+        {
+            code = 1; 
+            break;
+        } 
+        else 
+        {
+            code = 2; 
+            break;
+        }
+    }
+
+    return code;
 }
 
-// 
-// Start address: 0x2aeec0
+// 100% matching!
 void bhSetDoor()
 {
-	//_anon3* ptP;
-	//_anon36* phP;
-	//_anon3* ptP;
-	//_anon36* phP;
-	//_door_wrk* dwP;
-	int i;
-	float far;
-	float near;
-	//_anon43 DkiPru;
-	//_anon33 dmo_clip[2];
-	// Line 392, Address: 0x2aeec0, Func Offset: 0
-	// Line 402, Address: 0x2aeecc, Func Offset: 0xc
-	// Line 406, Address: 0x2aeed4, Func Offset: 0x14
-	// Line 407, Address: 0x2aeedc, Func Offset: 0x1c
-	// Line 409, Address: 0x2aeee0, Func Offset: 0x20
-	// Line 410, Address: 0x2aeef8, Func Offset: 0x38
-	// Line 412, Address: 0x2aef0c, Func Offset: 0x4c
-	// Line 414, Address: 0x2aef14, Func Offset: 0x54
-	// Line 413, Address: 0x2aef18, Func Offset: 0x58
-	// Line 414, Address: 0x2aef28, Func Offset: 0x68
-	// Line 415, Address: 0x2aef30, Func Offset: 0x70
-	// Line 418, Address: 0x2aef5c, Func Offset: 0x9c
-	// Line 419, Address: 0x2aef78, Func Offset: 0xb8
-	// Line 420, Address: 0x2aef84, Func Offset: 0xc4
-	// Line 422, Address: 0x2aef90, Func Offset: 0xd0
-	// Line 429, Address: 0x2aefa8, Func Offset: 0xe8
-	// Line 434, Address: 0x2aefb0, Func Offset: 0xf0
-	// Line 435, Address: 0x2aefcc, Func Offset: 0x10c
-	// Line 438, Address: 0x2aefdc, Func Offset: 0x11c
-	// Line 439, Address: 0x2aefe4, Func Offset: 0x124
-	// Line 442, Address: 0x2aefec, Func Offset: 0x12c
-	// Line 445, Address: 0x2af004, Func Offset: 0x144
-	// Line 446, Address: 0x2af010, Func Offset: 0x150
-	// Line 451, Address: 0x2af01c, Func Offset: 0x15c
-	// Line 454, Address: 0x2af020, Func Offset: 0x160
-	// Line 455, Address: 0x2af034, Func Offset: 0x174
-	// Line 458, Address: 0x2af044, Func Offset: 0x184
-	// Line 461, Address: 0x2af050, Func Offset: 0x190
-	// Line 458, Address: 0x2af058, Func Offset: 0x198
-	// Line 459, Address: 0x2af068, Func Offset: 0x1a8
-	// Line 464, Address: 0x2af06c, Func Offset: 0x1ac
-	// Line 467, Address: 0x2af074, Func Offset: 0x1b4
-	// Line 459, Address: 0x2af07c, Func Offset: 0x1bc
-	// Line 461, Address: 0x2af084, Func Offset: 0x1c4
-	// Line 470, Address: 0x2af088, Func Offset: 0x1c8
-	// Line 461, Address: 0x2af090, Func Offset: 0x1d0
-	// Line 462, Address: 0x2af0a0, Func Offset: 0x1e0
-	// Line 464, Address: 0x2af0ac, Func Offset: 0x1ec
-	// Line 465, Address: 0x2af0c0, Func Offset: 0x200
-	// Line 467, Address: 0x2af0cc, Func Offset: 0x20c
-	// Line 468, Address: 0x2af0e0, Func Offset: 0x220
-	// Line 470, Address: 0x2af0ec, Func Offset: 0x22c
-	// Line 471, Address: 0x2af100, Func Offset: 0x240
-	// Line 476, Address: 0x2af10c, Func Offset: 0x24c
-	// Line 477, Address: 0x2af128, Func Offset: 0x268
-	// Line 478, Address: 0x2af144, Func Offset: 0x284
-	// Line 479, Address: 0x2af160, Func Offset: 0x2a0
-	// Line 481, Address: 0x2af17c, Func Offset: 0x2bc
-	// Line 484, Address: 0x2af19c, Func Offset: 0x2dc
-	// Line 485, Address: 0x2af1ac, Func Offset: 0x2ec
-	// Line 487, Address: 0x2af1b8, Func Offset: 0x2f8
-	// Line 488, Address: 0x2af1d8, Func Offset: 0x318
-	// Line 492, Address: 0x2af1e8, Func Offset: 0x328
-	// Line 493, Address: 0x2af208, Func Offset: 0x348
-	// Line 497, Address: 0x2af228, Func Offset: 0x368
-	// Line 498, Address: 0x2af22c, Func Offset: 0x36c
-	// Line 501, Address: 0x2af234, Func Offset: 0x374
-	// Line 497, Address: 0x2af238, Func Offset: 0x378
-	// Line 498, Address: 0x2af240, Func Offset: 0x380
-	// Line 501, Address: 0x2af248, Func Offset: 0x388
-	// Line 504, Address: 0x2af250, Func Offset: 0x390
-	// Line 507, Address: 0x2af264, Func Offset: 0x3a4
-	// Line 509, Address: 0x2af270, Func Offset: 0x3b0
-	// Line 510, Address: 0x2af278, Func Offset: 0x3b8
-	// Line 509, Address: 0x2af280, Func Offset: 0x3c0
-	// Line 510, Address: 0x2af284, Func Offset: 0x3c4
-	// Line 513, Address: 0x2af288, Func Offset: 0x3c8
-	// Func End, Address: 0x2af298, Func Offset: 0x3d8
-	scePrintf("bhSetDoor - UNIMPLEMENTED!\n");
+    float near, far; 
+    int i;
+    _door_wrk* dwP; 
+    PH_WORK* phP; 
+    PT_WORK* ptP; 
+    static DMO_CLIP dmo_clip[2] = 
+    {
+        {
+            1,        /* dmo_typ */
+            5,        /* prti_no */
+            4,        /* vew_no */
+            -10.0f,   /* near */
+            -34.0f    /* far */
+        },
+        {
+            -1,       /* dmo_typ */
+            -1,       /* prti_no */
+            -1,       /* vew_no */
+            -2.0f,    /* near */
+            -20000.0f /* far */
+        }
+    };
+    static const PURUPROC_WORK DkiPru = 
+    {
+        0,   /* wait_time */
+        768, /* loop_time */
+        0,   /* snd_no */
+        13,  /* pru_no */
+        20   /* pru_wait */
+    };  
+    
+    dwP = &DoorWrk;
+
+    phP = (PH_WORK*)dwP->dmo_prmP;
+    ptP = (void*)((int)dwP->dmo_prmP + 4);
+    
+    if (dwP->cse_no < phP->prm_num) 
+    {
+        ptP += dwP->cse_no;
+    }
+    
+    near = -2.0f;
+    far = -20000.0f;
+    
+    for (i = 0; dmo_clip[i].dmo_typ >= 0; i++)
+    {
+        if ((dwP->dmo_typ == dmo_clip[i].dmo_typ) && (dwP->prti_no == dmo_clip[i].prti_no) && (ptP->vew_no == dmo_clip[i].vew_no))
+        {
+            near = dmo_clip[i].near;
+            far = dmo_clip[i].far;
+            break;
+        }
+    } 
+    
+    njClipZ(near, far);
+    
+    njSetAspect(1.174f, 1.0f);
+    njSetBackColor(0x00000000, 0x00000000, 0x00000000);  
+    
+    dwP->objP = dwP->dor_mdl.objP;
+    
+    npCnkFlatOff(dwP->objP);
+    
+    if (dwP->dor_mdl.texP != NULL) 
+    {
+        bhSetMemPvpTexture(dwP->dor_mdl.texP, dwP->tex_pacP, 0);
+    }
+    
+    njCnkSetEasyMultiLight(4);
+    njCnkSetEasyMultiLightSwitch(0, 0);
+    
+    {
+    PH_WORK* phP; 
+    PT_WORK* ptP; 
+        
+    phP = (PH_WORK*)dwP->dmo_prmP;
+    ptP = (PT_WORK*)((int)phP + 4);
+        
+    if (dwP->cse_no < phP->prm_num) 
+    {
+        ptP += dwP->cse_no;
+    }
+        
+    dwP->fde_prcP = FadeProcTbl[ptP->fde_no].procP;
+    dwP->fpP = (void*)((int)phP + ptP->fde_off);
+        
+    dwP->vew_prcP = ViewProcTbl[ptP->vew_no].procP;
+    dwP->vpP = (void*)((int)phP + ptP->vew_off);
+        
+    dwP->dor_prcP = DoorProcTbl[ptP->dor_no].procP;
+    dwP->dpP = (void*)((int)phP + ptP->dor_off);
+        
+    dwP->lgt_prcP = LightProcTbl[ptP->lgt_no].procP;
+    dwP->lpP = (void*)((int)phP + ptP->lgt_off);
+        
+    dwP->pru_prcP = PuruProcTbl[ptP->pru_no].procP;
+    dwP->ppP = (void*)((int)phP + ptP->pru_off);
+    }
+    
+    if ((dwP->dmo_atr & 0x1)) 
+    {
+        dwP->status |= 0x4000;
+    }
+    
+    if ((dwP->dmo_atr & 0x4)) 
+    {
+        dwP->status |= 0x4800;
+    }
+    
+    if ((dwP->dmo_atr & 0x10)) 
+    {
+        dwP->status |= 0xA000;
+    }
+    
+    if ((dwP->dmo_atr & 0x8)) 
+    {
+        dwP->status |= 0x1000;
+    }
+    
+    if (dwP->dor_mdl.obj_num < 5) 
+    {
+        dwP->status &= ~0x3000;
+    }
+    
+    if ((dwP->dmo_atr & 0x2)) 
+    {
+        dwP->status ^= 0xC00;
+        
+        if (dwP->dor_mdl.obj_num >= 5) 
+        {
+            dwP->status ^= 0x2000;
+        } 
+        else 
+        {
+            dwP->status &= ~0x2000;
+        }
+    }
+    
+    if ((dwP->dmo_atr & 0x20)) 
+    {
+        dwP->status |= 0x40000000;
+    }
+    
+    if ((dwP->dmo_atr & 0x40))
+    {
+        dwP->status |= 0x20000000;
+    }
+    
+    dwP->status |= 0x10;
+    dwP->status |= 0x1000000F;
+    
+    SetSoundTiming(dwP);
+    
+    if ((dwP->status & 0x20000000)) 
+    {
+        dwP->status |= 0x10000000;
+        
+        dwP->pru_prcP = PuruProcTbl[1].procP;
+        dwP->ppP = &DkiPru;
+    }
 }
 
 // 100% matching!
@@ -502,7 +653,7 @@ static void FadeProc1(_door_wrk* dwP)
 static void ViewProc1(_door_wrk* dwP)
 {
     int flp;            
-    VIEWPROC_WORK* vpP; 
+    VIEWPROC1_WORK* vpP; 
 
     dwP->status = dwP->status;
     
@@ -637,59 +788,90 @@ static void ViewProc2(_door_wrk* dwP)
     dwP->vew_ang[1] = (int)(10430.381f * atan2f(-vct.x, -vct.z));
 }
 
-/*// 
-// Start address: 0x2afd50
-void ViewProc3(_door_wrk* dwP)
+// 99.32% matching
+static void ViewProc3(_door_wrk* dwP) 
 {
-	_anon7* prmP;
-	_anon7* vpP;
-	// Line 1029, Address: 0x2afd50, Func Offset: 0
-	// Line 1033, Address: 0x2afd64, Func Offset: 0x14
-	// Line 1031, Address: 0x2afd68, Func Offset: 0x18
-	// Line 1033, Address: 0x2afd70, Func Offset: 0x20
-	// Line 1035, Address: 0x2afd80, Func Offset: 0x30
-	// Line 1039, Address: 0x2afdac, Func Offset: 0x5c
-	// Line 1040, Address: 0x2afdb4, Func Offset: 0x64
-	// Line 1042, Address: 0x2afdbc, Func Offset: 0x6c
-	// Line 1043, Address: 0x2afdd4, Func Offset: 0x84
-	// Line 1044, Address: 0x2afddc, Func Offset: 0x8c
-	// Line 1045, Address: 0x2afde4, Func Offset: 0x94
-	// Line 1046, Address: 0x2afdec, Func Offset: 0x9c
-	// Line 1047, Address: 0x2afdf4, Func Offset: 0xa4
-	// Line 1048, Address: 0x2afdfc, Func Offset: 0xac
-	// Line 1052, Address: 0x2afe08, Func Offset: 0xb8
-	// Line 1054, Address: 0x2afe18, Func Offset: 0xc8
-	// Line 1058, Address: 0x2afe1c, Func Offset: 0xcc
-	// Line 1054, Address: 0x2afe20, Func Offset: 0xd0
-	// Line 1055, Address: 0x2afe24, Func Offset: 0xd4
-	// Line 1056, Address: 0x2afe2c, Func Offset: 0xdc
-	// Line 1057, Address: 0x2afe34, Func Offset: 0xe4
-	// Line 1058, Address: 0x2afe4c, Func Offset: 0xfc
-	// Line 1059, Address: 0x2afe58, Func Offset: 0x108
-	// Line 1064, Address: 0x2afe64, Func Offset: 0x114
-	// Line 1065, Address: 0x2afe74, Func Offset: 0x124
-	// Line 1066, Address: 0x2afe88, Func Offset: 0x138
-	// Line 1070, Address: 0x2afe90, Func Offset: 0x140
-	// Line 1066, Address: 0x2afea0, Func Offset: 0x150
-	// Line 1067, Address: 0x2afea8, Func Offset: 0x158
-	// Line 1068, Address: 0x2afeb8, Func Offset: 0x168
-	// Line 1070, Address: 0x2afec8, Func Offset: 0x178
-	// Line 1071, Address: 0x2aff08, Func Offset: 0x1b8
-	// Line 1078, Address: 0x2aff0c, Func Offset: 0x1bc
-	// Line 1071, Address: 0x2aff10, Func Offset: 0x1c0
-	// Line 1072, Address: 0x2aff14, Func Offset: 0x1c4
-	// Line 1073, Address: 0x2aff1c, Func Offset: 0x1cc
-	// Line 1074, Address: 0x2aff24, Func Offset: 0x1d4
-	// Line 1075, Address: 0x2aff2c, Func Offset: 0x1dc
-	// Line 1078, Address: 0x2aff44, Func Offset: 0x1f4
-	// Line 1085, Address: 0x2aff50, Func Offset: 0x200
-	// Line 1086, Address: 0x2aff5c, Func Offset: 0x20c
-	// Line 1087, Address: 0x2aff8c, Func Offset: 0x23c
-	// Line 1088, Address: 0x2affbc, Func Offset: 0x26c
-	// Line 1089, Address: 0x2affe8, Func Offset: 0x298
-	// Line 1091, Address: 0x2afff8, Func Offset: 0x2a8
-	// Func End, Address: 0x2b0010, Func Offset: 0x2c0
-}*/
+    VIEWPROC3_WORK* vpP, *prmP;  
+
+    prmP = dwP->vpP;
+    vpP = prmP;
+    
+    if ((dwP->status & 0x4000)) 
+    {
+        vpP = (VIEWPROC3_WORK*)&prmP->pos_high;
+    }
+
+    // the $a0 vs $a2 reg mismatch doesn't appear on GC
+    switch (dwP->vew_mode) 
+    {                          
+    case 0:
+        dwP->vew_reg = prmP->pos_wait;
+        dwP->vew_tmp = prmP->ang_wait;
+        
+        dwP->vew_pos = vpP->pos_low;
+        
+        dwP->vew_ang[0] = vpP->ang_low[0];
+        dwP->vew_ang[1] = vpP->ang_low[1];
+        dwP->vew_ang[2] = vpP->ang_low[2];
+        
+        dwP->vew_yaw = vpP->yaw_low;
+        dwP->vew_pitch = vpP->pitch_low;
+        
+        dwP->vew_mode++;
+    case 1:
+        if (dwP->vew_reg-- <= 0)
+        {
+            dwP->vew_speed = vpP->speed_low;
+            dwP->vew_ang_speed = vpP->speed_dx_low;
+            dwP->vew_reg = vpP->loop_wait_low;
+            
+            dwP->vew_bak = dwP->vew_pos;
+            
+            dwP->status |= 0x8000000;
+            
+            dwP->vew_mode++;
+        }
+        else 
+        {
+            break;
+        }
+    case 2:
+        if (dwP->vew_reg-- <= 0) 
+        {
+            VectorMove(&dwP->vew_pos, dwP->vew_yaw, dwP->vew_pitch, dwP->vew_speed);
+            
+            dwP->vew_speed += vpP->accel_low;
+            dwP->vew_ang_speed += vpP->accel_dx_low;
+            
+            dwP->vew_pitch += dwP->vew_ang_speed;
+            
+            if (CompareFloat(dwP->vew_pos.y - dwP->vew_bak.y, 1, (dwP->vew_pos.z - dwP->vew_bak.z) * -tanf(0.0000958738f * prmP->slope_ax)) != 0) 
+            {
+                dwP->vew_speed = vpP->speed_low;
+                dwP->vew_ang_speed = vpP->speed_dx_low;
+                dwP->vew_pitch = vpP->pitch_low;
+                dwP->vew_reg = vpP->loop_wait_low;
+                
+                dwP->vew_bak = dwP->vew_pos;
+                
+                dwP->status |= 0x10000;
+            }
+        }
+        
+        break;
+    }
+    
+    if (dwP->vew_tmp <= 0) 
+    {
+        dwP->vew_ang[0] += vpP->ang_rte_low * (vpP->dst_ang_low[0] - dwP->vew_ang[0]);
+        dwP->vew_ang[1] += vpP->ang_rte_low * (vpP->dst_ang_low[1] - dwP->vew_ang[1]);
+        dwP->vew_ang[2] += vpP->ang_rte_low * (vpP->dst_ang_low[2] - dwP->vew_ang[2]);
+    }
+    else 
+    {
+        dwP->vew_tmp--;
+    }
+}
 
 // 100% matching!
 static void ViewProc4(_door_wrk* dwP) 
@@ -805,54 +987,93 @@ static void ViewProc5(_door_wrk* dwP)
     }
 }
 
-/*// 
-// Start address: 0x2b02a0
-void ViewProc6(_door_wrk* dwP)
+// 99.77% matching
+static void ViewProc6(_door_wrk* dwP) 
 {
-	float adj_ang;
-	float adj_pos;
-	_anon50* prmP;
-	_anon50* vpP;
-	// Line 1212, Address: 0x2b02a0, Func Offset: 0
-	// Line 1217, Address: 0x2b02b8, Func Offset: 0x18
-	// Line 1215, Address: 0x2b02bc, Func Offset: 0x1c
-	// Line 1217, Address: 0x2b02c4, Func Offset: 0x24
-	// Line 1219, Address: 0x2b02d4, Func Offset: 0x34
-	// Line 1223, Address: 0x2b02f4, Func Offset: 0x54
-	// Line 1227, Address: 0x2b02f8, Func Offset: 0x58
-	// Line 1223, Address: 0x2b030c, Func Offset: 0x6c
-	// Line 1224, Address: 0x2b0310, Func Offset: 0x70
-	// Line 1226, Address: 0x2b0318, Func Offset: 0x78
-	// Line 1227, Address: 0x2b0320, Func Offset: 0x80
-	// Line 1228, Address: 0x2b0344, Func Offset: 0xa4
-	// Line 1230, Address: 0x2b0368, Func Offset: 0xc8
-	// Line 1234, Address: 0x2b0374, Func Offset: 0xd4
-	// Line 1235, Address: 0x2b0380, Func Offset: 0xe0
-	// Line 1237, Address: 0x2b0390, Func Offset: 0xf0
-	// Line 1238, Address: 0x2b03a0, Func Offset: 0x100
-	// Line 1240, Address: 0x2b03c8, Func Offset: 0x128
-	// Line 1242, Address: 0x2b03e8, Func Offset: 0x148
-	// Line 1243, Address: 0x2b0408, Func Offset: 0x168
-	// Line 1244, Address: 0x2b0424, Func Offset: 0x184
-	// Line 1245, Address: 0x2b042c, Func Offset: 0x18c
-	// Line 1247, Address: 0x2b0434, Func Offset: 0x194
-	// Line 1248, Address: 0x2b0440, Func Offset: 0x1a0
-	// Line 1250, Address: 0x2b0450, Func Offset: 0x1b0
-	// Line 1252, Address: 0x2b048c, Func Offset: 0x1ec
-	// Line 1253, Address: 0x2b049c, Func Offset: 0x1fc
-	// Line 1255, Address: 0x2b04e0, Func Offset: 0x240
-	// Line 1257, Address: 0x2b051c, Func Offset: 0x27c
-	// Line 1258, Address: 0x2b0554, Func Offset: 0x2b4
-	// Line 1259, Address: 0x2b055c, Func Offset: 0x2bc
-	// Line 1261, Address: 0x2b0564, Func Offset: 0x2c4
-	// Line 1263, Address: 0x2b0574, Func Offset: 0x2d4
-	// Line 1264, Address: 0x2b0578, Func Offset: 0x2d8
-	// Line 1265, Address: 0x2b0584, Func Offset: 0x2e4
-	// Line 1264, Address: 0x2b0588, Func Offset: 0x2e8
-	// Line 1265, Address: 0x2b0598, Func Offset: 0x2f8
-	// Line 1270, Address: 0x2b059c, Func Offset: 0x2fc
-	// Func End, Address: 0x2b05b8, Func Offset: 0x318
-}*/
+    VIEWPROC6_WORK* vpP, *prmP;  
+    float adj_pos, adj_ang;        
+    
+    prmP = dwP->vpP;
+    vpP = prmP;
+    
+    if ((dwP->status & 0x4000))
+    {
+        vpP = (VIEWPROC6_WORK*)&prmP->dst_pos_high;
+    }
+
+    // the $a0 vs $a2 reg mismatch doesn't appear on GC
+    switch (dwP->vew_mode) 
+    {                         
+    case 0:
+        dwP->vew_reg = prmP->wait_pos;
+        dwP->vew_tmp = prmP->wait_ang;
+        
+        dwP->vew_adj_ang = 0;
+        dwP->vew_adj_pos = 0;
+        
+        dwP->vew_adj_pos_add = 0.6f * (1.0f / (prmP->total_time - prmP->wait_pos));
+        dwP->vew_adj_ang_add = 0.6f * (1.0f / (prmP->total_time - prmP->wait_ang));
+        
+        dwP->vew_mode++;
+    case 1:
+        if (dwP->vew_reg <= 0) 
+        {
+            dwP->vew_adj_pos += dwP->vew_adj_pos_add; 
+            
+            adj_pos = dwP->vew_adj_pos;
+            
+            if ((dwP->dmo_atr & 0x2)) 
+            {
+                dwP->vew_pos.x += adj_pos * (prmP->pos_rte.x * (-vpP->dst_pos_low.x - dwP->vew_pos.x));
+            } 
+            else
+            {
+                dwP->vew_pos.x += adj_pos * (prmP->pos_rte.x * (vpP->dst_pos_low.x - dwP->vew_pos.x));
+            }
+            
+            dwP->vew_pos.y += adj_pos * (prmP->pos_rte.y * (vpP->dst_pos_low.y - dwP->vew_pos.y));
+            dwP->vew_pos.z += adj_pos * (prmP->pos_rte.z * (vpP->dst_pos_low.z - dwP->vew_pos.z));
+        }
+        else 
+        {
+            dwP->vew_reg--;
+        }
+        
+        if (dwP->vew_tmp <= 0) 
+        {
+            dwP->vew_adj_ang += dwP->vew_adj_ang_add;
+            
+            adj_ang = dwP->vew_adj_ang;
+            
+            dwP->vew_ang[0] += (int)(adj_ang * (prmP->ang_rte.x * (short)(vpP->dst_ang_low[0] - dwP->vew_ang[0])));
+            
+            if ((dwP->dmo_atr & 0x2)) 
+            {
+                dwP->vew_ang[1] += (int)(adj_ang * (prmP->ang_rte.y * (short)-(vpP->dst_ang_low[1] + dwP->vew_ang[1])));
+            } 
+            else 
+            {
+                dwP->vew_ang[1] += (int)(adj_ang * (prmP->ang_rte.y * (short)(vpP->dst_ang_low[1] - dwP->vew_ang[1])));
+            }
+            
+            dwP->vew_ang[2] += (int)(adj_ang * (prmP->ang_rte.z * (short)(vpP->dst_ang_low[2] - dwP->vew_ang[2])));
+        } 
+        else 
+        {
+            dwP->vew_tmp--;
+        }
+        
+        if (prmP->total_time-- <= 0) 
+        {
+            dwP->vew_mode = 0;
+            dwP->vew_prcP = ViewProcTbl[prmP->chg_vew].procP;
+            
+            dwP->vpP = &prmP[1];
+        }
+        
+        break;
+    }
+}
 
 // 100% matching!
 static void ViewProc7(_door_wrk* dwP) 
@@ -1731,9 +1952,7 @@ static int CompareSint32(int val_a, int cmp_typ, int val_b)
     return ret;
 }
 
-/* 97.56% matching - with this same code, this function matches 100% on Dreamcast but for some reason not here. However, compiling 
-   this function with a different version of MWCC (2.3 as opposed to 2.3.3) does match, which might indicate that the project is
-   using the wrong compiler? */ 
+// 100% matching! 
 static int CompareFloat(float val_a, int cmp_typ, float val_b)
 {
     switch (cmp_typ) 
@@ -1785,6 +2004,8 @@ static int CompareFloat(float val_a, int cmp_typ, float val_b)
         break;
     }
 }
+
+#pragma optimization_level 3
 
 // 100% matching! 
 static void VectorMove(NJS_POINT3* posP, int yaw, int pitch, float speed)
@@ -1849,34 +2070,43 @@ static void LightSubPnt(_door_wrk* dwP, int lgt_no, LGT_WRK* ldP, NJS_POINT3* rt
     njCnkSetEasyMultiLightSwitch(lgt_no + 2, 1);
 }
 
-// 
-// Start address: 0x2b1c20
-void ryExcuteFade(float pri, int col, float rate)
+// 98.77% matching (matches on GC)
+static void ryExcuteFade(float pri, int col, float rate) 
 {
-	unsigned int tmp;
-	int pal;
-	//_anon47 p2c;
-	//_anon24 col_buf[4];
-	// Line 2148, Address: 0x2b1c20, Func Offset: 0
-	// Line 2161, Address: 0x2b1c34, Func Offset: 0x14
-	// Line 2148, Address: 0x2b1c3c, Func Offset: 0x1c
-	// Line 2161, Address: 0x2b1c40, Func Offset: 0x20
-	// Line 2162, Address: 0x2b1c54, Func Offset: 0x34
-	// Line 2165, Address: 0x2b1c64, Func Offset: 0x44
-	// Line 2162, Address: 0x2b1c68, Func Offset: 0x48
-	// Line 2165, Address: 0x2b1c6c, Func Offset: 0x4c
-	// Line 2167, Address: 0x2b1c74, Func Offset: 0x54
-	// Line 2166, Address: 0x2b1c78, Func Offset: 0x58
-	// Line 2167, Address: 0x2b1c7c, Func Offset: 0x5c
-	// Line 2168, Address: 0x2b1c88, Func Offset: 0x68
-	// Line 2171, Address: 0x2b1c98, Func Offset: 0x78
-	// Line 2173, Address: 0x2b1ca4, Func Offset: 0x84
-	// Line 2174, Address: 0x2b1cb0, Func Offset: 0x90
-	// Line 2176, Address: 0x2b1cbc, Func Offset: 0x9c
-	// Line 2177, Address: 0x2b1cdc, Func Offset: 0xbc
-	// Line 2179, Address: 0x2b1cf8, Func Offset: 0xd8
-	// Func End, Address: 0x2b1d14, Func Offset: 0xf4
-	scePrintf("ryExcuteFade - UNIMPLEMENTED!\n");
+	int pal; 
+    unsigned int tmp; 
+    static NJS_POINT2 pnt_dat[4] = 
+    {
+        0, 0, 640.0f, 0, 640.0f, 480.0f, 0, 480.0f
+    };
+    static NJS_COLOR col_buf[4]; 
+    static NJS_POINT2COL p2c = 
+    {
+        pnt_dat, col_buf, NULL, 4
+    };    
+    
+    tmp = (int)(256.0f * rate);
+    tmp = ((col & 0xFF00FF) * tmp) >> 8;
+    
+    pal = tmp & 0xFF00FF;
+    
+    tmp = (int)(256.0f * rate);
+    
+    col >>= 8;
+    
+    tmp = (col & 0xFF00FF) * tmp;
+    
+    pal |= tmp & 0xFF00FF00;
+    
+    if ((pal & 0xFF000000))
+    {
+        njColorBlendingMode(0, 8);
+        njColorBlendingMode(1, 6);
+        
+        col_buf[0].color = col_buf[1].color = col_buf[2].color = col_buf[3].color = pal;
+        
+        njDrawPolygon2D(&p2c, p2c.num, pri, 96);
+    }
 }
 
 // 100% matching!

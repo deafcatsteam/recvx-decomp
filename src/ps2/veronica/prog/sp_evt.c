@@ -1,4 +1,6 @@
 #include "../../../ps2/veronica/prog/sp_evt.h"
+#include "../../../ps2/veronica/prog/main.h"
+#include "../../../ps2/veronica/prog/pwksub.h"
 
 /*char* comevt_message_tst[27];
 unsigned char comevt_script_tst[181];
@@ -22,9 +24,15 @@ unsigned char comevt_script_no7[40];
 _anon20 acs_no7[8];
 void* comevt_message_tab[8];
 void* comevt_script_tab[8];
-void* comevt_acs_tab[8];
-void(*bhCtrSpEvtCom_mode0)()[3];
-_anon11* sys;
+void* comevt_acs_tab[8];*/
+typedef void (*bhCtrSpEvtCom_mode0_proc)();
+bhCtrSpEvtCom_mode0_proc bhCtrSpEvtCom_mode0[3] = 
+{
+	bhInitSpEvtComputer,
+	bhMainSpEvtComputer,
+	bhMainSpEvtComputer
+};
+/*_anon11* sys;
 unsigned int palbuf[0];
 _anon12* rom;
 float fNaViwClipFar;
@@ -32,34 +40,29 @@ float cmat[16];
 BH_PWORK ene[0];
 float fNaViwClipNear;*/
 
-// 
-// Start address: 0x2bd050
+// 100% matching!
 void bhControlSpEvtComputer()
 {
-	// Line 93, Address: 0x2bd050, Func Offset: 0
-	// Func End, Address: 0x2bd080, Func Offset: 0x30
-	scePrintf("bhControlSpEvtComputer - UNIMPLEMENTED!\n");
+	bhCtrSpEvtCom_mode0[sys->com_md0]();
+}
+
+// 100% matching!
+void bhKeepSpEvtComputer()
+{
+    if (!(sys->com_flg & 0x1))
+    {
+        sys->com_flg |= 0x1;
+        
+        sys->com_exp = bhGetFreeMemory(sizeof(COM_EVT_WORK), 32);
+    }
 }
 
 // 
-// Start address: 0x2bd080
-void bhKeepSpEvtComputer()
-{
-	// Line 100, Address: 0x2bd080, Func Offset: 0
-	// Line 101, Address: 0x2bd088, Func Offset: 0x8
-	// Line 103, Address: 0x2bd0ac, Func Offset: 0x2c
-	// Line 104, Address: 0x2bd0b4, Func Offset: 0x34
-	// Line 106, Address: 0x2bd0d4, Func Offset: 0x54
-	// Func End, Address: 0x2bd0e0, Func Offset: 0x60
-	scePrintf("bhKeepSpEvtComputer - UNIMPLEMENTED!\n");
-}
-
-/*// 
 // Start address: 0x2bd0e0
 void bhInitSpEvtComputer()
 {
 	int i;
-	_anon7* ce;
+	//_anon7* ce;
 	// Line 112, Address: 0x2bd0e0, Func Offset: 0
 	// Line 116, Address: 0x2bd0f4, Func Offset: 0x14
 	// Line 119, Address: 0x2bd0fc, Func Offset: 0x1c
@@ -95,14 +98,15 @@ void bhInitSpEvtComputer()
 	// Line 148, Address: 0x2bd320, Func Offset: 0x240
 	// Line 149, Address: 0x2bd354, Func Offset: 0x274
 	// Func End, Address: 0x2bd36c, Func Offset: 0x28c
+	scePrintf("bhInitSpEvtComputer - UNIMPLEMENTED!\n");
 }
 
 // 
 // Start address: 0x2bd370
 void bhMainSpEvtComputer()
 {
-	_anon41 line;
-	_anon7* ce;
+	//_anon41 line;
+	//_anon7* ce;
 	// Line 156, Address: 0x2bd370, Func Offset: 0
 	// Line 157, Address: 0x2bd37c, Func Offset: 0xc
 	// Line 160, Address: 0x2bd384, Func Offset: 0x14
@@ -296,13 +300,14 @@ void bhMainSpEvtComputer()
 	// Line 375, Address: 0x2bddb0, Func Offset: 0xa40
 	// Line 376, Address: 0x2bddb8, Func Offset: 0xa48
 	// Func End, Address: 0x2bddc8, Func Offset: 0xa58
+	scePrintf("bhMainSpEvtComputer - UNIMPLEMENTED!\n");
 }
 
 // 
 // Start address: 0x2bddd0
 void bhExitSpEvtComputer()
 {
-	_anon7* ce;
+	//_anon7* ce;
 	// Line 382, Address: 0x2bddd0, Func Offset: 0
 	// Line 383, Address: 0x2bdddc, Func Offset: 0xc
 	// Line 384, Address: 0x2bddf0, Func Offset: 0x20
@@ -344,9 +349,10 @@ void bhExitSpEvtComputer()
 	// Line 408, Address: 0x2bdf4c, Func Offset: 0x17c
 	// Line 409, Address: 0x2bdf54, Func Offset: 0x184
 	// Func End, Address: 0x2bdf64, Func Offset: 0x194
+	scePrintf("bhExitSpEvtComputer - UNIMPLEMENTED!\n");
 }
 
-// 
+/*// 
 // Start address: 0x2bdf70
 void bhEntrySpEvtComputer()
 {
@@ -1016,25 +1022,25 @@ void bhDrawSpEvtComCharacter()
 	// Line 994, Address: 0x2bf76c, Func Offset: 0x29c
 	// Line 996, Address: 0x2bf77c, Func Offset: 0x2ac
 	// Func End, Address: 0x2bf7a4, Func Offset: 0x2d4
-}
+}*/
 
-// 
-// Start address: 0x2bf7b0
+// 100% matching!
 void bhSetSpEvtComFade(float fdst, float fcnt)
 {
-	_anon7* ce;
-	// Line 1003, Address: 0x2bf7b0, Func Offset: 0
-	// Line 1004, Address: 0x2bf7c4, Func Offset: 0x14
-	// Line 1005, Address: 0x2bf7c8, Func Offset: 0x18
-	// Line 1007, Address: 0x2bf7cc, Func Offset: 0x1c
-	// Line 1005, Address: 0x2bf7d0, Func Offset: 0x20
-	// Line 1006, Address: 0x2bf7dc, Func Offset: 0x2c
-	// Line 1007, Address: 0x2bf7e0, Func Offset: 0x30
-	// Line 1008, Address: 0x2bf7fc, Func Offset: 0x4c
-	// Func End, Address: 0x2bf804, Func Offset: 0x54
+	COM_EVT_WORK* ce;
+
+	ce = sys->com_exp;
+
+    ce->fdst = fdst;
+
+    ce->fcal = (fdst - ce->fsrc) / fcnt;
+
+    ce->fcnt = fcnt;
+
+    sys->com_flg |= 0x2;
 }
 
-// 
+/*// 
 // Start address: 0x2bf810
 void bhCalcSpEvtComFade()
 {
@@ -1177,17 +1183,19 @@ void bhDrawSpEvtBoxLine()
 	// Line 1113, Address: 0x2bfba0, Func Offset: 0x150
 	// Line 1114, Address: 0x2bfba8, Func Offset: 0x158
 	// Func End, Address: 0x2bfbc8, Func Offset: 0x178
-}
+}*/
 
-// 
-// Start address: 0x2bfbd0
+// 100% matching!
 void bhClearComEvtText()
 {
-	// Line 1122, Address: 0x2bfbd0, Func Offset: 0
-	// Func End, Address: 0x2bfbf4, Func Offset: 0x24
+	COM_EVT_WORK* ce; // not from DWARF
+
+	ce = sys->com_exp;
+
+    npSetMemoryL((unsigned int*)ce->txt, sizeof(ce->txt) / 4, 0);
 }
 
-// 
+/*// 
 // Start address: 0x2bfc00
 void bhInitComEvtScript()
 {

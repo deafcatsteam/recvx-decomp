@@ -456,17 +456,15 @@ void bhControlAlphaFadeObject(_anon0* op)
 	// Line 730, Address: 0x284778, Func Offset: 0x168
 	// Line 731, Address: 0x28477c, Func Offset: 0x16c
 	// Func End, Address: 0x2847a4, Func Offset: 0x194
-}
+}*/
 
-// 
-// Start address: 0x2847b0
+// 100% matching!
 void bhObjDmy()
 {
-	// Line 746, Address: 0x2847b0, Func Offset: 0
-	// Func End, Address: 0x2847b8, Func Offset: 0x8
+
 }
 
-// 
+/*// 
 // Start address: 0x2847c0
 void bhObjItmBox(_anon0* op)
 {
@@ -780,30 +778,23 @@ void bhObj001(_anon0* op)
 	// Line 1017, Address: 0x285504, Func Offset: 0xc24
 	// Line 1021, Address: 0x285518, Func Offset: 0xc38
 	// Func End, Address: 0x285534, Func Offset: 0xc54
-}
+}*/
 
-// 
-// Start address: 0x285540
-void bhObj002(_anon0* op)
+// 100% matching!
+void bhObj002(O_WRK* op)
 {
-	// Line 1028, Address: 0x285540, Func Offset: 0
-	// Line 1029, Address: 0x28554c, Func Offset: 0xc
-	// Line 1030, Address: 0x285588, Func Offset: 0x48
-	// Func End, Address: 0x285598, Func Offset: 0x58
+	op->ay += (int)(182.04445f * (0.5f * op->aspd)) & 0xFFFF;
 }
 
-// 
-// Start address: 0x2855a0
-void bhObj003(_anon0* op)
+// 100% matching!
+void bhObj003(O_WRK* op)
 {
-	// Line 1037, Address: 0x2855a0, Func Offset: 0
-	// Line 1038, Address: 0x2855b0, Func Offset: 0x10
-	// Line 1039, Address: 0x2855d0, Func Offset: 0x30
-	// Line 1040, Address: 0x2855dc, Func Offset: 0x3c
-	// Func End, Address: 0x2855ec, Func Offset: 0x4c
+	op->az = (int)(65536.0f * njSin(op->ct0)) / 32;
+
+    op->ct0 += 1024;
 }
 
-// 
+/*// 
 // Start address: 0x2855f0
 void bhObj004(_anon0* op)
 {
@@ -1427,18 +1418,15 @@ void bhObj010(_anon0* op)
 	// Line 2477, Address: 0x2870f0, Func Offset: 0x60
 	// Line 2480, Address: 0x287108, Func Offset: 0x78
 	// Func End, Address: 0x287118, Func Offset: 0x88
-}
+}*/
 
-// 
-// Start address: 0x287120
-void bhObj011(_anon0* op)
+// 100% matching!
+void bhObj011(O_WRK* op)
 {
-	// Line 2488, Address: 0x287120, Func Offset: 0
-	// Line 2489, Address: 0x287128, Func Offset: 0x8
-	// Func End, Address: 0x287130, Func Offset: 0x10
+	op->mdflg |= 0x8;
 }
 
-// 
+/*// 
 // Start address: 0x287130
 void bhObj012(_anon0* op)
 {
@@ -1723,13 +1711,10 @@ void bhObjClpn(_anon0* op)
 	// Line 2742, Address: 0x287b50, Func Offset: 0x8a0
 	// Line 2747, Address: 0x287b60, Func Offset: 0x8b0
 	// Func End, Address: 0x287b9c, Func Offset: 0x8ec
-}
-
-// 
-// Start address: 0x287ba0
-void bhObjWssg()
-{
-	// Line 2761, Address: 0x287ba0, Func Offset: 0
-	// Func End, Address: 0x287ba8, Func Offset: 0x8
 }*/
 
+// 100% matching!
+void bhObjWssg()
+{
+
+}
