@@ -68,18 +68,21 @@ static const char* k_afs_filename[7] = {
 #define LABEL_W          820
 #define LABEL_H           45
 
-/* TIM2 picture header — local copy so gallery doesn't pull in PS2 SDK
- * headers. Layout matches Sony's TIM2 1.0 spec exactly:
+/* TIM2 picture header — local copy that matches RECVX's `TIM2_PICTUREHEADER`
+ * in include/ps2/veronica/prog/types.h. Note the ClutType / ImageType swap
+ * vs Sony's published TIM2 1.0 spec — RECVX has ClutType at 0x12 and
+ * ImageType at 0x13. Don't "correct" this back to the spec or the decoder
+ * silently rejects every entry.
  *
  *   0x00 u32 TotalSize       — total picture size (header + image + clut)
  *   0x04 u32 ClutSize        — clut data byte count
  *   0x08 u32 ImageSize       — image data byte count
- *   0x0C u16 HeaderSize      — picture-header size (e.g. 0x30 / 0x40)
+ *   0x0C u16 HeaderSize      — picture-header size (e.g. 0x30)
  *   0x0E u16 ClutColors      — palette entry count
  *   0x10 u8  PictFormat      — always 0 in PS2 builds
  *   0x11 u8  MipMapTextures  — mipmap level count
- *   0x12 u8  ImageType       — 3=BGRA32, 4=4bpp paletted, 5=8bpp paletted, ...
- *   0x13 u8  ClutType        — clut format + CSM flag (bit 7)
+ *   0x12 u8  ClutType        — clut format + CSM flag (bit 7)   ← RECVX order
+ *   0x13 u8  ImageType       — 3=BGRA32, 4=4bpp paletted, 5=8bpp paletted
  *   0x14 u16 ImageWidth
  *   0x16 u16 ImageHeight
  *   0x18 ...                 — GsTex0/Tex1/Regs/TexClut, ignored
@@ -93,8 +96,8 @@ typedef struct {
     uint16_t ClutColors;
     uint8_t  PictFormat;
     uint8_t  MipMapTextures;
-    uint8_t  ImageType;
     uint8_t  ClutType;
+    uint8_t  ImageType;
     uint16_t ImageWidth;
     uint16_t ImageHeight;
     uint64_t GsTex0;
