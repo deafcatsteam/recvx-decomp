@@ -109,8 +109,8 @@ void bhSetScreenSaver(int a, float b) { (void)a;(void)b; }
 void bhControlScreenSaver(void)       {}
 void bhInitScreenSaver(void)          {}
 void bhDrawScreenSaver(void)          {}
-int  bhCkFlg(void* flg, int bit)      { (void)flg;(void)bit; return 0; }
-void bhStFlg(void* flg, int bit)      { (void)flg;(void)bit; }
+/* bhStFlg / bhCrFlg / bhCkFlg now live in src/ps2/veronica/prog/flag.c —
+ * pulled into RECVX_GAME_SOURCES. */
 void bhSetPad(void)                   {}
 void bhDeleteYakkyou(void)            {}
 float bhMesLen(const unsigned short* m) { (void)m; return 0.0f; }

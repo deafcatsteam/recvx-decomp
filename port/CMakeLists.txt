@@ -210,6 +210,9 @@ if(RECVX_BUILD_GAME)
         ${RECVX_SRC}/ps2/veronica/prog/adv.c
         ${RECVX_SRC}/ps2/veronica/prog/padman.c
         ${RECVX_SRC}/ps2/veronica/prog/vibman.c
+        # Tiny utilities — bit-flag helpers used by adv.c and game.c. 100%
+        # matched, zero deps; replaces the void* stubs in stub_game.c.
+        ${RECVX_SRC}/ps2/veronica/prog/flag.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.

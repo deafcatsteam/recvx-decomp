@@ -19,10 +19,20 @@
 #include <string.h>
 #include <time.h>
 
+#include "recvx_afs.h"
+
 #ifdef _WIN32
 #include <windows.h>
+#include <direct.h>
 #include <dbghelp.h>
 #pragma comment(lib, "dbghelp.lib")
+#endif
+
+#ifndef _WIN32
+#include <sys/stat.h>
+#endif
+
+#ifdef _WIN32
 
 /* Crash handler — captures the offending RIP plus a 16-frame stack trace
  * with symbol names so we can pinpoint where in the decomp/port the
@@ -114,6 +124,13 @@ static bool        g_run_game      = false;
 static int         g_msa_rate      = 0;   /* 0 = use Smpl-derived rate */
 static const char* g_se_remap_str  = NULL; /* "N:M[,N:M...]"; NULL → use msa_init defaults */
 
+/* Demo / inspection modes — short-circuit the normal boot flow so we
+ * can poke at the disc contents without running the game. */
+static int         g_play_movie    = -1;  /* >=0: open MOVIE/MV_NNN.PSS and play */
+static bool        g_list_afs      = false;
+static int         g_dump_afs      = -1;  /* 0..6: extract every entry of AFS partition N */
+static const char* g_dump_afs_dir  = NULL; /* output dir for --dump-afs */
+
 /* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
  * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
  * as sample_idx to explicitly clear an entry (back to identity). */
@@ -152,17 +169,32 @@ static void parse_args(int argc, char** argv) {
             g_msa_rate = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--se-remap") == 0 && i + 1 < argc) {
             g_se_remap_str = argv[++i];
+        } else if (strcmp(argv[i], "--play-movie") == 0 && i + 1 < argc) {
+            g_play_movie = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--list-afs") == 0) {
+            g_list_afs = true;
+        } else if (strcmp(argv[i], "--dump-afs") == 0 && i + 1 < argc) {
+            g_dump_afs = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--dump-afs-dir") == 0 && i + 1 < argc) {
+            g_dump_afs_dir = argv[++i];
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
                    "                [--gamedata path\\to\\extracted\\dir]\n"
                    "                [--game] [--msa-rate N]\n"
                    "                [--se-remap N:M[,N:M...]]\n"
-                   "  --game      run njUserInit/njUserMain task loop instead of FMV demo\n"
-                   "  --gamedata  dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n"
-                   "  --msa-rate  override COMMON.MLT source sample rate in Hz\n"
-                   "              (try 22050 / 24000 / 32000 / 44100 / 48000)\n"
-                   "  --se-remap  remap SeNo→sample-index for COMMON.MLT menu SEs\n"
-                   "              e.g. --se-remap 0:3,2:0,3:2   (sample_idx -1 = identity)\n");
+                   "                [--play-movie N] [--list-afs] [--dump-afs N [--dump-afs-dir DIR]]\n"
+                   "  --game        run njUserInit/njUserMain task loop instead of FMV demo\n"
+                   "  --gamedata    dir containing SYSTEM.AFS / ADV.AFS / ... for real file I/O\n"
+                   "  --msa-rate    override COMMON.MLT source sample rate in Hz\n"
+                   "                (try 22050 / 24000 / 32000 / 44100 / 48000)\n"
+                   "  --se-remap    remap SeNo→sample-index for COMMON.MLT menu SEs\n"
+                   "                e.g. --se-remap 0:3,2:0,3:2   (sample_idx -1 = identity)\n"
+                   "  --play-movie  open MOVIE/MV_NNN.PSS from gamedata dir and play it\n"
+                   "                Skip with Start. Useful: 0=opening, 16=Capcom presents.\n"
+                   "  --list-afs    print TOC of every AFS partition (BGM1, VOICE1, ADV, ...)\n"
+                   "  --dump-afs N  extract every entry of partition N to disk:\n"
+                   "                  0=BGM1 1=VOICE1 2=MULTSPQ1 3=ADV 4=ITEM1 5=MRY 6=SYSTEM\n"
+                   "  --dump-afs-dir  output dir for --dump-afs (default: ./afs-dump)\n");
             exit(0);
         }
     }
@@ -174,25 +206,146 @@ static void parse_args(int argc, char** argv) {
 /* SDL2 main shim provides WinMain, we just write main() */
 #endif
 
-static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso) {
+/* Sniff the first 4 bytes of an AFS entry to label its likely format.
+ * Used by --list-afs / --dump-afs so the printed line and the file
+ * extension on disk match the actual content. */
+static const char* sniff_afs_format(const unsigned char* p, uint32_t sz) {
+    if (sz < 4) return "raw";
+    /* TIM2 (texture): "TIM2" */
+    if (p[0] == 'T' && p[1] == 'I' && p[2] == 'M' && p[3] == '2') return "tim2";
+    /* CRI ADX: 0x80 0x00 prefix + "(c)CRI" at offset 4 */
+    if (p[0] == 0x80 && p[1] == 0x00 && sz >= 0x14 &&
+        p[0x10] == '(' && p[0x11] == 'c' && p[0x12] == ')' &&
+        p[0x13] == 'C') return "adx";
+    /* CRI Sofdec / MPEG-PS: starts with 0x000001BA pack header */
+    if (p[0] == 0x00 && p[1] == 0x00 && p[2] == 0x01 && p[3] == 0xBA) return "pss";
+    /* AFS-in-AFS (some MULTSPQ files contain nested archives) */
+    if (p[0] == 'A' && p[1] == 'F' && p[2] == 'S' &&
+        (p[3] == 0x00 || p[3] == 0x20)) return "afs";
+    return "raw";
+}
+
+static const char* g_afs_filename[7] = {
+    "BGM1.AFS", "VOICE1.AFS", "MULTSPQ1.AFS", "ADV.AFS",
+    "ITEM1.AFS", "MRY.AFS", "SYSTEM.AFS"
+};
+
+static int run_list_afs(void) {
+    char path[512];
+    for (int p = 0; p < 7; ++p) {
+        snprintf(path, sizeof path, "%s/%s", g_gamedata_path, g_afs_filename[p]);
+        recvx_afs_t* a = recvx_afs_open(path);
+        if (!a) { printf("[%d] %-13s  (not found)\n", p, g_afs_filename[p]); continue; }
+        unsigned n = recvx_afs_count(a);
+        printf("[%d] %-13s  %u entries\n", p, g_afs_filename[p], n);
+        for (unsigned i = 0; i < n; ++i) {
+            uint32_t sz = recvx_afs_entry_size(a, i);
+            const char* fmt = "raw";
+            if (sz >= 4) {
+                unsigned char head[16] = {0};
+                recvx_afs_read(a, i, head); /* small read; ok if short */
+                fmt = sniff_afs_format(head, sz);
+            }
+            printf("    [%4u]  %10u bytes  %s\n", i, sz, fmt);
+        }
+        recvx_afs_close(a);
+    }
+    return 0;
+}
+
+static int run_dump_afs(int part) {
+    if (part < 0 || part > 6) {
+        fprintf(stderr, "--dump-afs: partition must be 0..6\n");
+        return 1;
+    }
+    const char* outdir = g_dump_afs_dir ? g_dump_afs_dir : "./afs-dump";
+#ifdef _WIN32
+    _mkdir(outdir);
+    char sub[512];
+    snprintf(sub, sizeof sub, "%s/%s", outdir, g_afs_filename[part]);
+    _mkdir(sub);
+#else
+    mkdir(outdir, 0777);
+    char sub[512];
+    snprintf(sub, sizeof sub, "%s/%s", outdir, g_afs_filename[part]);
+    mkdir(sub, 0777);
+#endif
+
+    char path[512];
+    snprintf(path, sizeof path, "%s/%s", g_gamedata_path, g_afs_filename[part]);
+    recvx_afs_t* a = recvx_afs_open(path);
+    if (!a) { fprintf(stderr, "could not open %s\n", path); return 1; }
+
+    unsigned n = recvx_afs_count(a);
+    printf("dumping %u entries from %s to %s ...\n",
+           n, g_afs_filename[part], sub);
+    for (unsigned i = 0; i < n; ++i) {
+        uint32_t sz = recvx_afs_entry_size(a, i);
+        if (!sz) {
+            printf("  [%4u]  (empty, skipped)\n", i);
+            continue;
+        }
+        unsigned char* buf = (unsigned char*)malloc(sz);
+        if (!buf) { fprintf(stderr, "OOM at entry %u\n", i); break; }
+        uint32_t got = recvx_afs_read(a, i, buf);
+        if (got != sz) { free(buf); fprintf(stderr, "short read at %u\n", i); continue; }
+        const char* fmt = sniff_afs_format(buf, sz);
+        char fname[640];
+        snprintf(fname, sizeof fname, "%s/%04u.%s", sub, i, fmt);
+        FILE* fp = fopen(fname, "wb");
+        if (fp) {
+            fwrite(buf, 1, sz, fp);
+            fclose(fp);
+            printf("  [%4u]  %10u bytes -> %s\n", i, sz, fname);
+        } else {
+            fprintf(stderr, "  [%4u]  failed to open %s\n", i, fname);
+        }
+        free(buf);
+    }
+    recvx_afs_close(a);
+    return 0;
+}
+
+static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso,
+                        int movie_id) {
     recvx_fmv_t* fmv = NULL;
     uint32_t     fmv_start_ms = 0;
-    if (iso) {
-        fmv = recvx_fmv_open("\\MOVIE\\MV_000.PSS;1");
-        if (fmv) {
-            recvx_fmv_set_audio_sink(fmv, audio_sink_to_backend,
-                                     (void*)backend);
-        }
-        if (fmv && !recvx_fmv_advance(fmv)) {
-            recvx_fmv_close(fmv);
-            fmv = NULL;
-        } else if (fmv) {
-            fmv_start_ms = now_ms();
-        }
+
+    /* Try gamedata/MOVIE/MV_NNN.PSS first (loose file), fall back to ISO. */
+    char path[512];
+    snprintf(path, sizeof path, "%s/MOVIE/MV_%03d.PSS",
+             g_gamedata_path, movie_id);
+    fmv = recvx_fmv_open_loose(path);
+
+    if (!fmv && iso) {
+        char iso_path[64];
+        snprintf(iso_path, sizeof iso_path, "\\MOVIE\\MV_%03d.PSS;1", movie_id);
+        fmv = recvx_fmv_open(iso_path);
+    }
+
+    if (fmv) {
+        recvx_fmv_set_audio_sink(fmv, audio_sink_to_backend, (void*)backend);
+    }
+    if (fmv && !recvx_fmv_advance(fmv)) {
+        recvx_fmv_close(fmv);
+        fmv = NULL;
+    } else if (fmv) {
+        fmv_start_ms = now_ms();
     }
 
     while (backend->pump_events()) {
         backend->begin_frame();
+        recvx_input_new_frame();
+        extern void recvx_pump_pad(void);
+        recvx_pump_pad();
+        if (fmv) {
+            /* Start press skips the movie. */
+            if (recvx_input_buttons() & 0x800u) {
+                RX_LOG("fmv-demo", "Start-press skip");
+                recvx_fmv_close(fmv);
+                fmv = NULL;
+            }
+        }
         if (fmv) {
             double elapsed_s = (double)(now_ms() - fmv_start_ms) / 1000.0;
             while (recvx_fmv_pts_s(fmv) < elapsed_s) {
@@ -209,6 +362,7 @@ static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso) {
             }
         }
         backend->end_frame();
+        recvx_backend_pace(60);
     }
     if (fmv) recvx_fmv_close(fmv);
     return 0;
@@ -436,10 +590,19 @@ int main(int argc, char** argv) {
     SetUnhandledExceptionFilter(crash_filter);
 #endif
     parse_args(argc, argv);
+
+    /* Headless inspection modes — no backend init needed. Run before any
+     * SDL/GL setup so they exit cleanly even if the user has no display. */
+    if (g_list_afs)        return run_list_afs();
+    if (g_dump_afs >= 0)   return run_dump_afs(g_dump_afs);
+
+    const char* mode_name = g_run_game ? "game"
+                          : (g_play_movie >= 0) ? "fmv-demo"
+                          : "fmv-demo (default MV_000)";
     RX_LOG("boot", "RECVX PC port — phase 5 scaffold");
     RX_LOG("boot", "ISO path: %s", g_iso_path);
     RX_LOG("boot", "gamedata: %s", g_gamedata_path);
-    RX_LOG("boot", "mode: %s", g_run_game ? "game" : "fmv-demo");
+    RX_LOG("boot", "mode: %s", mode_name);
 
     recvx_iso_t* iso = recvx_iso_open(g_iso_path);
     if (!iso) {
@@ -465,8 +628,17 @@ int main(int argc, char** argv) {
     recvx_backend_set_current(backend);
     RX_LOG("boot", "backend: %s", backend->name);
 
-    int rc = g_run_game ? run_game_loop(backend)
-                        : run_fmv_demo(backend, iso);
+    /* Set the gamedata dir even in fmv-demo mode so run_fmv_demo can
+     * resolve loose-file MOVIE/MV_NNN.PSS paths. */
+    recvx_set_gamedata_dir(g_gamedata_path);
+
+    int rc;
+    if (g_run_game) {
+        rc = run_game_loop(backend);
+    } else {
+        int mid = (g_play_movie >= 0) ? g_play_movie : 0;
+        rc = run_fmv_demo(backend, iso, mid);
+    }
 
     backend->shutdown();
     if (iso) recvx_iso_close(iso);
