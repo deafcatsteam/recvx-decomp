@@ -69,18 +69,32 @@ static const char* k_afs_filename[7] = {
 #define LABEL_H           45
 
 /* TIM2 picture header — local copy so gallery doesn't pull in PS2 SDK
- * headers. Layout matches Sony's TIM2 1.0 spec. */
+ * headers. Layout matches Sony's TIM2 1.0 spec exactly:
+ *
+ *   0x00 u32 TotalSize       — total picture size (header + image + clut)
+ *   0x04 u32 ClutSize        — clut data byte count
+ *   0x08 u32 ImageSize       — image data byte count
+ *   0x0C u16 HeaderSize      — picture-header size (e.g. 0x30 / 0x40)
+ *   0x0E u16 ClutColors      — palette entry count
+ *   0x10 u8  PictFormat      — always 0 in PS2 builds
+ *   0x11 u8  MipMapTextures  — mipmap level count
+ *   0x12 u8  ImageType       — 3=BGRA32, 4=4bpp paletted, 5=8bpp paletted, ...
+ *   0x13 u8  ClutType        — clut format + CSM flag (bit 7)
+ *   0x14 u16 ImageWidth
+ *   0x16 u16 ImageHeight
+ *   0x18 ...                 — GsTex0/Tex1/Regs/TexClut, ignored
+ */
 #pragma pack(push, 1)
 typedef struct {
     uint32_t TotalSize;
     uint32_t ClutSize;
     uint32_t ImageSize;
     uint16_t HeaderSize;
-    uint16_t ImageColors;
-    uint8_t  ImageType;
+    uint16_t ClutColors;
+    uint8_t  PictFormat;
     uint8_t  MipMapTextures;
+    uint8_t  ImageType;
     uint8_t  ClutType;
-    uint8_t  ImageType2;
     uint16_t ImageWidth;
     uint16_t ImageHeight;
     uint64_t GsTex0;
@@ -103,34 +117,42 @@ static inline uint8_t idx_csm1_swap(uint8_t i) {
     return (uint8_t)((i & 0xE7u) | ((i & 0x08u) << 1) | ((i & 0x10u) >> 1));
 }
 
-/* Decode a TIM2 blob into RGBA8. Tries both EX-headered (128B prefix
- * before "TIM2" magic at +0) and bare layouts. Returns 1 on success. */
+/* Decode a TIM2 blob into RGBA8. Both bare TIM2 (picture header @ +16,
+ * after the 16-byte file header) and the in-game EX layout (game-extended
+ * 128-byte file header, picture header @ +128) start with "TIM2" magic
+ * at offset 0. We try both candidate offsets and pick whichever produces
+ * a sane ImageWidth/Height — RECVX's AFS entries use the EX layout but
+ * dumps from third-party tools may strip it down to bare. */
 static int gallery_tim2_decode(const void* blob, uint32_t blob_size,
                                int* out_w, int* out_h, uint8_t** out_pixels) {
     const uint8_t* pp = (const uint8_t*)blob;
     if (!pp || blob_size < 0x40) return 0;
+    if (pp[0] != 'T' || pp[1] != 'I' || pp[2] != 'M' || pp[3] != '2') return 0;
 
-    /* Magic at offset 0 means raw TIM2; not the in-game EX layout. */
-    int hdr_off = 0;
-    if (pp[0] != 'T' || pp[1] != 'I' || pp[2] != 'M' || pp[3] != '2') {
-        /* Try EX header — game blobs prepend 128B incl. "TIM2" */
-        if (blob_size > 128 && pp[0] == 'T' && pp[1] == 'I' &&
-            pp[2] == 'M' && pp[3] == '2') {
+    int hdr_off = -1;
+    /* Prefer EX (RECVX's in-memory layout) — try it first. */
+    if (blob_size >= 128 + sizeof(tim2_pic_hdr)) {
+        const tim2_pic_hdr* p = (const tim2_pic_hdr*)(pp + 128);
+        if (p->ImageWidth > 0 && p->ImageWidth <= TIM2_MAX_W &&
+            p->ImageHeight > 0 && p->ImageHeight <= TIM2_MAX_H &&
+            (p->ImageType == 3 || p->ImageType == 4 || p->ImageType == 5)) {
             hdr_off = 128;
-        } else {
-            return 0;
         }
     }
-    /* Picture header sits at hdr_off + 16 (after the TIM2 file header)
-     * for the bare format, or at 128 directly for EX. */
-    if (hdr_off == 0) {
-        /* Bare TIM2: 16-byte file hdr (magic+version+pic_count+pad), then pic hdr */
-        hdr_off = 16;
+    /* Fallback: bare TIM2 with 16-byte file header. */
+    if (hdr_off < 0 && blob_size >= 16 + sizeof(tim2_pic_hdr)) {
+        const tim2_pic_hdr* p = (const tim2_pic_hdr*)(pp + 16);
+        if (p->ImageWidth > 0 && p->ImageWidth <= TIM2_MAX_W &&
+            p->ImageHeight > 0 && p->ImageHeight <= TIM2_MAX_H &&
+            (p->ImageType == 3 || p->ImageType == 4 || p->ImageType == 5)) {
+            hdr_off = 16;
+        }
     }
+    if (hdr_off < 0) return 0;
+
     const tim2_pic_hdr* ph = (const tim2_pic_hdr*)(pp + hdr_off);
     int w = (int)ph->ImageWidth;
     int h = (int)ph->ImageHeight;
-    if (w <= 0 || h <= 0 || w > TIM2_MAX_W || h > TIM2_MAX_H) return 0;
 
     const uint8_t* img  = pp + hdr_off + ph->HeaderSize;
     const uint8_t* clut = img + ph->ImageSize;
