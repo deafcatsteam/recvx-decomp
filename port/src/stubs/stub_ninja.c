@@ -31,6 +31,55 @@ void njClipZ(float near, float far)                   { (void)near; (void)far; }
 void njSetBackColor(unsigned int a,unsigned int b,unsigned int c){ (void)a;(void)b;(void)c; }
 int  njCalcVtxBuffer(int a,int b,int c)               { (void)a;(void)b;(void)c; return a+b+c; }
 
+/* ----------------------------------------------------------------------
+ * Matrix stack + transform stubs needed by itemview.c.
+ * Real impls would track a NJS_MATRIX stack and apply rotation/scaling
+ * for the in-game 3D item-view model. For headless / port-without-GL3D
+ * builds these are no-ops; the model rendering would be invisible
+ * anyway since njCnkEasyMultiDrawModel below is also stubbed.
+ * ---------------------------------------------------------------------- */
+void njPushMatrix(void* m)                            { (void)m; }
+void njPopMatrix(int n)                               { (void)n; }
+void njSetMatrix(void* m)                             { (void)m; }
+void njMultiMatrix(void* m)                           { (void)m; }
+void njClearMatrix(void* m)                           { (void)m; }
+void njUnitMatrix(void* m)                            { (void)m; }
+void njTransposeMatrix(void* dst, void* src)          { (void)dst;(void)src; }
+void njTranslate(void* m, float x, float y, float z)  { (void)m;(void)x;(void)y;(void)z; }
+void njRotateX(void* m, int a)                        { (void)m;(void)a; }
+void njRotateY(void* m, int a)                        { (void)m;(void)a; }
+void njRotateZ(void* m, int a)                        { (void)m;(void)a; }
+void njScale  (void* m, float x, float y, float z)    { (void)m;(void)x;(void)y;(void)z; }
+void njScalor (float* dst, float* src, float s)       { (void)dst;(void)src;(void)s; }
+void njCalcPoint(void* m, void* in, void* out)        { (void)m;(void)in;(void)out; }
+void njDrawPolygon3D(void* p, int n, int t)           { (void)p;(void)n;(void)t; }
+
+/* Chunked-model draw + lighting (njCnk*). Real impls walk a chunk
+ * tree and send polys to the PS2 GS / our GL3D backend. Stubbed for
+ * now — itemview's 3D inventory item won't be visible until we
+ * implement these. */
+void njCnkEasyMultiDrawModel(void* p)                 { (void)p; }
+void njCnkEasyMultiDrawObjectI(void* p, int idx)      { (void)p;(void)idx; }
+void njCnkSetEasyMultiAmbient(unsigned int c)         { (void)c; }
+void njCnkSetEasyMultiLight(int n, void* v)           { (void)n;(void)v; }
+void njCnkSetEasyMultiLightColor(int n, unsigned int c){ (void)n;(void)c; }
+void njCnkSetEasyMultiLightMatrices(int n, void* m)   { (void)n;(void)m; }
+void njCnkSetEasyMultiLightPoint(int n, void* p)      { (void)n;(void)p; }
+void njCnkSetEasyMultiLightRange(int n, float r)      { (void)n;(void)r; }
+
+/* Bounding-box / model-action helpers — itemview.c calls these to
+ * size + animate the rotating item preview. No-op = no animation. */
+void npGetWHDSize(void* mlw, float* whd)              { (void)mlw;(void)whd; }
+void MdlAction00(void* mlw)                           { (void)mlw; }
+void MdlAction01(void* mlw)                           { (void)mlw; }
+void MdlAction02(void* mlw)                           { (void)mlw; }
+int  MdlDirChk(void* mlw)                             { (void)mlw; return 0; }
+
+/* Model-binary / object-work helpers — bring in real impls when
+ * binfunc.c or playpch.c gets compiled. For now no-ops. */
+int  bhMlbBinRealize(void* dat, void* mlw)            { (void)dat;(void)mlw; return 0; }
+void bhKeepObjWork(void* obj, void* dst)              { (void)obj;(void)dst; }
+
 /* sb* — SEGA basic (display mode / vsync) */
 int  sbInitSystem(int mode, int frame, int count)     { (void)mode;(void)frame;(void)count; return 0; }
 void sbExitSystem(void)                               {}

@@ -230,6 +230,11 @@ if(RECVX_BUILD_GAME)
         # in by itself, just doesn't have item state to read against
         # until sub1.c follows.
         ${RECVX_SRC}/ps2/veronica/prog/fileview.c
+        # Item-view 3D model preview (zoom-on-pickup). 21/23 matched.
+        # Stubs out 26 ninja matrix/draw + model-loading symbols in
+        # stub_ninja.c — itemview compiles, but the 3D rendering
+        # surface is no-op until njCnk* / matrix stack are implemented.
+        ${RECVX_SRC}/ps2/veronica/prog/itemview.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
