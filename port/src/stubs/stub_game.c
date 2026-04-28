@@ -118,6 +118,24 @@ void bhDispMessage(float x,float y,float z,int a,int b,int c,int d){(void)x;(voi
 void bhDispMessageEx(float x,float y,float z,int a,int b,int c,int d){(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)d;}
 void bhDispTime(void* pos,int n,int tim,int col,float z){(void)pos;(void)n;(void)tim;(void)col;(void)z;}
 
+/* ----------------------------------------------------------------------
+ * Inventory + message stubs needed by fileview.c.
+ *
+ * Real bodies live in sub1.c (EraseItem / ItemSearch / NameChangeSet)
+ * and message.c (bhDispItemName / bhSetMessage). Neither is in
+ * RECVX_GAME_SOURCES yet. ItemSearch must return non-NULL when the
+ * caller has a "valid" item id — but in our gallery / no-game-state
+ * scenario nothing has been picked up, so always returning NULL ("not
+ * found") is correct and lets the file-view UI's "no item with that
+ * tag" branch fire safely. */
+void* ItemSearch(unsigned short itemid)            { (void)itemid; return 0; }
+void  EraseItem(unsigned int* wp)                  { (void)wp; }
+void  NameChangeSet(void* st)                      { (void)st; }
+int   bhDispItemName(void* pos,int id,int color,int count,float pri) {
+    (void)pos;(void)id;(void)color;(void)count;(void)pri; return 0;
+}
+void  bhSetMessage(int mes_typ, int mes_idx)       { (void)mes_typ;(void)mes_idx; }
+
 /* Adv_FirstWarningMessage / Adv_CapcomLogo / Adv_BioCvTitle /
  * Adv_ChangeDiscScreen / Adv_SoundMuseum / Adv_GameOptionScreen all live
  * in adv.c now (compiled into recvx_game). No stubs needed. */

@@ -8,11 +8,18 @@ context
 elf
 iso
 
-// ignored files 
+// ignored files
 compile_config.json
 dwarfdump.txt
 objdiff.exe
 objdiff.json
+
+// port-side runtime artifacts — local-only, not for the repo
+port/afs-dump
+port/runtime.log
+port/build-errors.txt
+port/configure.txt
+build-errors.txt
 
 // ignored files from config 
 config/.venv

@@ -223,6 +223,13 @@ if(RECVX_BUILD_GAME)
         # Tiny utilities — bit-flag helpers used by adv.c and game.c. 100%
         # matched, zero deps; replaces the void* stubs in stub_game.c.
         ${RECVX_SRC}/ps2/veronica/prog/flag.c
+        # File-view sub-screen of the inventory (FILE tab). 21/23 funcs
+        # 100% matched. The 5 sub1.c/message.c symbols it calls
+        # (ItemSearch, EraseItem, NameChangeSet, bhDispItemName,
+        # bhSetMessage) are stubbed in stub_game.c — fileview compiles
+        # in by itself, just doesn't have item state to read against
+        # until sub1.c follows.
+        ${RECVX_SRC}/ps2/veronica/prog/fileview.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
