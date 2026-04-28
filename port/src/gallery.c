@@ -50,30 +50,30 @@ static const char* k_afs_filename[7] = {
  * we have the asset on screen. */
 #define BG_W            1280
 #define BG_H             720
-/* Blue display rectangle — where the TIM2 texture renders. Coords were
- * read off bg_viewer.png via the screenshot grid: blue field spans
- * roughly x=190..830, y=185..495 in the 1280x720 native bg. */
-#define BLUE_X           195
-#define BLUE_Y           190
-#define BLUE_W           635
-#define BLUE_H           300
+/* Blue display rectangle — where the TIM2 texture renders. Tuned to
+ * the bg's painted bezel inset so the texture sits inside the visible
+ * blue field, not over the gold border. */
+#define BLUE_X           220
+#define BLUE_Y           195
+#define BLUE_W           620
+#define BLUE_H           305
 /* Painted arrow click hit boxes — generous rectangles around the small
  * green ◄ ► icons baked into the bg, ~mid-height of the blue rect. */
 #define ARROW_W           80
 #define ARROW_H           70
-#define ARROW_L_X        185
-#define ARROW_L_Y        310
-#define ARROW_R_X        730
-#define ARROW_R_Y        310
-/* Black info strip beneath the blue rectangle. Caption is anchored to
- * the top-left corner per user direction (avoids visual conflict with
- * the "EMPTY" placeholder centered there in the bg art). */
+#define ARROW_L_X        205
+#define ARROW_L_Y        315
+#define ARROW_R_X        750
+#define ARROW_R_Y        315
+/* Black info strip beneath the blue rectangle. Caption anchored to
+ * top-left with a generous left margin so it sits clear of the bg's
+ * gold bezel. */
 #define LABEL_X          175
 #define LABEL_Y          528
 #define LABEL_W          735
 #define LABEL_H          150
-#define LABEL_TEXT_X     LABEL_X + 18
-#define LABEL_TEXT_Y     LABEL_Y + 14
+#define LABEL_TEXT_X     (LABEL_X + 35)
+#define LABEL_TEXT_Y     (LABEL_Y + 8)
 #define LABEL_LINE_H     26
 
 /* TIM2 picture header — local copy that matches RECVX's `TIM2_PICTUREHEADER`
@@ -313,6 +313,11 @@ int run_gallery(const recvx_backend* backend, int part,
         NULL
     };
     static const char* k_font_paths[] = {
+        "src/custom/RobotoMono-Light.ttf",
+        "../../src/custom/RobotoMono-Light.ttf",
+        "port/src/custom/RobotoMono-Light.ttf",
+        "../port/src/custom/RobotoMono-Light.ttf",
+        /* Fall back to the older .otf if the new font wasn't dropped in. */
         "src/custom/font.otf",
         "../../src/custom/font.otf",
         "port/src/custom/font.otf",
@@ -424,24 +429,37 @@ int run_gallery(const recvx_backend* backend, int part,
 
     int cur = 0;
 
-    /* --- Render loop --- */
+    /* --- Render loop ---
+     * NOTE: don't call backend->pump_events() here — it drains the SDL
+     * event queue into recvx_input which we don't read in gallery mode.
+     * We poll SDL directly and detect SDL_QUIT ourselves. */
     int quit = 0;
-    while (backend->pump_events() && !quit) {
+    while (!quit) {
         SDL_Event ev;
         while (SDL_PollEvent(&ev)) {
             if (ev.type == SDL_QUIT) quit = 1;
             if (ev.type == SDL_KEYDOWN && slide_n > 0) {
                 SDL_Keycode k = ev.key.keysym.sym;
                 if (k == SDLK_ESCAPE) quit = 1;
-                if (k == SDLK_LEFT  || k == SDLK_x)
+                if (k == SDLK_LEFT  || k == SDLK_x || k == SDLK_a)
                     cur = (cur - 1 + slide_n) % slide_n;
-                if (k == SDLK_RIGHT || k == SDLK_z)
+                if (k == SDLK_RIGHT || k == SDLK_z || k == SDLK_d)
                     cur = (cur + 1) % slide_n;
+            }
+            if (ev.type == SDL_KEYDOWN && ev.key.keysym.sym == SDLK_ESCAPE) {
+                quit = 1;
             }
             if (ev.type == SDL_MOUSEBUTTONDOWN &&
                 ev.button.button == SDL_BUTTON_LEFT && slide_n > 0) {
-                int mx = ev.button.x;
-                int my = ev.button.y;
+                /* Convert window-coords to logical 1280x720 since the
+                 * window may have been resized by the user. */
+                int win_w = 0, win_h = 0;
+                SDL_Window* w = SDL_GL_GetCurrentWindow();
+                if (w) SDL_GetWindowSize(w, &win_w, &win_h);
+                if (win_w <= 0) win_w = BG_W;
+                if (win_h <= 0) win_h = BG_H;
+                int mx = ev.button.x * BG_W / win_w;
+                int my = ev.button.y * BG_H / win_h;
                 /* Hit-box on the painted ◄ ► arrows. */
                 if (mx >= ARROW_L_X && mx <= ARROW_L_X + ARROW_W &&
                     my >= ARROW_L_Y && my <= ARROW_L_Y + ARROW_H) {
