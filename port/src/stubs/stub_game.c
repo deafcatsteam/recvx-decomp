@@ -90,14 +90,13 @@ void bhStandPlayerMotion(void){}
 void bhSetRDT(void)          {}
 void bhInitReadRDT(void)     {}
 void bhFinishRoom(void)      {}
-void bhSetMemPvpTexture(void* a, void* b, int c) { (void)a;(void)b;(void)c; }
+/* bhSetMemPvpTexture / bhCopyMainmem2Texmem / bhCopyTexmem2MainmemSub /
+ * bhGarbageTexture all moved to the real ps2_texture.c (now in
+ * RECVX_GAME_SOURCES). Stubs deleted. */
 void bhPushGameData(void)    {}
-void bhPushAllTexture(void)  {}
-void bhPopAllTexture(void)   {}
-void bhReleaseMainTexture(void) {}
-void bhCopyMainmem2Texmem(void* t) { (void)t; }
-unsigned char* bhCopyTexmem2MainmemSub(void* t, char* dst) { (void)t; return (unsigned char*)dst; }
-void bhGarbageTexture(void* tl, int n) { (void)tl;(void)n; }
+/* bhPushAllTexture / bhPopAllTexture / bhReleaseMainTexture /
+ * bhCopyMainmem2Texmem / bhCopyTexmem2MainmemSub / bhGarbageTexture
+ * all moved to the real ps2_texture.c (now in RECVX_GAME_SOURCES). */
 void bhControlGameOver(void) {}
 void bhControlEffect(void)   {}
 void bhControlSpEvtComputer(void) {}

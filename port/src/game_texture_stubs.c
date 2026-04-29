@@ -60,10 +60,26 @@ NJS_TEXMEMLIST* Ps2_current_texmemlist;
 /* PS2 globals declared as `extern` in headers we use, but defined for
  * real only in ps2_dummy.c / ps2_NaTextureFunction.c which aren't in
  * RECVX_GAME_SOURCES yet. sub1.c reads/writes Ps2_current_texbreak
- * after each OT pass; itemview.c picks branches off ViewType.
- * Default values mirror the PS2's startup state (both 0). */
-unsigned int Ps2_current_texbreak;
-int          ViewType;
+ * after each OT pass; itemview.c picks branches off ViewType;
+ * ps2_texture.c reads Ps2_tex_info as the head of the texmem pool list. */
+unsigned int     Ps2_current_texbreak;
+int              ViewType;
+NJS_TEXMEMLIST*  Ps2_tex_info;
+
+/* Stubs for ps2_NaTextureFunction.c helpers that ps2_texture.c calls
+ * from bhCopyTexmem2Mainmem / bhCopyMainmem2Texmem (paths we don't run
+ * since we don't actually push/pop texmem on PC — the GL backend keeps
+ * everything resident). bhSetMemPvpTexture, the only ps2_texture.c
+ * function that runs in our flow, doesn't reach these. */
+void Ps2MemCopy4(void* dst, void* src, int lNum) {
+    if (!dst || !src || lNum <= 0) return;
+    memcpy(dst, src, (size_t)lNum * 4);
+}
+int  Ps2TextureMalloc(NJS_TEXMEMLIST* p) { (void)p; return 0; }
+int  SearchNumber(unsigned int gidx, unsigned int bank) {
+    (void)gidx; (void)bank; return -1;
+}
+int  SearchNullNumber(void) { return 0; }
 
 /* ------------------------------------------------------------------ */
 /* Low-4GiB TEXMEMLIST pool                                           */

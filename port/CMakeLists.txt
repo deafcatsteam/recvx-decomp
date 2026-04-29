@@ -248,6 +248,14 @@ if(RECVX_BUILD_GAME)
         # mestbl, curedata). 697 lines of pure const arrays — no funcs
         # to match, no external deps, perfectly portable.
         ${RECVX_SRC}/ps2/veronica/prog/item.c
+        # PS2 texture-memory loader. 11/12 funcs matched. Replaces our
+        # stub bhSetMemPvpTexture with the real impl that walks chunked
+        # binary blobs (PLI palette + TIM2 pictures) and feeds each to
+        # njSetTextureInfo / njLoadTexture — that's what gets the
+        # inventory's actual textures into our pool. The remaining
+        # functions (bhCopy*, bhPushAllTexture, etc.) handle texmem
+        # eviction/restoration which our GL backend doesn't need.
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_texture.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
