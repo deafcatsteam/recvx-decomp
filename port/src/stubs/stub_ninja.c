@@ -80,6 +80,21 @@ int  MdlDirChk(void* mlw)                             { (void)mlw; return 0; }
 int  bhMlbBinRealize(void* dat, void* mlw)            { (void)dat;(void)mlw; return 0; }
 void bhKeepObjWork(void* obj, void* dst)              { (void)obj;(void)dst; }
 
+/* ----------------------------------------------------------------------
+ * Ninja 3D state stubs needed by sub1.c. Real impls bind GS register
+ * state on PS2; on PC a real GL3D backend would translate these into
+ * glEnable/glBlendFunc/glFogf calls. No-op for now since sub1's 3D
+ * paths (item-view rotating model) aren't reachable without matching
+ * game flow yet.
+ * ---------------------------------------------------------------------- */
+void njControl3D(int mode)                            { (void)mode; }
+void njDrawSprite2D(void* p, int n, float z, int t)   { (void)p;(void)n;(void)z;(void)t; }
+void njSetConstantAttr(unsigned int a)                { (void)a; }
+void njSetConstantMaterial(void* m)                   { (void)m; }
+void njSetFogColor(unsigned int c)                    { (void)c; }
+void njSetPaletteBankNum(int n)                       { (void)n; }
+void njUserClipping(void* p)                          { (void)p; }
+
 /* sb* — SEGA basic (display mode / vsync) */
 int  sbInitSystem(int mode, int frame, int count)     { (void)mode;(void)frame;(void)count; return 0; }
 void sbExitSystem(void)                               {}

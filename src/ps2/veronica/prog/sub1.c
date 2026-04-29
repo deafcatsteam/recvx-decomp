@@ -1033,23 +1033,34 @@ static inline void StatusInit_Parts06bCheck()
     }
 }
 
-// 100% matching! 
+// 100% matching!
 void Ps2ZbuffOffI()
 {
-	D2_SyncTag();
-    
+#ifdef RECVX_PC_PORT
+    /* PS2 GS register pack — writes to physical hardware DMA workbase
+     * (0x70000000) which is unmapped on PC. The PS2 path constructs a
+     * GIF tag + a TEST_1 register write disabling Z-buffering for the
+     * OT pass that follows. Our GL backend handles depth test state
+     * through its own glDisable(GL_DEPTH_TEST) calls when 2D draws
+     * happen, so the no-op here is sufficient for the inventory's
+     * needs. Implement properly once we have a GL3D path that needs
+     * per-pass depth-test toggling. */
+#else
+    D2_SyncTag();
+
     ((u_long*)WORKBASE)[0] = DMAend | 0x2;
     ((u_long*)WORKBASE)[1] = 0;
-    
+
     ((u_long*)WORKBASE)[2] = SCE_GIF_SET_TAG(1, SCE_GS_TRUE, SCE_GS_FALSE, 0, SCE_GIF_PACKED, 1);
     ((u_long*)WORKBASE)[3] = SCE_GIF_PACKED_AD;
-    
+
     ((u_long*)WORKBASE)[4] = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GEQUAL, 128, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
     ((u_long*)WORKBASE)[5] = SCE_GS_TEST_1;
-    
+
     loadImage((void*)0xF0000000);
-    
+
     D2_SyncTag();
+#endif
 }
 
 // 100% matching! 

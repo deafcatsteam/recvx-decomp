@@ -136,6 +136,21 @@ int   bhDispItemName(void* pos,int id,int color,int count,float pri) {
 }
 void  bhSetMessage(int mes_typ, int mes_idx)       { (void)mes_typ;(void)mes_idx; }
 
+/* PS2 ordering-table (OT) draw + sync helpers used by sub1.c's 3D
+ * inventory-item path. Real impls use GS DMA tags (see ps2_dummy.c).
+ * Headless port: no-ops — the OT-based draw never runs. */
+void Ps2DrawOTag(void)                             {}
+int  Ps2DrawOTagSub(int start_no)                  { (void)start_no; return 4096; /* full OT consumed */ }
+void Ps2ZbuffOff2(void)                            {}
+void Ps2ZbuffOn(void)                              {}
+void D2_SyncTag(void)                              {}
+void SyncPath(void)                                {}
+void loadImage(void* tags)                         { (void)tags; }
+/* sub1.c 3D path camera + sub-pack helpers — defined for real in
+ * camera.c / player.c which we haven't compiled yet. */
+void bhChangeViewClip(int near, int far)           { (void)near;(void)far; }
+int  bhCheckSubPack(int idx)                       { (void)idx; return 0; }
+
 /* Adv_FirstWarningMessage / Adv_CapcomLogo / Adv_BioCvTitle /
  * Adv_ChangeDiscScreen / Adv_SoundMuseum / Adv_GameOptionScreen all live
  * in adv.c now (compiled into recvx_game). No stubs needed. */

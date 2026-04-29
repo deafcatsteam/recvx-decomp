@@ -235,6 +235,14 @@ if(RECVX_BUILD_GAME)
         # stub_ninja.c — itemview compiles, but the 3D rendering
         # surface is no-op until njCnk* / matrix stack are implemented.
         ${RECVX_SRC}/ps2/veronica/prog/itemview.c
+        # Inventory main loop (StatusMain + StatusInit + cursor / combine
+        # / use logic). 31/72 funcs 100%-matched upstream — partial. The
+        # stubs added above (Ps2DrawOTag/Sub, Z-buff toggles, SyncPath,
+        # njControl3D / Sprite2D / SetConstantAttr / Material / FogColor,
+        # njUserClipping, scePrintf) cover all its external calls. A
+        # PS2-only WORKBASE register block in Ps2ZbuffOffI is gated
+        # behind #ifdef RECVX_PC_PORT.
+        ${RECVX_SRC}/ps2/veronica/prog/sub1.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
