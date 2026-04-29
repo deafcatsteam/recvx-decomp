@@ -1254,6 +1254,20 @@ void bhSysCallMovie()
             recvx_log("game",
                 "bhSysCallMovie case 6 done — port-unsuspending all tasks (tk=0x%08x ts=0x%08x)",
                 sys->tk_flg, sys->ts_flg);
+
+            /* --inventory mode: kick the inventory open right here. Sets
+             * subscreenmode=1 so StatusMain's case-1 init runs, and
+             * cb_flg bit 0x10 selects the StatusInit branch within case 1
+             * which loads inventory textures + parts. Without this hook
+             * the game just sits in a black "Game task active but no
+             * gameplay logic compiled" state. */
+            extern int g_recvx_open_inventory;
+            if (g_recvx_open_inventory) {
+                extern S_WORK swork;
+                swork.subscreenmode = 1;
+                sys->cb_flg |= 0x10;
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10");
+            }
         }
 #endif
         break;

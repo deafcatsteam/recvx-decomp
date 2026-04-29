@@ -131,6 +131,11 @@ static bool        g_list_afs      = false;
 static int         g_dump_afs      = -1;  /* 0..6: extract every entry of AFS partition N */
 static const char* g_dump_afs_dir  = NULL; /* output dir for --dump-afs */
 static int         g_gallery       = -2;  /* -2 unset; -1 all parts; 0..6 specific */
+static bool        g_inventory     = false;  /* --inventory: force-open status screen post-MV_000 */
+
+/* Read by system.c bhSysCallMovie case-6 port hook. int (not bool) so
+ * the extern in C source compiles cleanly without including stdbool.h. */
+int g_recvx_open_inventory = 0;
 
 /* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
  * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
@@ -186,6 +191,9 @@ static void parse_args(int argc, char** argv) {
             } else {
                 g_gallery = -1;
             }
+        } else if (strcmp(argv[i], "--inventory") == 0) {
+            g_inventory = true;
+            g_run_game = true;
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
                    "                [--gamedata path\\to\\extracted\\dir]\n"
@@ -207,7 +215,8 @@ static void parse_args(int argc, char** argv) {
                    "  --gallery [N] open visual TIM2 viewer. Without N, scans ALL\n"
                    "                partitions and shows every embedded TIM2 inside\n"
                    "                ADV resource packs. With N, scans just partition N.\n"
-                   "                arrows / Z-X keys / mouse-click side arrows to navigate\n");
+                   "                arrows / Z-X keys / mouse-click side arrows to navigate\n"
+                   "  --inventory   --game + force-open inventory once gameplay starts\n");
             exit(0);
         }
     }
@@ -647,6 +656,10 @@ int main(int argc, char** argv) {
     /* Set the gamedata dir even in fmv-demo mode so run_fmv_demo can
      * resolve loose-file MOVIE/MV_NNN.PSS paths. */
     recvx_set_gamedata_dir(g_gamedata_path);
+
+    /* Tell the system.c case-6 port hook whether to flip subscreenmode=1
+     * after MV_000 ends. Read by extern in src/ps2/veronica/prog/system.c. */
+    g_recvx_open_inventory = g_inventory ? 1 : 0;
 
     int rc;
     if (g_run_game) {
