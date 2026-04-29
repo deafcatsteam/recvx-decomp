@@ -1264,9 +1264,19 @@ void bhSysCallMovie()
             extern int g_recvx_open_inventory;
             if (g_recvx_open_inventory) {
                 extern S_WORK swork;
+                /* parts_07b is declared as `PARTS parts_07b[8];` (no
+                 * initializer), so all 8 elements zero-init and anim=0.
+                 * StatusInit's `for (pb = sprset[num1]; pb->anim != -1;
+                 * pb++)` loop walks past the array end and crashes when
+                 * it hits .text/.rdata. On real PS2 some uncompiled init
+                 * function (game.c?) populates parts_07b's anim with a
+                 * real terminator. For now: stamp the sentinel ourselves
+                 * so the loop has a stop. */
+                extern PARTS parts_07b[8];
+                parts_07b[0].anim = -1;
                 swork.subscreenmode = 1;
                 sys->cb_flg |= 0x10;
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10");
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10, parts_07b[0].anim=-1");
             }
         }
 #endif
