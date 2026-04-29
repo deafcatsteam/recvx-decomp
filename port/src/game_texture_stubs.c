@@ -474,25 +474,47 @@ void njDrawQuadTexture(QUAD* q, float z) {
  *                     blend-enabled for now, since menu parts use a
  *                     mix of opaque tabs + alpha-blended icons)
  */
+/* True if `p` is NULL, the PS2 bin-relocator -1 sentinel, or any other
+ * "looks like garbage" address. On Windows x64 user-mode any pointer with
+ * the top 17 bits set is necessarily kernel/sentinel. Filters out -1
+ * (0xFFFFFFFFFFFFFFFF), x86-32 sign-extended -1 (0xFFFFFFFF80000000+),
+ * and accidental zero-extensions like 0x00000000FFFFFFFF that some bin
+ * realizers leave when a 32-bit -1 is widened. */
+static int ptr_looks_invalid(const void* p) {
+    if (p == NULL) return 1;
+    uintptr_t u = (uintptr_t)p;
+    if (u == ~(uintptr_t)0) return 1;            /* exact -1 */
+    if (u == 0xFFFFFFFFu) return 1;              /* 32-bit -1 zero-ext */
+    if ((u >> 47) != 0 && (u >> 47) != ((uintptr_t)1 << 17) - 1) {
+        /* High 17 bits not all 0 (user) or all 1 (canonical kernel) — i.e.
+         * some non-canonical garbage. Best to skip. */
+        return 1;
+    }
+    return 0;
+}
+
 void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
-    if (!sp) return;
-    /* PS2 bin-relocator convention: uninitialized pointers are stored as
-     * 0xFFFFFFFFFFFFFFFF (-1), not NULL. SpriteSet2D forwards them as-is
-     * from PARTS structs that haven't had their tlist/tanim wired up
-     * yet (early frames before StatusInit's resource load completes).
-     * Treat both NULL and -1 as "no texture, skip draw." */
-    if (sp->tlist == NULL || (uintptr_t)sp->tlist == (uintptr_t)-1) return;
-    if (sp->tanim == NULL || (uintptr_t)sp->tanim == (uintptr_t)-1) return;
+    if (ptr_looks_invalid(sp))         return;
+    if (ptr_looks_invalid(sp->tlist))  return;
+    if (ptr_looks_invalid(sp->tanim))  return;
 
     NJS_TEXANIM* ta = &sp->tanim[n];
     NJS_TEXLIST* tl = sp->tlist;
+    if (ptr_looks_invalid(ta))         return;
+    if (ptr_looks_invalid(tl))         return;
+    if (n < 0 || n > 4096)             return;  /* tanim animation index sanity */
+
+    /* nbTexture / textures pointer sanity — tl might be a stack/static
+     * struct that's been zero-initialized but not loaded, so nbTexture==0
+     * and textures==NULL is a normal "skip" rather than a bug. */
+    if (tl->nbTexture == 0 || ptr_looks_invalid(tl->textures)) return;
     if (ta->texid < 0 || (Uint32)ta->texid >= tl->nbTexture) return;
 
     /* Resolve the tex id to our pool slot the same way njSetQuadTexture
      * does. The slot is what the backend uses to bind a real GL texture. */
     NJS_TEXMEMLIST* ml =
         (NJS_TEXMEMLIST*)(uintptr_t)tl->textures[ta->texid].texaddr;
-    if (!ml || (uintptr_t)ml == (uintptr_t)-1) return;
+    if (ptr_looks_invalid(ml))         return;
     int slot = pool_slot_of(ml);
     if (slot < 0) return;
 
