@@ -475,7 +475,15 @@ void njDrawQuadTexture(QUAD* q, float z) {
  *                     mix of opaque tabs + alpha-blended icons)
  */
 void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
-    if (!sp || !sp->tlist || !sp->tanim) return;
+    if (!sp) return;
+    /* PS2 bin-relocator convention: uninitialized pointers are stored as
+     * 0xFFFFFFFFFFFFFFFF (-1), not NULL. SpriteSet2D forwards them as-is
+     * from PARTS structs that haven't had their tlist/tanim wired up
+     * yet (early frames before StatusInit's resource load completes).
+     * Treat both NULL and -1 as "no texture, skip draw." */
+    if (sp->tlist == NULL || (uintptr_t)sp->tlist == (uintptr_t)-1) return;
+    if (sp->tanim == NULL || (uintptr_t)sp->tanim == (uintptr_t)-1) return;
+
     NJS_TEXANIM* ta = &sp->tanim[n];
     NJS_TEXLIST* tl = sp->tlist;
     if (ta->texid < 0 || (Uint32)ta->texid >= tl->nbTexture) return;
@@ -484,7 +492,7 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
      * does. The slot is what the backend uses to bind a real GL texture. */
     NJS_TEXMEMLIST* ml =
         (NJS_TEXMEMLIST*)(uintptr_t)tl->textures[ta->texid].texaddr;
-    if (!ml) return;
+    if (!ml || (uintptr_t)ml == (uintptr_t)-1) return;
     int slot = pool_slot_of(ml);
     if (slot < 0) return;
 
