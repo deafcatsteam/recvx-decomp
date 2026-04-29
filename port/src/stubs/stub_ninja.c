@@ -67,13 +67,10 @@ void njCnkSetEasyMultiLightMatrices(int n, void* m)   { (void)n;(void)m; }
 void njCnkSetEasyMultiLightPoint(int n, void* p)      { (void)n;(void)p; }
 void njCnkSetEasyMultiLightRange(int n, float r)      { (void)n;(void)r; }
 
-/* Bounding-box / model-action helpers — itemview.c calls these to
- * size + animate the rotating item preview. No-op = no animation. */
+/* npGetWHDSize is a model bounding-box helper — defined for real in
+ * playpch.c which we haven't compiled. No-op for now.
+ * MdlAction00/01/02/MdlDirChk now provided by itemview.c (compiled). */
 void npGetWHDSize(void* mlw, float* whd)              { (void)mlw;(void)whd; }
-void MdlAction00(void* mlw)                           { (void)mlw; }
-void MdlAction01(void* mlw)                           { (void)mlw; }
-void MdlAction02(void* mlw)                           { (void)mlw; }
-int  MdlDirChk(void* mlw)                             { (void)mlw; return 0; }
 
 /* Model-binary / object-work helpers — bring in real impls when
  * binfunc.c or playpch.c gets compiled. For now no-ops. */

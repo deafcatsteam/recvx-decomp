@@ -119,18 +119,10 @@ void bhDispMessageEx(float x,float y,float z,int a,int b,int c,int d){(void)x;(v
 void bhDispTime(void* pos,int n,int tim,int col,float z){(void)pos;(void)n;(void)tim;(void)col;(void)z;}
 
 /* ----------------------------------------------------------------------
- * Inventory + message stubs needed by fileview.c.
- *
- * Real bodies live in sub1.c (EraseItem / ItemSearch / NameChangeSet)
- * and message.c (bhDispItemName / bhSetMessage). Neither is in
- * RECVX_GAME_SOURCES yet. ItemSearch must return non-NULL when the
- * caller has a "valid" item id — but in our gallery / no-game-state
- * scenario nothing has been picked up, so always returning NULL ("not
- * found") is correct and lets the file-view UI's "no item with that
- * tag" branch fire safely. */
-void* ItemSearch(unsigned short itemid)            { (void)itemid; return 0; }
-void  EraseItem(unsigned int* wp)                  { (void)wp; }
-void  NameChangeSet(void* st)                      { (void)st; }
+ * message.c stubs — until message.c lands in RECVX_GAME_SOURCES we
+ * provide minimal stand-ins so adv.c / fileview.c link. ItemSearch /
+ * EraseItem / NameChangeSet now come from the real sub1.c.
+ * ---------------------------------------------------------------------- */
 int   bhDispItemName(void* pos,int id,int color,int count,float pri) {
     (void)pos;(void)id;(void)color;(void)count;(void)pri; return 0;
 }
@@ -369,10 +361,11 @@ int PlayMovieMain(void) {
 void mwPlySetDispMode(int m)             { (void)m; }
 
 /* ----------------------------------------------------------------------
- * Sub-task handlers (itemselect, typewriter, ending, monitor etc.).
+ * Sub-task handlers (typewriter, ending, monitor etc.).
+ * ItemTaskCheck / StatusMain / AllItemInit / SbsTextureInit /
+ * StatusMapFlagInit moved to sub1.c (real bodies). EraseItem /
+ * ItemSearch / NameChangeSet also now real.
  * ---------------------------------------------------------------------- */
-int  ItemTaskCheck(void)    { return 0; }
-int  StatusMain(void)       { return 0; }
 /* ControlTypewriter is implemented in port/src/game_texture_stubs.c so it
  * can access the real SYS_WORK struct (requires KATANA types.h prelude).
  * Needed to skip the text-scroll intro and jump straight to MV_000.PSS
@@ -380,9 +373,6 @@ int  StatusMain(void)       { return 0; }
  * isn't compiled yet. */
 int  ControlRanking(void)   { return 0; }
 void Expand(void)           {}
-void AllItemInit(void)      {}
-void SbsTextureInit(void)   {}
-void StatusMapFlagInit(void){}
 void TypewriterKeepMemory(void) {}
 void Ps2ClearOT(void)       {}
 

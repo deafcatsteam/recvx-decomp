@@ -57,6 +57,14 @@ extern void recvx_gfx_set_filter(int mode);
  * ClutChange with 0x8000. Needs to point at a real pool slot, not NULL. */
 NJS_TEXMEMLIST* Ps2_current_texmemlist;
 
+/* PS2 globals declared as `extern` in headers we use, but defined for
+ * real only in ps2_dummy.c / ps2_NaTextureFunction.c which aren't in
+ * RECVX_GAME_SOURCES yet. sub1.c reads/writes Ps2_current_texbreak
+ * after each OT pass; itemview.c picks branches off ViewType.
+ * Default values mirror the PS2's startup state (both 0). */
+unsigned int Ps2_current_texbreak;
+int          ViewType;
+
 /* ------------------------------------------------------------------ */
 /* Low-4GiB TEXMEMLIST pool                                           */
 /* ------------------------------------------------------------------ */

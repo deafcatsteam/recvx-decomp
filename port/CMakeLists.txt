@@ -243,6 +243,11 @@ if(RECVX_BUILD_GAME)
         # PS2-only WORKBASE register block in Ps2ZbuffOffI is gated
         # behind #ifdef RECVX_PC_PORT.
         ${RECVX_SRC}/ps2/veronica/prog/sub1.c
+        # Item data tables (combidata, itemdata, dsptbl, itemflg,
+        # itemidtbl, getmestbl, idsettbl, hoseipos, getbulletmax, c_a,
+        # mestbl, curedata). 697 lines of pure const arrays — no funcs
+        # to match, no external deps, perfectly portable.
+        ${RECVX_SRC}/ps2/veronica/prog/item.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
