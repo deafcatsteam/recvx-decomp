@@ -177,9 +177,45 @@ PARTS parts_05b[8] =
     {{0.0f,   0.0f,   0.0f},  0, 0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
     {{0.0f,   0.0f,   0.0f},  0, 0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
 };
-PARTS parts_06b[24];
+PARTS parts_06b[24] = 
+{
+    {{0.0f,  0.0f,   4.8f},        0,    0x00, 0x00, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{88.0f, 0.0f,   4.8f},        0,    0x08, 0x00, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{0.0f,  148.0f, 4.8f},        0,    0x00, 0x01, 0x0B, 0x05, 32.0f, 0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{88.0f, 148.0f, 4.8f},        0,    0x08, 0x01, 0x0B, 0x05, 32.0f, 0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  0.0f,   4.8f},        0,    0x00, 0x02, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  184.0f, 4.8f},        0,    0x00, 0x03, 0x0B, 0x05, 16.0f, 0x40, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  24.0f,  4.8f},        0,    0x00, 0x04, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  180.0f, 4.8f},        0,    0x10, 0x04, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  52.0f,  4.8f},        0,    0x00, 0x05, 0x0B, 0x05, 32.0f, 0x03, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{8.0f,  28.0f,  4.8f},        0,    0x00, 0x06, 0x0B, 0x05, 32.0f, 0x04, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{84.0f, 28.0f,  4.8f},        0,    0x08, 0x06, 0x0B, 0x05, 32.0f, 0x04, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{0.0f,  116.0f, 4.8f},        0,    0x00, 0x07, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{88.0f, 116.0f, 4.8f},        0,    0x08, 0x07, 0x0B, 0x05, 0.0f,  0x00, {1.0f,  0.7f, 0.7f, 0.7f}, 0x00},
+    {{10.0f, 26.0f,  4.9f},        0,    0x00, 0x07, 0x0B, 0x0A, 0.0f,  0x00, {1.0f, 0.125f, 0.5f, 1.0f}, 0x00},
+    {{10.0f, 58.0f,  4.9f},        0,    0x00, 0x09, 0x0B, 0x0A, 0.0f,  0x00, {1.0f,  1.0f, 1.0f, 1.0f}, 0x00},
+    {{10.0f, 90.0f,  4.9f},        0,    0x00, 0x0A, 0x0B, 0x0A, 0.0f,  0x00, {1.0f,  1.0f, 1.0f, 1.0f}, 0x00},
+    {{10.0f, 122.0f, 4.9f},        0,    0x00, 0x08, 0x0B, 0x0A, 0.0f,  0x00, {1.0f,  1.0f, 1.0f, 1.0f}, 0x00},
+    {{10.0f, 154.0f, 4.9f},        0,    0x00, 0x0B, 0x0B, 0x0A, 0.0f,  0x00, {1.0f,  1.0f, 1.0f, 1.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0xFF, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,  0.0f,   0.0f},        0,    0x00, 0x00, 0x00, 0x00, 0.0f,  0x00, {0.0f,  0.0f, 0.0f, 0.0f}, 0x00},
+};
 PARTS parts_07b[8];
-PARTS parts_08b[8];
+PARTS parts_08b[8] = 
+{
+    {{60.0f,  32.0f,  1.0f}, 0,    0x00, 0x00, 0x02, 0x08, 0.0f, 0x00, {1.0f, 0.7f, 0.7f, 0.7f}, 0x00},
+    {{60.0f,  124.0f, 1.0f}, 0,    0x00, 0x01, 0x02, 0x08, 0.0f, 0x00, {1.0f, 0.7f, 0.7f, 0.7f}, 0x00},
+    {{60.0f,  32.0f,  1.0f}, 0,    0x00, 0x02, 0x02, 0x08, 0.0f, 0x00, {1.0f, 0.7f, 0.7f, 0.7f}, 0x00},
+    {{366.0f, 32.0f,  1.0f}, 0,    0x08, 0x02, 0x02, 0x08, 0.0f, 0x00, {1.0f, 0.7f, 0.7f, 0.7f}, 0x00},
+    {{0.0f,   0.0f,   0.0f}, 0,    0x00, 0xFF, 0x00, 0x00, 0.0f, 0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,   0.0f,   0.0f}, 0,    0x00, 0x00, 0x00, 0x00, 0.0f, 0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,   0.0f,   0.0f}, 0,    0x00, 0x00, 0x00, 0x00, 0.0f, 0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
+    {{0.0f,   0.0f,   0.0f}, 0,    0x00, 0x00, 0x00, 0x00, 0.0f, 0x00, {0.0f, 0.0f, 0.0f, 0.0f}, 0x00},
+};
 PARTS parts_09b[8] = 
 {
 	{
@@ -1373,148 +1409,273 @@ void ItemBoxInit(S_WORK* st)
 	scePrintf("ItemBoxInit - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x29b260
+// 100% matching!
 void CursorMove(S_WORK* st)
 {
+    unsigned char max;
 	unsigned char secall;
-	unsigned char max;
-	// Line 1375, Address: 0x29b260, Func Offset: 0
-	// Line 1396, Address: 0x29b274, Func Offset: 0x14
-	// Line 1398, Address: 0x29b280, Func Offset: 0x20
-	// Line 1396, Address: 0x29b284, Func Offset: 0x24
-	// Line 1393, Address: 0x29b294, Func Offset: 0x34
-	// Line 1396, Address: 0x29b298, Func Offset: 0x38
-	// Line 1398, Address: 0x29b2a0, Func Offset: 0x40
-	// Line 1401, Address: 0x29b2c8, Func Offset: 0x68
-	// Line 1403, Address: 0x29b2e0, Func Offset: 0x80
-	// Line 1404, Address: 0x29b2e8, Func Offset: 0x88
-	// Line 1405, Address: 0x29b2ec, Func Offset: 0x8c
-	// Line 1406, Address: 0x29b2f0, Func Offset: 0x90
-	// Line 1407, Address: 0x29b2f4, Func Offset: 0x94
-	// Line 1410, Address: 0x29b2f8, Func Offset: 0x98
-	// Line 1411, Address: 0x29b30c, Func Offset: 0xac
-	// Line 1412, Address: 0x29b318, Func Offset: 0xb8
-	// Line 1414, Address: 0x29b324, Func Offset: 0xc4
-	// Line 1413, Address: 0x29b328, Func Offset: 0xc8
-	// Line 1414, Address: 0x29b32c, Func Offset: 0xcc
-	// Line 1412, Address: 0x29b330, Func Offset: 0xd0
-	// Line 1413, Address: 0x29b33c, Func Offset: 0xdc
-	// Line 1414, Address: 0x29b350, Func Offset: 0xf0
-	// Line 1416, Address: 0x29b364, Func Offset: 0x104
-	// Line 1418, Address: 0x29b36c, Func Offset: 0x10c
-	// Line 1416, Address: 0x29b374, Func Offset: 0x114
-	// Line 1418, Address: 0x29b38c, Func Offset: 0x12c
-	// Line 1419, Address: 0x29b39c, Func Offset: 0x13c
-	// Line 1420, Address: 0x29b3b0, Func Offset: 0x150
-	// Line 1421, Address: 0x29b3d0, Func Offset: 0x170
-	// Line 1423, Address: 0x29b3dc, Func Offset: 0x17c
-	// Line 1425, Address: 0x29b3f4, Func Offset: 0x194
-	// Line 1426, Address: 0x29b404, Func Offset: 0x1a4
-	// Line 1427, Address: 0x29b40c, Func Offset: 0x1ac
-	// Line 1428, Address: 0x29b414, Func Offset: 0x1b4
-	// Line 1430, Address: 0x29b418, Func Offset: 0x1b8
-	// Line 1431, Address: 0x29b420, Func Offset: 0x1c0
-	// Line 1432, Address: 0x29b424, Func Offset: 0x1c4
-	// Line 1434, Address: 0x29b428, Func Offset: 0x1c8
-	// Line 1435, Address: 0x29b448, Func Offset: 0x1e8
-	// Line 1436, Address: 0x29b44c, Func Offset: 0x1ec
-	// Line 1437, Address: 0x29b46c, Func Offset: 0x20c
-	// Line 1438, Address: 0x29b47c, Func Offset: 0x21c
-	// Line 1439, Address: 0x29b490, Func Offset: 0x230
-	// Line 1440, Address: 0x29b498, Func Offset: 0x238
-	// Line 1442, Address: 0x29b49c, Func Offset: 0x23c
-	// Line 1443, Address: 0x29b4a0, Func Offset: 0x240
-	// Line 1439, Address: 0x29b4a4, Func Offset: 0x244
-	// Line 1440, Address: 0x29b4b0, Func Offset: 0x250
-	// Line 1441, Address: 0x29b4b4, Func Offset: 0x254
-	// Line 1442, Address: 0x29b4b8, Func Offset: 0x258
-	// Line 1443, Address: 0x29b4bc, Func Offset: 0x25c
-	// Line 1445, Address: 0x29b4c4, Func Offset: 0x264
-	// Line 1446, Address: 0x29b4c8, Func Offset: 0x268
-	// Line 1448, Address: 0x29b4cc, Func Offset: 0x26c
-	// Line 1449, Address: 0x29b4d4, Func Offset: 0x274
-	// Line 1450, Address: 0x29b4e0, Func Offset: 0x280
-	// Line 1451, Address: 0x29b4f8, Func Offset: 0x298
-	// Line 1452, Address: 0x29b500, Func Offset: 0x2a0
-	// Line 1453, Address: 0x29b508, Func Offset: 0x2a8
-	// Line 1454, Address: 0x29b510, Func Offset: 0x2b0
-	// Line 1455, Address: 0x29b518, Func Offset: 0x2b8
-	// Line 1457, Address: 0x29b520, Func Offset: 0x2c0
-	// Line 1458, Address: 0x29b528, Func Offset: 0x2c8
-	// Line 1459, Address: 0x29b530, Func Offset: 0x2d0
-	// Line 1461, Address: 0x29b53c, Func Offset: 0x2dc
-	// Line 1464, Address: 0x29b548, Func Offset: 0x2e8
-	// Line 1465, Address: 0x29b55c, Func Offset: 0x2fc
-	// Line 1466, Address: 0x29b570, Func Offset: 0x310
-	// Line 1467, Address: 0x29b588, Func Offset: 0x328
-	// Line 1468, Address: 0x29b5a0, Func Offset: 0x340
-	// Line 1469, Address: 0x29b5a4, Func Offset: 0x344
-	// Line 1470, Address: 0x29b5ac, Func Offset: 0x34c
-	// Line 1472, Address: 0x29b5b8, Func Offset: 0x358
-	// Line 1473, Address: 0x29b5c0, Func Offset: 0x360
-	// Line 1474, Address: 0x29b5c8, Func Offset: 0x368
-	// Line 1475, Address: 0x29b5d0, Func Offset: 0x370
-	// Line 1477, Address: 0x29b5dc, Func Offset: 0x37c
-	// Line 1478, Address: 0x29b5e8, Func Offset: 0x388
-	// Line 1482, Address: 0x29b5ec, Func Offset: 0x38c
-	// Line 1483, Address: 0x29b60c, Func Offset: 0x3ac
-	// Line 1485, Address: 0x29b624, Func Offset: 0x3c4
-	// Line 1486, Address: 0x29b63c, Func Offset: 0x3dc
-	// Line 1487, Address: 0x29b648, Func Offset: 0x3e8
-	// Line 1488, Address: 0x29b654, Func Offset: 0x3f4
-	// Line 1489, Address: 0x29b658, Func Offset: 0x3f8
-	// Line 1490, Address: 0x29b660, Func Offset: 0x400
-	// Line 1492, Address: 0x29b668, Func Offset: 0x408
-	// Line 1494, Address: 0x29b670, Func Offset: 0x410
-	// Line 1495, Address: 0x29b678, Func Offset: 0x418
-	// Line 1496, Address: 0x29b680, Func Offset: 0x420
-	// Line 1498, Address: 0x29b68c, Func Offset: 0x42c
-	// Line 1500, Address: 0x29b6a0, Func Offset: 0x440
-	// Line 1501, Address: 0x29b6b4, Func Offset: 0x454
-	// Line 1503, Address: 0x29b6c4, Func Offset: 0x464
-	// Line 1504, Address: 0x29b6dc, Func Offset: 0x47c
-	// Line 1505, Address: 0x29b6e8, Func Offset: 0x488
-	// Line 1506, Address: 0x29b6f0, Func Offset: 0x490
-	// Line 1508, Address: 0x29b6f8, Func Offset: 0x498
-	// Line 1509, Address: 0x29b700, Func Offset: 0x4a0
-	// Line 1510, Address: 0x29b708, Func Offset: 0x4a8
-	// Line 1512, Address: 0x29b714, Func Offset: 0x4b4
-	// Line 1513, Address: 0x29b728, Func Offset: 0x4c8
-	// Line 1514, Address: 0x29b740, Func Offset: 0x4e0
-	// Line 1515, Address: 0x29b75c, Func Offset: 0x4fc
-	// Line 1517, Address: 0x29b764, Func Offset: 0x504
-	// Line 1516, Address: 0x29b768, Func Offset: 0x508
-	// Line 1517, Address: 0x29b76c, Func Offset: 0x50c
-	// Line 1518, Address: 0x29b770, Func Offset: 0x510
-	// Line 1519, Address: 0x29b784, Func Offset: 0x524
-	// Line 1521, Address: 0x29b788, Func Offset: 0x528
-	// Line 1527, Address: 0x29b79c, Func Offset: 0x53c
-	// Line 1528, Address: 0x29b7a4, Func Offset: 0x544
-	// Line 1529, Address: 0x29b7a8, Func Offset: 0x548
-	// Line 1530, Address: 0x29b7ac, Func Offset: 0x54c
-	// Line 1531, Address: 0x29b7cc, Func Offset: 0x56c
-	// Line 1532, Address: 0x29b7f8, Func Offset: 0x598
-	// Line 1534, Address: 0x29b804, Func Offset: 0x5a4
-	// Line 1533, Address: 0x29b808, Func Offset: 0x5a8
-	// Line 1534, Address: 0x29b80c, Func Offset: 0x5ac
-	// Line 1536, Address: 0x29b810, Func Offset: 0x5b0
-	// Line 1539, Address: 0x29b820, Func Offset: 0x5c0
-	// Line 1540, Address: 0x29b834, Func Offset: 0x5d4
-	// Line 1541, Address: 0x29b83c, Func Offset: 0x5dc
-	// Line 1543, Address: 0x29b840, Func Offset: 0x5e0
-	// Line 1540, Address: 0x29b848, Func Offset: 0x5e8
-	// Line 1541, Address: 0x29b854, Func Offset: 0x5f4
-	// Line 1543, Address: 0x29b858, Func Offset: 0x5f8
-	// Line 1544, Address: 0x29b860, Func Offset: 0x600
-	// Line 1545, Address: 0x29b864, Func Offset: 0x604
-	// Line 1546, Address: 0x29b878, Func Offset: 0x618
-	// Line 1547, Address: 0x29b880, Func Offset: 0x620
-	// Line 1548, Address: 0x29b888, Func Offset: 0x628
-	// Line 1549, Address: 0x29b894, Func Offset: 0x634
-	// Line 1570, Address: 0x29b8a0, Func Offset: 0x640
-	// Func End, Address: 0x29b8b8, Func Offset: 0x658
-	scePrintf("CursorMove - UNIMPLEMENTED!\n");
+
+    secall = 0;
+    
+    if ((sys->gm_flg & 0x8000000)) 
+    {
+        max = 10;
+    }
+    else 
+    {
+        max = 8; 
+    }
+    
+    switch (st->testmode)
+    {
+    case 0:
+        CursorInit(testset[15], sprset[9], st);
+        
+        st->testmode = 1;
+        
+        st->number = 0;
+        st->wait = 1;
+        
+        st->keywait = 0;
+        st->boxwait = 0;
+    case 1:
+        if ((swork.statusflg & 0x8000)) 
+        {
+            swork.statusflg |= 0x80;
+            swork.statusflg |= 0x10000;
+            
+            swork.statusflg &= ~0x10;
+            swork.statusflg &= ~0x8000;
+        }
+        
+        st->itemid = (st->pip[st->listcsr_0] >> 16) & 0xFF;
+        
+        swork.statusflg |= 0x100000;
+        
+        if (!(swork.statusflg & 0x40)) 
+        {
+            if (!(sys->pad_ps & 0x5800)) 
+            {
+                if (!(swork.statusflg & 0x20))
+                {
+                    if ((sys->pad_on & 0xF)) 
+                    {
+                        if (st->keywait > 4)
+                        {
+                            st->boxwait++;
+                        }
+                        else 
+                        {
+                            st->keywait++;
+                        }
+                    } 
+                    else 
+                    {
+                        st->keywait = 0;
+                        st->boxwait = 0;
+                    }
+                    
+                    if ((st->boxwait > 2) || (st->keywait == 1)) 
+                    {
+                        st->boxwait = 0;
+                        
+                        if ((sys->pad_on & 0x1))
+                        {
+                            if (st->listcsr_2 == 1)
+                            {
+                                if (!(parts_09b[1].atr & 0x20)) 
+                                {
+                                    parts_09b->atr &= ~0x20; 
+                                    
+                                    st->mode = 2;
+                                    st->testmode = 0;
+                                    
+                                    st->maincsr = 3;
+                                    
+                                    CallSystemSe(0, 0);
+                                    
+                                    secall = 1;
+                                    
+                                    st->keywait = 0;
+                                    st->boxwait = 0;
+                                }
+                            }
+                            else 
+                            {
+                                if (st->listcsr_2 >= 3)
+                                {
+                                    if (st->listcsr_0 <= sakai)
+                                    {
+                                        st->listcsr_0--;
+                                        st->listcsr_2 -= 2;
+                                    }
+                                    else 
+                                    {
+                                        st->listcsr_0 -= 2;
+                                        st->listcsr_2 -= 2;
+                                    }
+                                }
+                                else 
+                                {
+                                    st->listcsr_2--;
+                                    st->listcsr_0--;
+                                }
+                                
+                                CallSystemSe(0, 2);
+                                
+                                secall = 1;
+                            }
+                        } 
+                        else if ((sys->pad_on & 0x2))
+                        {
+                            if (st->listcsr_2 < max)
+                            {
+                                if (st->listcsr_0 < sakai)
+                                {
+                                    if (((st->listcsr_2 & 0x1)) && (st->listcsr_0 == (sakai - 1))) 
+                                    {
+                                        st->listcsr_0 += 2;
+                                    }
+                                    else 
+                                    {
+                                        st->listcsr_0++;
+                                    }
+                                    
+                                    st->listcsr_2 += 2;
+                                }
+                                else 
+                                {
+                                    st->listcsr_0 += 2;
+                                    st->listcsr_2 += 2;
+                                }
+                                
+                                CallSystemSe(0, 2);
+
+                                secall = 1;
+                            }
+                        }
+            
+                        if ((sys->pad_on & 0x8))
+                        {
+                            if (st->listcsr_2 < (max + 1))
+                            {
+                                if (st->listcsr_0 < sakai)
+                                {
+                                    if (st->listcsr_2 < max)
+                                    {
+                                        if ((st->listcsr_2 & 0x1))
+                                        {
+                                            st->listcsr_2++;
+                                        }
+                                        else
+                                        {
+                                            st->listcsr_2 += 2;
+                                        }
+                                        
+                                        st->listcsr_0++;
+                                    }
+                                }
+                                else 
+                                {
+                                    st->listcsr_0++;
+                                    st->listcsr_2++;
+                                }
+                                
+                                if (!secall) 
+                                {
+                                    CallSystemSe(0, 2);
+                                }
+                            }
+                        }
+                        else if ((sys->pad_on & 0x4))
+                        {
+                            if (st->listcsr_2 > 2) 
+                            {
+                                if (st->listcsr_0 < sakai)
+                                {
+                                    if (st->listcsr_0 > 2)
+                                    {
+                                        st->listcsr_0--;
+                                        st->listcsr_2 -= 2;
+                                    }
+                                }
+                                else 
+                                {
+                                    st->listcsr_0--;
+                                    st->listcsr_2--;
+                                }
+                                
+                                if (!secall)
+                                {
+                                    CallSystemSe(0, 2);
+                                }
+                            }
+                            else if ((st->listcsr_0 == 1) && (!(parts_09b[1].atr & 0x20)) && (!secall)) 
+                            {
+                                st->mode = 2;
+                                st->testmode = 0;
+                                
+                                st->maincsr = 3;
+                                
+                                parts_09b->atr &= ~0x20;
+                                
+                                st->keywait = 0;
+                                st->boxwait = 0;
+                                
+                                if (!secall)
+                                {
+                                    CallSystemSe(0, 0);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            else 
+            {
+                st->keywait = 0;
+                st->boxwait = 0;
+                
+                if ((sys->pad_ps & 0x800))
+                {
+                    if ((!(swork.statusflg & 0x20)) && (*(unsigned int*)&sys->mn_md0 == 0) && (st->itemid != 0))
+                    {
+                        st->testmode = 0;
+                        st->mode = 4;
+                        
+                        st->flag_ = 0;
+                        
+                        CallSystemSe(0, 3);
+                    }
+                } 
+                else if ((sys->pad_ps & 0x1000))
+                {
+                    parts_09b->atr &= ~0x20;
+                    
+                    st->mode = 2;
+                    st->testmode = 0;
+                    
+                    CallSystemSe(0, 0);
+                    
+                    st->maincsr = 3;
+                }
+                else if ((sys->pad_ps & 0x4000))
+                {
+                    st->testmode = 2;
+                    
+                    StatusCancel(st);
+                    
+                    CallSystemSe(0, 0);
+                    
+                    st->flgchk &= ~0x2;
+                }
+            }
+        }
+        
+        break;
+    case 2:
+        break;
+    }
 }
 
 // 100% matching!
@@ -3888,92 +4049,121 @@ void ArmsSet(S_WORK* st)
 	scePrintf("ArmsSet - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x2a12d0
+// 100% matching!
 void WindowJyoutai(S_WORK* st)
 {
-	unsigned short anim[5][3];
-	// Line 4114, Address: 0x2a12d0, Func Offset: 0
-	// Line 4112, Address: 0x2a12e4, Func Offset: 0x14
-	// Line 4114, Address: 0x2a12e8, Func Offset: 0x18
-	// Line 4119, Address: 0x2a1300, Func Offset: 0x30
-	// Line 4120, Address: 0x2a1318, Func Offset: 0x48
-	// Line 4121, Address: 0x2a1320, Func Offset: 0x50
-	// Line 4122, Address: 0x2a132c, Func Offset: 0x5c
-	// Line 4123, Address: 0x2a133c, Func Offset: 0x6c
-	// Line 4124, Address: 0x2a134c, Func Offset: 0x7c
-	// Line 4125, Address: 0x2a1354, Func Offset: 0x84
-	// Line 4126, Address: 0x2a135c, Func Offset: 0x8c
-	// Line 4128, Address: 0x2a1364, Func Offset: 0x94
-	// Line 4130, Address: 0x2a1370, Func Offset: 0xa0
-	// Line 4128, Address: 0x2a1374, Func Offset: 0xa4
-	// Line 4129, Address: 0x2a1394, Func Offset: 0xc4
-	// Line 4130, Address: 0x2a13a8, Func Offset: 0xd8
-	// Line 4131, Address: 0x2a13ac, Func Offset: 0xdc
-	// Line 4134, Address: 0x2a13bc, Func Offset: 0xec
-	// Func End, Address: 0x2a13c8, Func Offset: 0xf8
-	scePrintf("WindowJyoutai - UNIMPLEMENTED!\n");
+	unsigned short anim[3][5] = 
+    {
+        {  5,  6,  7,  8,  9 },
+        { 14, 13, 12, 11, 10 },
+        { 19, 18, 17, 16, 15 }
+    };
+
+    if ((st->wn_num != 0) && (st->dnum != 0)) 
+    {
+        st->wn_num--;
+        
+        if (st->wn_num == 0) 
+        {
+            st->dflg += st->dnum;
+            
+            if (st->dflg > 4) 
+            {
+                st->dflg = 4;
+                st->dnum = 255;
+                
+                st->sprflg = st->wn;
+            }
+            
+            parts_10b[15].anim = anim[st->sprflg][st->dflg];
+            
+            parts_10b[15].atr |= 0x20;
+            
+            st->wn_num = 1;
+            
+            if (st->dflg == 0) 
+            {
+                st->dnum = 0;
+            }
+        }
+    }
 }
 
-// 
-// Start address: 0x2a13d0
-void ItemCommandErase(S_WORK* st, int arg1/* unused */)
+// 100% matching!
+void ItemCommandErase(S_WORK* st, int param) // second parameter not present on DWARF
 {
 	unsigned char x;
-	// Line 4141, Address: 0x2a13d0, Func Offset: 0
-	// Line 4142, Address: 0x2a13e8, Func Offset: 0x18
-	// Line 4143, Address: 0x2a13f4, Func Offset: 0x24
-	// Line 4144, Address: 0x2a13fc, Func Offset: 0x2c
-	// Line 4145, Address: 0x2a1404, Func Offset: 0x34
-	// Line 4147, Address: 0x2a140c, Func Offset: 0x3c
-	// Line 4148, Address: 0x2a1418, Func Offset: 0x48
-	// Line 4149, Address: 0x2a143c, Func Offset: 0x6c
-	// Line 4150, Address: 0x2a1444, Func Offset: 0x74
-	// Line 4151, Address: 0x2a144c, Func Offset: 0x7c
-	// Line 4152, Address: 0x2a1450, Func Offset: 0x80
-	// Line 4153, Address: 0x2a1454, Func Offset: 0x84
-	// Line 4154, Address: 0x2a1474, Func Offset: 0xa4
-	// Line 4153, Address: 0x2a1478, Func Offset: 0xa8
-	// Line 4154, Address: 0x2a147c, Func Offset: 0xac
-	// Line 4155, Address: 0x2a1484, Func Offset: 0xb4
-	// Line 4161, Address: 0x2a1488, Func Offset: 0xb8
-	// Line 4155, Address: 0x2a1490, Func Offset: 0xc0
-	// Line 4156, Address: 0x2a1498, Func Offset: 0xc8
-	// Line 4157, Address: 0x2a14a4, Func Offset: 0xd4
-	// Line 4158, Address: 0x2a14a8, Func Offset: 0xd8
-	// Line 4159, Address: 0x2a14ac, Func Offset: 0xdc
-	// Line 4160, Address: 0x2a14b0, Func Offset: 0xe0
-	// Line 4161, Address: 0x2a14b8, Func Offset: 0xe8
-	// Line 4162, Address: 0x2a14d0, Func Offset: 0x100
-	// Line 4163, Address: 0x2a14d8, Func Offset: 0x108
-	// Line 4164, Address: 0x2a14dc, Func Offset: 0x10c
-	// Line 4163, Address: 0x2a14e4, Func Offset: 0x114
-	// Line 4164, Address: 0x2a14f0, Func Offset: 0x120
-	// Line 4165, Address: 0x2a1500, Func Offset: 0x130
-	// Line 4166, Address: 0x2a1524, Func Offset: 0x154
-	// Line 4170, Address: 0x2a152c, Func Offset: 0x15c
-	// Line 4171, Address: 0x2a1540, Func Offset: 0x170
-	// Line 4173, Address: 0x2a1544, Func Offset: 0x174
-	// Line 4172, Address: 0x2a1548, Func Offset: 0x178
-	// Line 4173, Address: 0x2a154c, Func Offset: 0x17c
-	// Line 4174, Address: 0x2a1550, Func Offset: 0x180
-	// Line 4175, Address: 0x2a1554, Func Offset: 0x184
-	// Line 4176, Address: 0x2a1564, Func Offset: 0x194
-	// Line 4175, Address: 0x2a1570, Func Offset: 0x1a0
-	// Line 4176, Address: 0x2a1578, Func Offset: 0x1a8
-	// Line 4177, Address: 0x2a1584, Func Offset: 0x1b4
-	// Line 4183, Address: 0x2a1588, Func Offset: 0x1b8
-	// Line 4177, Address: 0x2a1590, Func Offset: 0x1c0
-	// Line 4178, Address: 0x2a1598, Func Offset: 0x1c8
-	// Line 4179, Address: 0x2a15a4, Func Offset: 0x1d4
-	// Line 4180, Address: 0x2a15a8, Func Offset: 0x1d8
-	// Line 4181, Address: 0x2a15ac, Func Offset: 0x1dc
-	// Line 4182, Address: 0x2a15b0, Func Offset: 0x1e0
-	// Line 4183, Address: 0x2a15b8, Func Offset: 0x1e8
-	// Line 4184, Address: 0x2a15c8, Func Offset: 0x1f8
-	// Line 4186, Address: 0x2a15e0, Func Offset: 0x210
-	// Func End, Address: 0x2a15e8, Func Offset: 0x218
-	scePrintf("ItemCommandErase - UNIMPLEMENTED!\n");
+
+    if ((swork.statusflg & 0x800000)) 
+    {
+        if (st->flag_ == 0) 
+        {
+            st->wait_ = 24;
+            st->number_ = 4;
+            st->flag_ = 1;
+        }
+        
+        if (st->number_ != 0) 
+        {
+            cen_pos[11][0] += st->wait_;
+            
+            st->number_--;
+        }
+        else 
+        {
+            st->maincsr = 0;
+        
+            st->flag_ = 0;
+            
+            swork.statusflg &= ~0x800000;
+            
+            for (x = 0; x < 5; x++)
+            {
+                parts_06b[x + 13].atr &= ~0x4;
+                parts_06b[x + 13].color &= ~0x8;
+                
+                parts_06b[x + 13].col.a = 1.0f;
+                parts_06b[x + 13].col.r = 1.0f;
+                parts_06b[x + 13].col.g = 1.0f;
+                parts_06b[x + 13].col.b = 1.0f;
+            }
+            
+            for (x = 0; x < 18; x++)
+            {
+                parts_06b[x].atr &= ~0x20;
+            }
+            
+            if ((!(st->mode & 0x8)) && (!(swork.statusflg & 0x4))) 
+            {
+                st->mode = 1;
+                st->testmode = 1;
+            }
+        }
+    } 
+    else if ((swork.statusflg & 0x8)) 
+    {
+        st->maincsr = 0;
+        
+        st->flag_ = 0;
+        
+        st->mode = 1;
+        st->testmode = 1;
+        
+        cen_pos[11][0] += 96.0f;
+        
+        for (x = 0; x < 5; x++)
+        {
+            parts_06b[x + 13].atr &= ~0x4;
+            parts_06b[x + 13].color &= ~0x8;
+            
+            parts_06b[x + 13].col.a = 1.0f;
+            parts_06b[x + 13].col.r = 1.0f;
+            parts_06b[x + 13].col.g = 1.0f;
+            parts_06b[x + 13].col.b = 1.0f;
+        }
+        
+        swork.statusflg &= ~0x8;
+    }
 }
 
 // 
@@ -4421,71 +4611,81 @@ void ItemCombination(S_WORK* st)
 	scePrintf("ItemCombination - UNIMPLEMENTED!\n");
 }
 
-// 
-// Start address: 0x2a2a30
+// 100% matching!
 void SidePackSet()
 {
-	// Line 4700, Address: 0x2a2a30, Func Offset: 0
-	// Line 4701, Address: 0x2a2a4c, Func Offset: 0x1c
-	// Line 4702, Address: 0x2a2a58, Func Offset: 0x28
-	// Line 4703, Address: 0x2a2a64, Func Offset: 0x34
-	// Line 4704, Address: 0x2a2a70, Func Offset: 0x40
-	// Line 4705, Address: 0x2a2a78, Func Offset: 0x48
-	// Line 4706, Address: 0x2a2a7c, Func Offset: 0x4c
-	// Line 4707, Address: 0x2a2a84, Func Offset: 0x54
-	// Line 4708, Address: 0x2a2a90, Func Offset: 0x60
-	// Line 4709, Address: 0x2a2a9c, Func Offset: 0x6c
-	// Line 4710, Address: 0x2a2aa8, Func Offset: 0x78
-	// Line 4711, Address: 0x2a2ab0, Func Offset: 0x80
-	// Line 4713, Address: 0x2a2ab8, Func Offset: 0x88
-	// Func End, Address: 0x2a2ac0, Func Offset: 0x90
-	scePrintf("SidePackSet - UNIMPLEMENTED!\n");
+    if ((sys->gm_flg & 0x8000000)) 
+    {
+        parts_04b[6].pos[1] = 208.0f;
+        parts_04b[8].pos[1] = 248.0f;
+        parts_04b[9].pos[1] = 268.0f;
+        parts_04b[13].pos[1] = 248.0f;
+        parts_04b[14].pos[1] = 268.0f;
+    } 
+    else 
+    {
+        parts_04b[6].pos[1] = 160.0f;
+        parts_04b[8].pos[1] = 200.0f;
+        parts_04b[9].pos[1] = 220.0f;
+        parts_04b[13].pos[1] = 200.0f;
+        parts_04b[14].pos[1] = 220.0f;
+    }
 }
 
-// 
-// Start address: 0x2a2ac0
+// 100% matching!
 void TrigerSet(S_WORK* st)
 {
-	// Line 4718, Address: 0x2a2ac0, Func Offset: 0
-	// Line 4719, Address: 0x2a2ac8, Func Offset: 0x8
-	// Line 4720, Address: 0x2a2af4, Func Offset: 0x34
-	// Line 4721, Address: 0x2a2b00, Func Offset: 0x40
-	// Line 4722, Address: 0x2a2b0c, Func Offset: 0x4c
-	// Line 4723, Address: 0x2a2b14, Func Offset: 0x54
-	// Line 4724, Address: 0x2a2b20, Func Offset: 0x60
-	// Line 4728, Address: 0x2a2b2c, Func Offset: 0x6c
-	// Line 4725, Address: 0x2a2b34, Func Offset: 0x74
-	// Line 4728, Address: 0x2a2b38, Func Offset: 0x78
-	// Line 4725, Address: 0x2a2b3c, Func Offset: 0x7c
-	// Line 4726, Address: 0x2a2b44, Func Offset: 0x84
-	// Line 4727, Address: 0x2a2b50, Func Offset: 0x90
-	// Line 4728, Address: 0x2a2b54, Func Offset: 0x94
-	// Line 4729, Address: 0x2a2b68, Func Offset: 0xa8
-	// Line 4730, Address: 0x2a2b70, Func Offset: 0xb0
-	// Line 4731, Address: 0x2a2b78, Func Offset: 0xb8
-	// Line 4734, Address: 0x2a2b80, Func Offset: 0xc0
-	// Line 4735, Address: 0x2a2b88, Func Offset: 0xc8
-	// Line 4736, Address: 0x2a2b94, Func Offset: 0xd4
-	// Line 4737, Address: 0x2a2b9c, Func Offset: 0xdc
-	// Line 4738, Address: 0x2a2ba8, Func Offset: 0xe8
-	// Line 4739, Address: 0x2a2bb4, Func Offset: 0xf4
-	// Line 4740, Address: 0x2a2bc0, Func Offset: 0x100
-	// Line 4741, Address: 0x2a2bcc, Func Offset: 0x10c
-	// Line 4742, Address: 0x2a2bd4, Func Offset: 0x114
-	// Line 4743, Address: 0x2a2be8, Func Offset: 0x128
-	// Line 4745, Address: 0x2a2bf8, Func Offset: 0x138
-	// Line 4746, Address: 0x2a2c00, Func Offset: 0x140
-	// Line 4747, Address: 0x2a2c0c, Func Offset: 0x14c
-	// Line 4748, Address: 0x2a2c14, Func Offset: 0x154
-	// Line 4749, Address: 0x2a2c20, Func Offset: 0x160
-	// Line 4750, Address: 0x2a2c2c, Func Offset: 0x16c
-	// Line 4751, Address: 0x2a2c38, Func Offset: 0x178
-	// Line 4752, Address: 0x2a2c44, Func Offset: 0x184
-	// Line 4753, Address: 0x2a2c4c, Func Offset: 0x18c
-	// Line 4754, Address: 0x2a2c60, Func Offset: 0x1a0
-	// Line 4756, Address: 0x2a2c74, Func Offset: 0x1b4
-	// Func End, Address: 0x2a2c80, Func Offset: 0x1c0
-	scePrintf("TriggerSet - UNIMPLEMENTED!\n");
+    if ((itemdata[st->itemid].type & 0x1))
+    {
+        if (st->itemid == 10) 
+        {
+            parts_06b[2].pos[1] = 148.0f;
+            parts_06b[3].pos[1] = 148.0f;
+            parts_06b[5].pos[1] = 184.0f;
+            parts_06b[7].pos[1] = 180.0f;
+            
+            parts_06b[8].setnum = 3;
+            parts_06b[9].setnum = 4;
+            parts_06b[10].setnum = 4;
+            
+            if (bhCkFlg(sys->ev_flg, 74) != 0) 
+            {
+                parts_06b[17].anim = 12;
+            }
+            else
+            {
+                parts_06b[17].anim = 11;
+            }
+        }
+        else 
+        {
+            parts_06b[2].pos[1] = 116.0f;
+            parts_06b[3].pos[1] = 116.0f;
+            parts_06b[5].pos[1] = 152.0f;
+            parts_06b[7].pos[1] = 148.0f;
+            
+            parts_06b[8].setnum = 2;
+            parts_06b[9].setnum = 3;
+            parts_06b[10].setnum = 3;
+            
+            parts_06b[11].atr &= ~0x20;
+            parts_06b[12].atr &= ~0x20;
+        }
+    }
+    else 
+    {
+        parts_06b[2].pos[1] = 84.0f;
+        parts_06b[3].pos[1] = 84.0f;
+        parts_06b[5].pos[1] = 120.0f;
+        parts_06b[7].pos[1] = 116.0f;
+        
+        parts_06b[8].setnum = 1;
+        parts_06b[9].setnum = 2;
+        parts_06b[10].setnum = 2;
+        
+        parts_06b[11].atr &= ~0x20;
+        parts_06b[12].atr &= ~0x20;
+    }
 }
 
 // 
@@ -5109,43 +5309,54 @@ unsigned char Combi_03(short ps, unsigned int* moto, unsigned int* aite)
     return 1;
 }
 
-// 
-// Start address: 0x2a4340
+// 100% matching!
 unsigned char Combi_04(short ps, unsigned int* moto, unsigned int* aite)
 {
-	unsigned char ok;
-	unsigned short itemid2;
-	unsigned short itemid1;
-	unsigned short bullet2;
-	unsigned short bullet1;
-	// Line 5481, Address: 0x2a4340, Func Offset: 0
-	// Line 5482, Address: 0x2a4344, Func Offset: 0x4
-	// Line 5483, Address: 0x2a4348, Func Offset: 0x8
-	// Line 5484, Address: 0x2a434c, Func Offset: 0xc
-	// Line 5480, Address: 0x2a4350, Func Offset: 0x10
-	// Line 5481, Address: 0x2a4354, Func Offset: 0x14
-	// Line 5482, Address: 0x2a4358, Func Offset: 0x18
-	// Line 5481, Address: 0x2a435c, Func Offset: 0x1c
-	// Line 5486, Address: 0x2a4360, Func Offset: 0x20
-	// Line 5488, Address: 0x2a436c, Func Offset: 0x2c
-	// Line 5487, Address: 0x2a4378, Func Offset: 0x38
-	// Line 5488, Address: 0x2a4380, Func Offset: 0x40
-	// Line 5490, Address: 0x2a4390, Func Offset: 0x50
-	// Line 5492, Address: 0x2a4398, Func Offset: 0x58
-	// Line 5491, Address: 0x2a43b4, Func Offset: 0x74
-	// Line 5495, Address: 0x2a43bc, Func Offset: 0x7c
-	// Line 5497, Address: 0x2a43c4, Func Offset: 0x84
-	// Line 5496, Address: 0x2a43c8, Func Offset: 0x88
-	// Line 5497, Address: 0x2a43cc, Func Offset: 0x8c
-	// Line 5499, Address: 0x2a43d0, Func Offset: 0x90
-	// Line 5501, Address: 0x2a43d8, Func Offset: 0x98
-	// Line 5500, Address: 0x2a43dc, Func Offset: 0x9c
-	// Line 5501, Address: 0x2a43e0, Func Offset: 0xa0
-	// Line 5504, Address: 0x2a43e4, Func Offset: 0xa4
-	// Line 5505, Address: 0x2a43f8, Func Offset: 0xb8
-	// Line 5509, Address: 0x2a4408, Func Offset: 0xc8
-	// Func End, Address: 0x2a4410, Func Offset: 0xd0
-	scePrintf("Combi_04 - UNIMPLEMENTED!\n");
+    unsigned short bullet1, bullet2; 
+    unsigned short itemid1, itemid2; 
+    unsigned char ok;      
+
+    ok = 0;
+   
+    bullet1 = *moto;
+    bullet2 = *aite;
+    
+    itemid1 = (*moto >> 16) & 0xFF;
+    itemid2 = (*aite >> 16) & 0xFF;
+    
+    if (bullet2 <= bullet1) 
+    {
+        bullet1 -= bullet2;
+        
+        itemid2 = combidata[ps + 1];
+        
+        ok = 128;
+    } 
+    else 
+    {
+        itemid1 = combidata[ps + 1];
+        
+        bullet2 -= bullet1;
+    }
+    
+    if (!bullet1) 
+    {
+        itemid1 = 0;
+        
+        ok |= 0x1;
+    }
+    
+    if (!bullet2) 
+    {
+        itemid2 = 0;
+        
+        ok |= 0x2;
+    }
+    
+    *moto = (itemid1 << 16) | bullet1;
+    *aite = (itemid2 << 16) | bullet2;
+    
+    return ok;
 }
 
 // 
