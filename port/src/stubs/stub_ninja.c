@@ -85,7 +85,9 @@ void bhKeepObjWork(void* obj, void* dst)              { (void)obj;(void)dst; }
  * game flow yet.
  * ---------------------------------------------------------------------- */
 void njControl3D(int mode)                            { (void)mode; }
-void njDrawSprite2D(void* p, int n, float z, int t)   { (void)p;(void)n;(void)z;(void)t; }
+/* njDrawSprite2D moved to port/src/game_texture_stubs.c — needs real
+ * NJS_SPRITE / NJS_TEXANIM struct layout from ninjastr.h, which the
+ * stubs target intentionally doesn't include. */
 void njSetConstantAttr(unsigned int a)                { (void)a; }
 void njSetConstantMaterial(void* m)                   { (void)m; }
 void njSetFogColor(unsigned int c)                    { (void)c; }

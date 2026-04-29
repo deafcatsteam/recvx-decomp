@@ -455,6 +455,67 @@ void njDrawQuadTexture(QUAD* q, float z) {
                         z, g_current_color, g_current_trans);
 }
 
+/* sub1.c calls njDrawSprite2D ~50 times per frame to render every part
+ * of the inventory UI: tabs, cursor, item icons, count digits, equipment
+ * plates. PS2 path goes through ps2_NaSprite.c which builds a draw
+ * packet for the GS GIF; we instead resolve the sprite's chosen tanim
+ * frame to a screen-space + UV rect and forward to recvx_gfx_draw_quad,
+ * piggybacking on the same z-sorted 2D queue adv.c uses for menu plates.
+ *
+ *   sp->tlist       — texture list (NJS_TEXLIST*)
+ *   sp->tanim[n]    — animation frame: sx/sy size + cx/cy center
+ *                     + u1/v1/u2/v2 UV pixels + texid (index into tlist)
+ *   sp->p           — screen-space anchor
+ *   sp->sx / sy     — extra scale (sub1 always uses 1.0)
+ *   sp->ang         — rotation 0..0xFFFF mapping 0..360° (sub1 mostly 0)
+ *   pri             — render priority (used as z)
+ *   attr            — bit 1 = transparent, bit 5 = drawing flag (we
+ *                     treat both transparent + non-transparent as
+ *                     blend-enabled for now, since menu parts use a
+ *                     mix of opaque tabs + alpha-blended icons)
+ */
+void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
+    if (!sp || !sp->tlist || !sp->tanim) return;
+    NJS_TEXANIM* ta = &sp->tanim[n];
+    NJS_TEXLIST* tl = sp->tlist;
+    if (ta->texid < 0 || (Uint32)ta->texid >= tl->nbTexture) return;
+
+    /* Resolve the tex id to our pool slot the same way njSetQuadTexture
+     * does. The slot is what the backend uses to bind a real GL texture. */
+    NJS_TEXMEMLIST* ml =
+        (NJS_TEXMEMLIST*)(uintptr_t)tl->textures[ta->texid].texaddr;
+    if (!ml) return;
+    int slot = pool_slot_of(ml);
+    if (slot < 0) return;
+
+    int tex_w = (int)ml->texinfo.texsurface.nWidth;
+    int tex_h = (int)ml->texinfo.texsurface.nHeight;
+    if (tex_w <= 0 || tex_h <= 0) return;
+
+    /* Screen rect: anchor at sp->p with center offset (cx,cy), scaled
+     * by sp->sx / sp->sy, sized by the tanim's sx/sy. */
+    float sx = sp->sx, sy = sp->sy;
+    float x1 = sp->p.x - (float)ta->cx * sx;
+    float y1 = sp->p.y - (float)ta->cy * sy;
+    float x2 = x1 + (float)ta->sx * sx;
+    float y2 = y1 + (float)ta->sy * sy;
+
+    /* Normalized UVs from the pixel-coord anim rect. */
+    float u1 = (float)ta->u1 / (float)tex_w;
+    float v1 = (float)ta->v1 / (float)tex_h;
+    float u2 = (float)ta->u2 / (float)tex_w;
+    float v2 = (float)ta->v2 / (float)tex_h;
+
+    /* attr bit layout in sub1.c's SpriteSet2D:
+     *   bit 0=0x01 hidden     bit 1=0x02 inv x  bit 2=0x04 transparent
+     *   bit 3=0x08 inv y      bit 4=0x10 ?      bit 5=0x20 drawing
+     * Treat 0x04 as "alpha blended" and skip the rest for now. */
+    int trans = (attr & 0x04) ? 1 : 0;
+
+    recvx_gfx_draw_quad(slot, x1, y1, x2, y2, u1, v1, u2, v2,
+                        pri, 0xFFFFFFFFu /* white tint */, trans);
+}
+
 /* adv.c:447/687 njDrawPolygon — vertex-colored TRIANGLE_STRIP (usually 4
  * verts in TL-BL-TR-BR zigzag order). The PS2 GS PRIM register encodes
  * prim=4 (TRIANGLESTRIP) in ps2_NaDraw.c; the backend renders accordingly. */
