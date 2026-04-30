@@ -2,7 +2,8 @@
 # is captured even if the console scrollback buffer truncates it.
 #
 # Usage from the port/ directory:
-#   .\run.ps1                         # default args
+#   .\run.ps1                         # boots into --game (regular gameplay)
+#   .\run.ps1 -Inventory              # boots straight into the inventory screen
 #   .\run.ps1 -Iso "C:\path\to.iso"   # override ISO path
 #   .\run.ps1 -ExtraArgs "--msa-rate 32000"
 
@@ -10,7 +11,8 @@ param(
     [string]$Iso       = "C:\Claude\codeveronica\recvx\recvx.iso",
     [string]$Config    = "Debug",
     [string]$ExtraArgs = "",
-    [string]$Log       = "runtime.log"
+    [string]$Log       = "runtime.log",
+    [switch]$Inventory
 )
 
 $exe = ".\build\$Config\recvx_pc.exe"
@@ -19,7 +21,8 @@ if (-not (Test-Path $exe)) {
     exit 1
 }
 
-$argList = @("--iso", $Iso, "--game")
+$mode = if ($Inventory) { "--inventory" } else { "--game" }
+$argList = @("--iso", $Iso, $mode)
 if ($ExtraArgs) { $argList += $ExtraArgs.Split(' ') }
 
 Write-Host "-- Running $exe $($argList -join ' ') --"
