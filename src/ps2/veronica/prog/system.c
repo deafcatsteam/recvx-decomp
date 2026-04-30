@@ -1302,7 +1302,16 @@ void bhSysCallMovie()
 
                 swork.subscreenmode = 1;
                 sys->cb_flg |= 0x10;
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10");
+                /* Suspend Option task (bit 16). The same task loop frame
+                 * that fires this case-6 hook continues iterating to
+                 * Option (bit 16 > Movie bit 12) — bhSysCallOption sees
+                 * tk_flg & 0x80 (Game active) and enters its "open
+                 * options" branch with opt_md0=0 → ts_flg |= 0x180 →
+                 * Adv_GameOptionScreen takes over. Suspending bit 16
+                 * lets Itemselect (bit 9) dispatch on the next frame
+                 * with our subscreenmode=1 fresh in place. */
+                sys->ts_flg = 0x10000;
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10, ts_flg=0x10000 (Option suspended)");
             }
         }
 #endif
