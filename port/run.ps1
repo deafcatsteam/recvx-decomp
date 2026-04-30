@@ -19,7 +19,7 @@ if (-not (Test-Path $exe)) {
     exit 1
 }
 
-# Boot-mode menu — shown every time so there's zero ambiguity about which
+# Boot-mode menu - shown every time so there's zero ambiguity about which
 # code path is being exercised. Each entry maps to the literal CLI flag(s)
 # that main_pc.c parses.
 $bootArgs = $null
@@ -46,7 +46,7 @@ while ($null -eq $bootArgs) {
             if ($idx -match '^\d+$') {
                 $bootArgs = @("--play-movie", $idx)
             } else {
-                Write-Host "Not a number — try again." -ForegroundColor Yellow
+                Write-Host "Not a number - try again." -ForegroundColor Yellow
             }
         }
         "6" {
@@ -55,7 +55,7 @@ while ($null -eq $bootArgs) {
                 $bootArgs = $custom.Split(' ') | Where-Object { $_ -ne "" }
             }
         }
-        default { Write-Host "Invalid selection — try again." -ForegroundColor Yellow }
+        default { Write-Host "Invalid selection - try again." -ForegroundColor Yellow }
     }
 }
 
