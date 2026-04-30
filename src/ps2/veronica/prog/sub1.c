@@ -2283,6 +2283,11 @@ unsigned char ItemUse(S_WORK* st)
 // Start address: 0x29cbf0
 void SpriteH(S_WORK* st)
 {
+#ifdef RECVX_PC_PORT
+	extern void recvx_SpriteH(S_WORK* st);
+	recvx_SpriteH(st);
+	return;
+#endif
 	unsigned char chk;
 	unsigned short x;
 	// Line 2105, Address: 0x29cbf0, Func Offset: 0
@@ -2365,6 +2370,11 @@ void SpriteH(S_WORK* st)
 // Start address: 0x29d000
 void SpriteUV(S_WORK* st)
 {
+#ifdef RECVX_PC_PORT
+	extern void recvx_SpriteUV(S_WORK* st);
+	recvx_SpriteUV(st);
+	return;
+#endif
 	// Line 2182, Address: 0x29d000, Func Offset: 0
 	// Line 2186, Address: 0x29d008, Func Offset: 0x8
 	// Line 2187, Address: 0x29d020, Func Offset: 0x20
@@ -6090,6 +6100,11 @@ void BorderLineSet(S_WORK* st, unsigned char border, float ypos)
 // Start address: 0x2a63f0
 void SpriteOnOff(S_WORK* st)
 {
+#ifdef RECVX_PC_PORT
+	extern void recvx_SpriteOnOff(S_WORK* st);
+	recvx_SpriteOnOff(st);
+	return;
+#endif
 	short ips2;
 	unsigned char num1;
 	unsigned short itemid;
@@ -6759,6 +6774,11 @@ void SbsTextureInit()
 // Start address: 0x2a7d30
 void PulseInit()
 {
+#ifdef RECVX_PC_PORT
+	extern void recvx_PulseInit(void);
+	recvx_PulseInit();
+	return;
+#endif
 	unsigned short i;
 	float panelpos[5][5];
 	// _anon29* pw;
@@ -7514,6 +7534,11 @@ void KazariAnim()
 // Start address: 0x2a9510
 void DrawPoly2D(NJS_POINT2* pos00, NJS_COLOR* col00, NJS_COLOR* uv00, float pri, unsigned int atr, int texnum)
 {
+#ifdef RECVX_PC_PORT
+	extern void recvx_DrawPoly2D(NJS_POINT2*, NJS_COLOR*, NJS_COLOR*, float, unsigned int, int);
+	recvx_DrawPoly2D(pos00, col00, uv00, pri, atr, texnum);
+	return;
+#endif
 	short i;
 	NJS_COLOR uv[4];
 	NJS_COLOR col[4];
