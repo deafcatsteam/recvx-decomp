@@ -244,12 +244,22 @@ int bhSetMemPvpTexture(NJS_TEXLIST* tlp, unsigned char* datp, int offset)
                     gidx |= bk_id << 26; 
 
                     palno = et_of + ((bk_id & 0x3F) * 16);
-                    
-                    sz = (int)&palbuf[((bk_id / 64) * 64) * 16]; 
-                    
-                    palno *= 4; 
-                    
-                    palp = (unsigned char*)(palno + sz); 
+
+#ifdef RECVX_PC_PORT
+                    /* PS2 path stores palbuf base into the int `sz` then
+                     * adds palno*4 — the (int) cast truncates 64-bit
+                     * pointers on x64. Compute palp directly via uintptr_t
+                     * to keep the full address. */
+                    palp = (unsigned char*)((uintptr_t)&palbuf[((bk_id / 64) * 64) * 16]
+                                            + (uintptr_t)(palno * 4));
+                    palno *= 4;
+#else
+                    sz = (int)&palbuf[((bk_id / 64) * 64) * 16];
+
+                    palno *= 4;
+
+                    palp = (unsigned char*)(palno + sz);
+#endif
 
                     if (et_ct == 256)
                     {
