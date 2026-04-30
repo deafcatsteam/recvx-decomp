@@ -1270,13 +1270,39 @@ void bhSysCallMovie()
                  * pb++)` loop walks past the array end and crashes when
                  * it hits .text/.rdata. On real PS2 some uncompiled init
                  * function (game.c?) populates parts_07b's anim with a
-                 * real terminator. For now: stamp the sentinel ourselves
-                 * so the loop has a stop. */
+                 * real terminator. Stamp the sentinel ourselves. */
                 extern PARTS parts_07b[8];
                 parts_07b[0].anim = -1;
+
+                /* Pre-load the inventory texture pack (ITEM1.AFS file
+                 * 145) into sys->subtxp and call SbsTextureInit so the
+                 * inventory's swork.subtx_list gets populated with real
+                 * TIM2 textures. This is what bhSysCallMonitor case 5
+                 * mn_md1=1..3 normally does — but our --inventory short
+                 * circuit lands directly in the inventory state without
+                 * routing through Monitor's loading sequence. */
+                {
+                    int sz = GetInsideFileSize(sys->itm_partid, 145);
+                    if (sz > 0) {
+                        void* buf = bhGetFreeMemory((unsigned)sz, 32);
+                        if (buf) {
+                            RequestReadInsideFile(sys->itm_partid, 145, buf);
+                            sys->subtxp = (unsigned char*)buf;
+                            SbsTextureInit();
+                            recvx_log("game",
+                                "--inventory: loaded ITEM1.AFS/145 (%d B) into subtxp, SbsTextureInit done",
+                                sz);
+                        }
+                    } else {
+                        recvx_log("game",
+                            "--inventory: ITEM1.AFS file 145 missing (sz=%d, partid=%d)",
+                            sz, sys->itm_partid);
+                    }
+                }
+
                 swork.subscreenmode = 1;
                 sys->cb_flg |= 0x10;
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10, parts_07b[0].anim=-1");
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10");
             }
         }
 #endif
