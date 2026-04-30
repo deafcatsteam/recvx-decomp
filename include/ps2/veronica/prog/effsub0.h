@@ -3,6 +3,22 @@
 
 #include "types.h"
 
+typedef struct EFF0UV 
+{
+    // total size: 0x4
+    short u; // offset 0x0, size 0x2
+    short v; // offset 0x2, size 0x2
+} EFF0UV;
+
+typedef struct EFF0UVWHUC 
+{
+    // total size: 0x4
+    unsigned char u; // offset 0x0, size 0x1
+    unsigned char v; // offset 0x1, size 0x1
+    unsigned char w; // offset 0x2, size 0x1
+    unsigned char h; // offset 0x3, size 0x1
+} EFF0UVWHUC;
+
 /*typedef struct npobj;
 typedef struct _anon0;
 typedef struct _anon1;
