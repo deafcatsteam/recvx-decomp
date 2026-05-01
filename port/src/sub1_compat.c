@@ -66,6 +66,20 @@ void recvx_DrawPoly2D(NJS_POINT2* pos, NJS_COLOR* col, NJS_COLOR* uv,
         v[i].z = pri;
         v[i].color = col[i].color;
     }
+
+    /* One-time diagnostic so we can confirm the shim chain is actually
+     * being hit AND see what geometry sub1.c is asking for. Remove once
+     * the inventory chrome renders correctly. */
+    static int logged = 0;
+    if (!logged) {
+        recvx_log("game",
+                  "recvx_DrawPoly2D first call: p=[(%.1f,%.1f)..(%.1f,%.1f)] "
+                  "col=0x%08x pri=%.1f atr=0x%x",
+                  pos[0].x, pos[0].y, pos[2].x, pos[2].y,
+                  col[0].color, pri, atr);
+        logged = 1;
+    }
+
     recvx_gfx_draw_polygon(v, 4, 1);
 }
 
