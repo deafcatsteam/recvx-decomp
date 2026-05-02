@@ -490,14 +490,26 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
     int trans = (attr & 0x60) ? 1 : 0;
 
     if (!(attr & 0x80000000)) {
-        /* Untextured fan. Per-vertex color, single z. */
+        /* Untextured. Per-vertex color, single z.
+         *
+         * recvx_gfx_draw_polygon's backend submits as GL_TRIANGLE_STRIP
+         * (matches the GS PRIM=4 convention used by njDrawPolygon /
+         * AdvDrawFadePolygon, which feed verts in zigzag TL,BL,TR,BR
+         * order). njDrawPolygon2D callers (sub1.c MultiWindowBack,
+         * effect.c bhDrawPARAM2D, effsub1.c) instead emit ROTATIONAL
+         * order (CW or CCW around the quad). For n=4, swapping indices
+         * 2 and 3 converts either rotational direction into zigzag, so
+         * the strip primitive paints the full quad instead of a bow-tie.
+         * n=3 (effsub1b triangles) needs no reorder. */
         if (n > 64) return;
+        static const int reorder4[4] = { 0, 1, 3, 2 };
         recvx_gfx_vtx v[64];
         for (int i = 0; i < n; ++i) {
-            v[i].x = p2c->p[i].x;
-            v[i].y = p2c->p[i].y;
+            int src = (n == 4) ? reorder4[i] : i;
+            v[i].x = p2c->p[src].x;
+            v[i].y = p2c->p[src].y;
             v[i].z = pri;
-            v[i].color = p2c->col[i].color;
+            v[i].color = p2c->col[src].color;
         }
         recvx_gfx_draw_polygon(v, n, trans);
         return;
