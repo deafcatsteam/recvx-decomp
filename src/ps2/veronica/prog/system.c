@@ -1301,7 +1301,14 @@ void bhSysCallMovie()
                 }
 
                 swork.subscreenmode = 1;
-                sys->cb_flg |= 0x10;
+                /* DON'T set cb_flg | 0x10 - that routes StatusMain
+                 * case 0x1 through the "got-item pickup" branch
+                 * (subscreenmode=8, single big-icon display). For the
+                 * full inventory grid we want the `flgtest == 0`
+                 * fall-through, which sets subscreenmode=2 and runs
+                 * StatusInit + the main case 0x2 path next frame
+                 * (MultiWindowBack + full sprite iterator). */
+                swork.flgtest = 0;
                 /* Suspend Option task (bit 16). The same task loop frame
                  * that fires this case-6 hook continues iterating to
                  * Option (bit 16 > Movie bit 12) — bhSysCallOption sees
@@ -1311,7 +1318,7 @@ void bhSysCallMovie()
                  * lets Itemselect (bit 9) dispatch on the next frame
                  * with our subscreenmode=1 fresh in place. */
                 sys->ts_flg = 0x10000;
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, cb_flg|=0x10, ts_flg=0x10000 (Option suspended)");
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, flgtest=0, ts_flg=0x10000 (Option suspended)");
             }
         }
 #endif
