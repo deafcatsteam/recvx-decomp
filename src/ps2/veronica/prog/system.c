@@ -945,23 +945,48 @@ void bhSysCallItemselect()
     
     ItemTaskCheck();
     
-    if (!(sys->ts_flg & 0x200)) 
+    if (!(sys->ts_flg & 0x200))
     {
         StatusMain();
-    } 
-    else 
+#ifdef RECVX_PC_PORT
+        /* One-shot fixup for --inventory shortcut. Set by case-6 hook,
+         * applied right after the first StatusMain runs (which calls
+         * CenterPositionInit + StatusInit and stamps statusflg). We:
+         *   - jump cen_pos[i] to its slide-in TARGET so the panel sits
+         *     where it should immediately, instead of off-screen left
+         *     for 8 frames; SpriteH then sees the start==target case
+         *     and the animation no-ops.
+         *   - clear statusflg bits 0x80 (pulse-anim opaque-black panel)
+         *     and 0x2000 (slide-in trigger). MultiWindowBack now draws
+         *     the dark-blue 0xFF000030 panel instead of black-on-black. */
+        extern int g_recvx_inventory_force_target_pos;
+        if (g_recvx_inventory_force_target_pos) {
+            extern float cen_pos[12][6];
+            extern float cen_pos99[12][6];
+            for (int i = 0; i < 12; ++i) {
+                cen_pos[i][0] = cen_pos99[i][2];
+                cen_pos[i][1] = cen_pos99[i][3];
+            }
+            extern S_WORK swork;
+            swork.statusflg &= ~(0x80 | 0x2000);
+            recvx_log("game", "--inventory: applied target-pos + cleared statusflg 0x80|0x2000");
+            g_recvx_inventory_force_target_pos = 0;
+        }
+#endif
+    }
+    else
     {
         bhDeleteYakkyou();
-        
+
         bhSetScreenFade(sys->fade_pbk, 3.0f);
-        
+
         bhDrawScreenFade();
-        
+
         sys->bcl_ct = 1;
-        
+
         sys->gm_flg |= 0x8000;
     }
-    
+
     njPrintSize(13);
     
     if ((sys->st_flg & 0x2))
@@ -1318,7 +1343,37 @@ void bhSysCallMovie()
                  * lets Itemselect (bit 9) dispatch on the next frame
                  * with our subscreenmode=1 fresh in place. */
                 sys->ts_flg = 0x10000;
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, flgtest=0, ts_flg=0x10000 (Option suspended)");
+
+                /* Skip the slide-in animation + dark panel.
+                 * StatusInit (called from case 0x1's flgtest==0 branch)
+                 * sets statusflg |= 0x10A080 — bit 7 (0x80) keeps
+                 * MultiWindowBack drawing as opaque BLACK (the "menu
+                 * pulse opening" placeholder), and bit 13 (0x2000)
+                 * triggers SpriteH's 8-frame slide-in from
+                 * cen_pos99[i][0..1] to cen_pos99[i][2..3]. Pre-clear
+                 * those bits (StatusInit's |= leaves anything we set
+                 * after it intact) and pre-set every cen_pos[i] to its
+                 * target so we get the dark-blue panel sitting at the
+                 * end-of-animation position immediately.
+                 *
+                 * Done as a deferred-apply via a flag the next-frame
+                 * Itemselect dispatch reads; setting cen_pos here would
+                 * be overwritten by CenterPositionInit() that runs
+                 * inside case 0x1. We therefore force the post-init
+                 * fixup via a dedicated helper called from
+                 * bhSysCallItemselect's port hook (next chunk below).
+                 */
+                extern int g_recvx_inventory_force_target_pos;
+                g_recvx_inventory_force_target_pos = 1;
+
+                /* Inventory-open SE. ItemTaskCheck's full-init branch
+                 * normally calls this when ts_flg & 0x200 was set at
+                 * entry — our shortcut bypasses that branch, so play
+                 * it manually. (0,3) is the same combo. */
+                extern void CallSystemSe(int, int);
+                CallSystemSe(0, 3);
+
+                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, flgtest=0, ts_flg=0x10000 (Option suspended) + skip-anim + open-SE");
             }
         }
 #endif

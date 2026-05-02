@@ -136,6 +136,10 @@ static bool        g_inventory     = false;  /* --inventory: force-open status s
 /* Read by system.c bhSysCallMovie case-6 port hook. int (not bool) so
  * the extern in C source compiles cleanly without including stdbool.h. */
 int g_recvx_open_inventory = 0;
+/* One-shot flag for the --inventory hook's deferred cen_pos + statusflg
+ * fixup (applied after first StatusMain). See bhSysCallItemselect /
+ * bhSysCallMovie case 6. Cleared by the apply path so it only runs once. */
+int g_recvx_inventory_force_target_pos = 0;
 
 /* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
  * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
