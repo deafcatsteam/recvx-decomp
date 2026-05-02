@@ -511,6 +511,14 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
             v[i].z = pri;
             v[i].color = p2c->col[src].color;
         }
+        static int logged_poly = 0;
+        if (!logged_poly) {
+            RX_LOG("poly", "njDrawPolygon2D first untextured n=%d "
+                   "p[0]=(%.0f,%.0f) p[2]=(%.0f,%.0f) col=0x%08x z=%.2f",
+                   n, p2c->p[0].x, p2c->p[0].y, p2c->p[2].x, p2c->p[2].y,
+                   p2c->col[0].color, pri);
+            logged_poly = 1;
+        }
         recvx_gfx_draw_polygon(v, n, trans);
         return;
     }
@@ -659,6 +667,26 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
      *   bit 3=0x08 inv y      bit 4=0x10 ?      bit 5=0x20 drawing
      * Treat 0x04 as "alpha blended" and skip the rest for now. */
     int trans = (attr & 0x04) ? 1 : 0;
+
+    /* Dedup: log first time we see each (slot, anim-id) pair so we can
+     * see what's drawing post-hook without flooding the log. */
+    {
+        struct rec { int slot; int n; };
+        static struct rec seen[64];
+        static int nseen = 0;
+        int hit = 0;
+        for (int i = 0; i < nseen; ++i) {
+            if (seen[i].slot == slot && seen[i].n == n) { hit = 1; break; }
+        }
+        if (!hit && nseen < 64) {
+            seen[nseen].slot = slot;
+            seen[nseen].n    = n;
+            nseen++;
+            RX_LOG("spr", "njDrawSprite2D slot=%d n=%d screen=(%.0f,%.0f-%.0f,%.0f) "
+                   "uv=(%.3f,%.3f-%.3f,%.3f) z=%.3f attr=0x%x",
+                   slot, n, x1, y1, x2, y2, u1, v1, u2, v2, pri, attr);
+        }
+    }
 
     recvx_gfx_draw_quad(slot, x1, y1, x2, y2, u1, v1, u2, v2,
                         pri, 0xFFFFFFFFu /* white tint */, trans);
