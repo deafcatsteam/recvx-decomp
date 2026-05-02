@@ -394,9 +394,10 @@ static NJS_TEXLIST* g_active_tl;
 static uint32_t     g_current_color;
 static int          g_current_slot;
 static int          g_current_trans;
+static Uint32       g_current_texnum;
 
 Sint32 njSetTexture(NJS_TEXLIST* tl) { g_active_tl = tl; return 0; }
-Sint32 njSetTextureNum(Uint32 n)     { (void)n;  return 0; }
+Sint32 njSetTextureNum(Uint32 n)     { g_current_texnum = n; return 0; }
 
 /* ------------------------------------------------------------------ */
 /* Draw primitives — forward to the backend gfx API                   */
@@ -469,6 +470,95 @@ void njDrawQuadTexture(QUAD* q, float z) {
                         q->x1, q->y1, q->x2, q->y2,
                         q->u1, q->v1, q->u2, q->v2,
                         z, g_current_color, g_current_trans);
+}
+
+/* sub1.c:DrawPoly2D and effsub*.c bind a NJS_POINT2COL (positions + colors
+ * + optional UVs) and ask Ninja to draw it as a 2D polygon. PS2 path
+ * pushes a GIF packet; we lower it to either:
+ *   - recvx_gfx_draw_polygon for the untextured case (atr & 0x80000000 == 0)
+ *   - recvx_gfx_draw_quad for the textured n=4 case (binds the texture
+ *     latched by the most recent njSetTexture+njSetTextureNum)
+ * Other (textured non-quad) call sites currently no-op with a warning.
+ * `attr` semantics:
+ *   bit 31 (0x80000000) - "use UVs from p2c->tex" (textured)
+ *   bit 5  (0x20)       - alpha blend on
+ *   bit 6  (0x40)       - blend math variant (we treat any 0x60 as "blend")
+ */
+void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
+    if (!p2c || !p2c->p || !p2c->col || n < 3) return;
+
+    int trans = (attr & 0x60) ? 1 : 0;
+
+    if (!(attr & 0x80000000)) {
+        /* Untextured fan. Per-vertex color, single z. */
+        if (n > 64) return;
+        recvx_gfx_vtx v[64];
+        for (int i = 0; i < n; ++i) {
+            v[i].x = p2c->p[i].x;
+            v[i].y = p2c->p[i].y;
+            v[i].z = pri;
+            v[i].color = p2c->col[i].color;
+        }
+        recvx_gfx_draw_polygon(v, n, trans);
+        return;
+    }
+
+    /* Textured path: only quads handled for now (every sub1.c call passes
+     * n==4). NJS_POINT2COL.tex stores UVs as int16 in NJS_TEX{u,v} — PS2
+     * GS uses 4096 = 1.0 UV scale, but the inventory's TIM2 uploads land
+     * in our pool as RGBA with full-texture coverage so we normalize off
+     * a per-quad min/max. */
+    if (n != 4 || !p2c->tex) {
+        static int warned = 0;
+        if (!warned) {
+            RX_LOG("nj", "njDrawPolygon2D: textured non-quad (n=%d) not impl", n);
+            warned = 1;
+        }
+        return;
+    }
+
+    /* Resolve current texture slot via the same chain njSetQuadTexture
+     * uses: g_active_tl[g_current_texnum].texaddr -> NJS_TEXMEMLIST -> slot. */
+    int slot = -1;
+    if (g_active_tl && g_current_texnum < g_active_tl->nbTexture) {
+        NJS_TEXMEMLIST* ml =
+            (NJS_TEXMEMLIST*)(uintptr_t)g_active_tl->textures[g_current_texnum].texaddr;
+        if (ml) slot = pool_slot_of(ml);
+    }
+    if (slot < 0) return;
+
+    /* Compute axis-aligned screen + UV rect from the 4 verts. PS2 GS UVs
+     * are 16-bit fixed-point but the decomp also stores them as raw pixel
+     * coords for some calls — we normalize against the texture extent
+     * implied by the min/max UV span. */
+    float x1 = p2c->p[0].x, y1 = p2c->p[0].y;
+    float x2 = x1, y2 = y1;
+    int   u1 = p2c->tex[0].tex.u, v1 = p2c->tex[0].tex.v;
+    int   u2 = u1, v2 = v1;
+    for (int i = 1; i < 4; ++i) {
+        if (p2c->p[i].x < x1) x1 = p2c->p[i].x; else if (p2c->p[i].x > x2) x2 = p2c->p[i].x;
+        if (p2c->p[i].y < y1) y1 = p2c->p[i].y; else if (p2c->p[i].y > y2) y2 = p2c->p[i].y;
+        if (p2c->tex[i].tex.u < u1) u1 = p2c->tex[i].tex.u; else if (p2c->tex[i].tex.u > u2) u2 = p2c->tex[i].tex.u;
+        if (p2c->tex[i].tex.v < v1) v1 = p2c->tex[i].tex.v; else if (p2c->tex[i].tex.v > v2) v2 = p2c->tex[i].tex.v;
+    }
+    /* Standard PS2 UV scale: 16 = 1 texel, so divide by texture pixel size.
+     * Without the actual size here, fall back to the TEXANIM hsize/vsize
+     * via the texlist if needed — for now assume the texlist's textures
+     * are 256-wide (most inventory atlases are) and let mismatch be a
+     * noticeable visual cue rather than a silent black. */
+    float fu1 = u1 / 256.0f, fv1 = v1 / 256.0f;
+    float fu2 = u2 / 256.0f, fv2 = v2 / 256.0f;
+    uint32_t color = p2c->col[0].color;
+    recvx_gfx_draw_quad(slot, x1, y1, x2, y2, fu1, fv1, fu2, fv2, pri, color, trans);
+}
+
+/* njDrawPolygon2DM — same primitive with model-view matrix transform.
+ * sub1.c doesn't use it, but bup_00.c / effsub1b.c do. Forward to the
+ * untransformed variant so non-inventory call sites at least don't
+ * unresolved-link. The lack of matrix is incorrect for those, but they
+ * aren't in our render path until 3D effects are wired. */
+void njDrawPolygon2DM(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
+    njDrawPolygon2D(p2c, n, pri, attr);
 }
 
 /* sub1.c calls njDrawSprite2D ~50 times per frame to render every part

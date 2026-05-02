@@ -418,7 +418,26 @@ void recvx_gfx_begin_2d(int target_w, int target_h) {
         g_gfx_ps2_w = target_w;
         g_gfx_ps2_h = target_h;
     }
-    glViewport(0, 0, g_win_w, g_win_h);
+    /* Pillar/letterbox the PS2's 4:3 logical surface inside the
+     * 16:9 (or whatever) host window. gl_begin already cleared the
+     * whole framebuffer to black, so the bars stay black. */
+    double tgt_aspect = (double)g_gfx_ps2_w / (double)g_gfx_ps2_h;
+    double win_aspect = (double)g_win_w / (double)g_win_h;
+    int vp_w, vp_h, vp_x, vp_y;
+    if (win_aspect > tgt_aspect) {
+        /* Window is wider than 4:3 -- pillarbox (full height, narrower width) */
+        vp_h = g_win_h;
+        vp_w = (int)(g_win_h * tgt_aspect + 0.5);
+        vp_x = (g_win_w - vp_w) / 2;
+        vp_y = 0;
+    } else {
+        /* Window is taller than 4:3 -- letterbox */
+        vp_w = g_win_w;
+        vp_h = (int)(g_win_w / tgt_aspect + 0.5);
+        vp_x = 0;
+        vp_y = (g_win_h - vp_h) / 2;
+    }
+    glViewport(vp_x, vp_y, vp_w, vp_h);
 
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     /* Top-left origin, Y grows down. Matches PS2 SetQuadPos convention.
