@@ -100,6 +100,13 @@ void njDrawTextureH(void* polygon, int count, int tex, int flag) {
     (void)polygon; (void)count; (void)tex; (void)flag;
 }
 
+/* njColorBlendingMode(channel, mode) sets per-channel blending factors
+ * on PS2 GS (channel 0=src, 1=dst; mode 6=ZERO, 8=PASS, etc). For our
+ * GL backend we already use a single GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA
+ * mode which approximates what the inventory wants -- this is a no-op
+ * shim to satisfy linkage from message.c bhDispFont. */
+void njColorBlendingMode(int channel, int mode) { (void)channel; (void)mode; }
+
 /* Latched per-sprite tint color set by sub1.c:3217 (and other 2D draw
  * sites). NJS_ARGB layout from ninjastr.h is `{float a,r,g,b;}` in 0..1
  * range. We pack to BGRA byte order matching NJS_COLOR.color and

@@ -53,7 +53,7 @@ unsigned int syTmrGetCount(void) { return 0; }
  * ---------------------------------------------------------------------- */
 void bhClearVSync(void)  {}
 void bhInitVSync(void)   {}
-void bhFontScaleSet(float a, float b, float c) { (void)a;(void)b;(void)c; }
+/* bhFontScaleSet -- now from real message.c */
 
 /* bhGetFreeMemory is a bump allocator in the real game. Back it with
  * calloc — zero-init so stubbed RequestReadInsideFile (which doesn't
@@ -67,7 +67,7 @@ void* bhGetFreeMemory(unsigned int size, int align) {
 /* bhChangeHWSetting + bhCheckSubTask live in system.c — don't stub. */
 void bhMainSequence(void)    {}
 void bhControlEvent(void)    {}
-void bhControlMessage(int m) { (void)m; }
+/* bhControlMessage -- now from real message.c */
 int  bhControlMap(void)      { return 0; }
 void bhSetMap(void)          {}
 void bhExitMap(void)         {}
@@ -112,20 +112,10 @@ void bhDrawScreenSaver(void)          {}
  * pulled into RECVX_GAME_SOURCES. */
 void bhSetPad(void)                   {}
 void bhDeleteYakkyou(void)            {}
-float bhMesLen(const unsigned short* m) { (void)m; return 0.0f; }
-void bhDispMessage(float x,float y,float z,int a,int b,int c,int d){(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)d;}
-void bhDispMessageEx(float x,float y,float z,int a,int b,int c,int d){(void)x;(void)y;(void)z;(void)a;(void)b;(void)c;(void)d;}
-void bhDispTime(void* pos,int n,int tim,int col,float z){(void)pos;(void)n;(void)tim;(void)col;(void)z;}
+/* bhMesLen, bhDispMessage(Ex), bhDispTime -- now from real message.c */
 
-/* ----------------------------------------------------------------------
- * message.c stubs — until message.c lands in RECVX_GAME_SOURCES we
- * provide minimal stand-ins so adv.c / fileview.c link. ItemSearch /
- * EraseItem / NameChangeSet now come from the real sub1.c.
- * ---------------------------------------------------------------------- */
-int   bhDispItemName(void* pos,int id,int color,int count,float pri) {
-    (void)pos;(void)id;(void)color;(void)count;(void)pri; return 0;
-}
-void  bhSetMessage(int mes_typ, int mes_idx)       { (void)mes_typ;(void)mes_idx; }
+/* bhDispItemName, bhSetMessage, bhDispMessage etc. -- now provided by
+ * the real message.c in RECVX_GAME_SOURCES. */
 
 /* PS2 ordering-table (OT) draw + sync helpers used by sub1.c's 3D
  * inventory-item path. Real impls use GS DMA tags (see ps2_dummy.c).
@@ -385,9 +375,7 @@ void FlushCache(int mode)   { (void)mode; }
  * the boot chain, so zero-init is fine.
  * ---------------------------------------------------------------------- */
 void*        _nj_vertex_buf_;
-float        FontScaleX  = 1.0f;
-float        FontScaleCR = 1.0f;
-int          FontSz      = 13;
+/* FontScaleX/Y/CR + FontSz now defined by message.c. */
 int          BackColorFlag;
 int          Ps2_albinoid_flag;
 int          Ps2_ice_flag;

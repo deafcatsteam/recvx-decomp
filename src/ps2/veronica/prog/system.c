@@ -1340,6 +1340,25 @@ void bhSysCallMovie()
                     }
                 }
 
+                /* sysmes.ald (the message text bundle) is NOT loaded in
+                 * our --inventory shortcut. message.c's bhDispItemName /
+                 * bhDispMessage NULL-deref on sys->mes_ip if we let them
+                 * run. They tolerate a non-NULL pointer to an empty
+                 * stub, so allocate a small zero-filled bump and point
+                 * mes_ip at it -- bhDispItemName will treat all IDs as
+                 * empty strings and harmlessly return 0 instead of
+                 * crashing. Real impl needs ISO-by-name file IO that
+                 * our port doesn't have yet. */
+                if (sys->mes_ip == NULL) {
+                    void* buf = bhGetFreeMemory(2048, 32);
+                    if (buf) {
+                        sys->mes_ip = (unsigned int*)buf;
+                        recvx_log("game",
+                            "--inventory: stub mes_ip with empty 2KB buffer "
+                            "(no sysmes.ald loaded; item names will be blank)");
+                    }
+                }
+
                 swork.subscreenmode = 1;
                 /* DON'T set cb_flg | 0x10 - that routes StatusMain
                  * case 0x1 through the "got-item pickup" branch

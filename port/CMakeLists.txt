@@ -256,6 +256,14 @@ if(RECVX_BUILD_GAME)
         # functions (bhCopy*, bhPushAllTexture, etc.) handle texmem
         # eviction/restoration which our GL backend doesn't need.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_texture.c
+        # Text/font rendering: bhDispItemName, bhDispMessage, bhDispFont,
+        # bhDispTime + bhSetMessage. Drives the bottom item-name strip
+        # ("Grenade Launcher"), status messages, and the inventory's
+        # font glyphs. Reads from sys->mes_ip (sysmes.ald text bundle)
+        # and sys->ef_tlist (font texture atlas) -- both need to be
+        # loaded for real text to render. Until then most calls
+        # NULL-deref-protect.
+        ${RECVX_SRC}/ps2/veronica/prog/message.c
         # Port-side nj* texture stubs that need the real ninjastr.h layout.
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
