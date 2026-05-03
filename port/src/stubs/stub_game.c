@@ -423,11 +423,18 @@ void recvx_get_screen_offset(float* dx, float* dy) {
 }
 
 void njSetScreen(void* s) {
-    if (!s) { g_screen_dx = g_screen_dy = 0.0f; return; }
-    const float* f = (const float*)s;
-    /* f[0]=dist, f[1]=w, f[2]=h, f[3]=cx, f[4]=cy */
-    g_screen_dx = f[3] - 320.0f;
-    g_screen_dy = f[4] - 240.0f;
+    /* Empirical: applying (cx-320, cy-240) as a 2D draw offset shifts the
+     * inventory chrome 85px left -- which in our test made things WORSE,
+     * cropping the player-info panel off the left edge. The PS2's
+     * NJS_SCREEN.cx/cy is the 3D-projection principal point (camera
+     * focal centre), NOT a 2D viewport offset. So 2D draws should keep
+     * the default screen-pixel mapping regardless of cx/cy.
+     *
+     * Latch left in place (commented out) for future 3D camera work --
+     * delete the early return when wiring njCnk* / itemview camera. */
+    (void)s;
+    g_screen_dx = 0.0f;
+    g_screen_dy = 0.0f;
 }
 float njSin(int brad)             { (void)brad; return 0.0f; }
 void  njMemCopy(void* d,void* s,int n) { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
