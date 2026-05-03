@@ -119,11 +119,37 @@ void UnmountSoundAfs(void) {
  * after a successful read, matching sdfunc.c's FileReadStatus flow. */
 static int g_last_status = 0; /* 0 = idle/done, 1 = pending, -1 = error */
 
-int RequestReadIsoFile(int a, int b, void* dst) {
-    (void)a; (void)b; (void)dst;
-    /* Not wired: boot chain uses RequestReadInsideFile. */
-    g_last_status = -1;
-    return -1;
+/* Real signature from sdfunc.c:3027 is `int RequestReadIsoFile(char* name,
+ * void* dst)`. Game calls it with bare names like "sysmes.ald". We resolve
+ * via recvx_iso_find against the open ISO, then read all sectors into dst.
+ * Used by message.c bhSysCallMonitor case 5 (sysmes.ald), bup_00.c (item
+ * descriptions), ranking.c, etc. */
+int RequestReadIsoFile(const char* name, void* dst) {
+    if (!name || !dst) { g_last_status = -1; return -1; }
+    extern recvx_iso_t* recvx_iso_global(void);
+    recvx_iso_t* iso = recvx_iso_global();
+    if (!iso) {
+        RX_LOG("iso", "RequestReadIsoFile FAIL: no ISO mounted (file=%s)", name);
+        g_last_status = -1;
+        return -1;
+    }
+    uint32_t lba = 0, sz = 0;
+    if (recvx_iso_find(iso, name, &lba, &sz) != 0) {
+        RX_LOG("iso", "RequestReadIsoFile FAIL: file not found (%s)", name);
+        g_last_status = -1;
+        return -1;
+    }
+    /* sz is byte count; sector size is 2048 so round up. */
+    uint32_t nsec = (sz + 2047u) / 2048u;
+    if (recvx_iso_read_sectors(iso, lba, nsec, dst) != 0) {
+        RX_LOG("iso", "RequestReadIsoFile FAIL: read err lba=%u nsec=%u (%s)",
+               lba, nsec, name);
+        g_last_status = -1;
+        return -1;
+    }
+    RX_LOG("iso", "RequestReadIsoFile OK: %s -> %u bytes (lba=%u)", name, sz, lba);
+    g_last_status = 0;
+    return 0;
 }
 
 int RequestReadInsideFile(unsigned int pat, unsigned int id, void* dst) {
@@ -146,7 +172,17 @@ int RequestReadInsideFile(unsigned int pat, unsigned int id, void* dst) {
     return 0;
 }
 
-int GetIsoFileSize(int a) { (void)a; return 0; }
+/* Real signature: `int GetIsoFileSize(char* FileName)`. Returns 0 if the
+ * file isn't on the ISO. Used to size buffers before RequestReadIsoFile. */
+int GetIsoFileSize(const char* name) {
+    if (!name) return 0;
+    extern recvx_iso_t* recvx_iso_global(void);
+    recvx_iso_t* iso = recvx_iso_global();
+    if (!iso) return 0;
+    uint32_t lba = 0, sz = 0;
+    if (recvx_iso_find(iso, name, &lba, &sz) != 0) return 0;
+    return (int)sz;
+}
 
 int GetInsideFileSize(unsigned int pat, unsigned int id) {
     if (pat >= 8 || !g_afs[pat]) return 0;

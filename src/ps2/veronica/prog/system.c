@@ -1340,22 +1340,31 @@ void bhSysCallMovie()
                     }
                 }
 
-                /* sysmes.ald (the message text bundle) is NOT loaded in
-                 * our --inventory shortcut. message.c's bhDispItemName /
-                 * bhDispMessage NULL-deref on sys->mes_ip if we let them
-                 * run. They tolerate a non-NULL pointer to an empty
-                 * stub, so allocate a small zero-filled bump and point
-                 * mes_ip at it -- bhDispItemName will treat all IDs as
-                 * empty strings and harmlessly return 0 instead of
-                 * crashing. Real impl needs ISO-by-name file IO that
-                 * our port doesn't have yet. */
+                /* Load sysmes.ald (the message text bundle) from the
+                 * ISO so message.c's bhDispItemName + bhDispMessage have
+                 * real text data. bhSysCallMonitor case 5 mn_md1=1
+                 * normally does this; our shortcut bypasses it. */
                 if (sys->mes_ip == NULL) {
-                    void* buf = bhGetFreeMemory(2048, 32);
-                    if (buf) {
-                        sys->mes_ip = (unsigned int*)buf;
+                    extern int GetIsoFileSize(const char*);
+                    extern int RequestReadIsoFile(const char*, void*);
+                    int sz = GetIsoFileSize("sysmes.ald");
+                    if (sz > 0) {
+                        void* buf = bhGetFreeMemory((unsigned)sz, 32);
+                        if (buf) {
+                            if (RequestReadIsoFile("sysmes.ald", buf) == 0) {
+                                sys->mes_ip = (unsigned int*)buf;
+                                recvx_log("game",
+                                    "--inventory: loaded sysmes.ald (%d B) into mes_ip",
+                                    sz);
+                            } else {
+                                recvx_log("game",
+                                    "--inventory: sysmes.ald read FAILED "
+                                    "(file present, size=%d)", sz);
+                            }
+                        }
+                    } else {
                         recvx_log("game",
-                            "--inventory: stub mes_ip with empty 2KB buffer "
-                            "(no sysmes.ald loaded; item names will be blank)");
+                            "--inventory: sysmes.ald not on ISO; item names blank");
                     }
                 }
 
