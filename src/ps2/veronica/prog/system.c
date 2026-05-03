@@ -1374,10 +1374,20 @@ void bhSysCallMovie()
                                 sys->ef_tlist.textures = sys->ef_tex;
                                 sys->ef_tlist.nbTexture = 0;
                                 int n = bhSetMemPvpTexture(&sys->ef_tlist, buf + found, 0);
-                                sys->ef_tlist.nbTexture = n;
+                                /* bhSetFontTexture (effect.c:146) hardcodes
+                                 * nbTexture=4 -- the pvp blob holds 4 font
+                                 * textures first then ~36 effect textures,
+                                 * but only the fonts are valid font-atlas
+                                 * pages. Higher glyph codes (>=1296) would
+                                 * wrap into effect textures with garbage
+                                 * UVs otherwise. Inventory uses ASCII so
+                                 * page 0 (the first font texture) is what
+                                 * we actually need. */
+                                sys->ef_tlist.nbTexture = (n < 4) ? n : 4;
                                 recvx_log("game",
                                     "--inventory: loaded font textures from SYSTEM.AFS/1 "
-                                    "@offset %d -> %d textures in ef_tlist", found, n);
+                                    "@offset %d -> %d textures (clamped to %d for fonts)",
+                                    found, n, sys->ef_tlist.nbTexture);
                             } else {
                                 recvx_log("game",
                                     "--inventory: SYSTEM.AFS/1 has no PLI/TIM2 magic "
@@ -1385,6 +1395,23 @@ void bhSysCallMovie()
                             }
                         }
                     }
+                }
+
+                /* message.c's FontScaleX/Y/CR default to 0.0 (BSS).
+                 * They're set by bhFontScaleSet which lives in
+                 * ps2_LoadScreen / ps2_SaveScreen / ps2_SystemLoadScreen
+                 * -- none of which are in our build. Without this,
+                 * every bhDispFont quad collapses to zero-area at one
+                 * font scale and renders garbage at others. Force 1.0
+                 * for the inventory's standard text size. */
+                {
+                    extern float FontScaleX, FontScaleY, FontScaleCR;
+                    FontScaleX = 1.0f;
+                    FontScaleY = 1.0f;
+                    FontScaleCR = 1.0f;
+                    recvx_log("game",
+                        "--inventory: forced FontScaleX/Y/CR = 1.0 "
+                        "(message.c BSS defaults are 0.0 -> zero-area glyphs)");
                 }
 
                 /* Load sysmes.ald (the message text bundle) from the
