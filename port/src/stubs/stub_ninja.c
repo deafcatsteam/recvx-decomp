@@ -90,6 +90,16 @@ void njControl3D(int mode)                            { (void)mode; }
  * stubs target intentionally doesn't include. */
 void njSetConstantAttr(unsigned int a)                { (void)a; }
 
+/* Pulse00/PulseHealAnim/PulsePoisonHealAnim (sub1.c:7765, 7848, 7897) draw
+ * the inventory's heart-rate / condition waveform via njDrawTextureH with
+ * a NJS_TEXTUREH_VTX[4] poly and a hardcoded tex ID (200004). Real impl
+ * would route to a textured quad with the active palette/tex lookup.
+ * Stubbed to no-op so the inventory builds; the heart-rate waveform
+ * just won't animate visually until we resolve tex IDs to slots. */
+void njDrawTextureH(void* polygon, int count, int tex, int flag) {
+    (void)polygon; (void)count; (void)tex; (void)flag;
+}
+
 /* Latched per-sprite tint color set by sub1.c:3217 (and other 2D draw
  * sites). NJS_ARGB layout from ninjastr.h is `{float a,r,g,b;}` in 0..1
  * range. We pack to BGRA byte order matching NJS_COLOR.color and
