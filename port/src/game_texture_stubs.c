@@ -39,6 +39,13 @@
 extern void recvx_log(const char* tag, const char* fmt, ...);
 #define RX_LOG(tag, ...) recvx_log(tag, __VA_ARGS__)
 
+/* Per-frame projection-center offset latched by njSetScreen (stub_game.c).
+ * Applied to every 2D draw rect so logical positions land relative to the
+ * intended cx/cy instead of PS2's default 320,240. Inventory uses
+ * (235, 224) -> offset (-85, -16); most other modes keep cx=320, cy=240
+ * which gives offset (0, 0) and passes through unchanged. */
+extern void recvx_get_screen_offset(float* dx, float* dy);
+
 typedef struct recvx_gfx_vtx {
     float    x, y, z;
     uint32_t color;
@@ -466,8 +473,9 @@ void njDrawQuadTexture(QUAD* q, float z) {
                    z, (unsigned)g_current_color, g_current_trans);
         }
     }
+    float dx, dy; recvx_get_screen_offset(&dx, &dy);
     recvx_gfx_draw_quad(g_current_slot,
-                        q->x1, q->y1, q->x2, q->y2,
+                        q->x1 + dx, q->y1 + dy, q->x2 + dx, q->y2 + dy,
                         q->u1, q->v1, q->u2, q->v2,
                         z, g_current_color, g_current_trans);
 }
@@ -489,6 +497,8 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
 
     int trans = (attr & 0x60) ? 1 : 0;
 
+    float dx, dy; recvx_get_screen_offset(&dx, &dy);
+
     if (!(attr & 0x80000000)) {
         /* Untextured. Per-vertex color, single z.
          *
@@ -506,8 +516,8 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
         recvx_gfx_vtx v[64];
         for (int i = 0; i < n; ++i) {
             int src = (n == 4) ? reorder4[i] : i;
-            v[i].x = p2c->p[src].x;
-            v[i].y = p2c->p[src].y;
+            v[i].x = p2c->p[src].x + dx;
+            v[i].y = p2c->p[src].y + dy;
             v[i].z = pri;
             v[i].color = p2c->col[src].color;
         }
@@ -558,14 +568,16 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
 
     /* Compute axis-aligned screen + UV rect from the 4 verts. NJS_COLOR.tex
      * gives us int16 pixel coordinates that we normalize against the
-     * texture's actual size. */
-    float x1 = p2c->p[0].x, y1 = p2c->p[0].y;
+     * texture's actual size. dx/dy already computed above for the
+     * untextured branch. */
+    float x1 = p2c->p[0].x + dx, y1 = p2c->p[0].y + dy;
     float x2 = x1, y2 = y1;
     int   u1 = p2c->tex[0].tex.u, v1 = p2c->tex[0].tex.v;
     int   u2 = u1, v2 = v1;
     for (int i = 1; i < 4; ++i) {
-        if (p2c->p[i].x < x1) x1 = p2c->p[i].x; else if (p2c->p[i].x > x2) x2 = p2c->p[i].x;
-        if (p2c->p[i].y < y1) y1 = p2c->p[i].y; else if (p2c->p[i].y > y2) y2 = p2c->p[i].y;
+        float px = p2c->p[i].x + dx, py = p2c->p[i].y + dy;
+        if (px < x1) x1 = px; else if (px > x2) x2 = px;
+        if (py < y1) y1 = py; else if (py > y2) y2 = py;
         if (p2c->tex[i].tex.u < u1) u1 = p2c->tex[i].tex.u; else if (p2c->tex[i].tex.u > u2) u2 = p2c->tex[i].tex.u;
         if (p2c->tex[i].tex.v < v1) v1 = p2c->tex[i].tex.v; else if (p2c->tex[i].tex.v > v2) v2 = p2c->tex[i].tex.v;
     }
@@ -652,10 +664,13 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
     if (tex_w <= 0 || tex_h <= 0) return;
 
     /* Screen rect: anchor at sp->p with center offset (cx,cy), scaled
-     * by sp->sx / sp->sy, sized by the tanim's sx/sy. */
+     * by sp->sx / sp->sy, sized by the tanim's sx/sy. Plus the latched
+     * njSetScreen offset so inventory sprites (cx=235, cy=224) shift
+     * left/up by (-85, -16) and land in their intended viewport. */
     float sx = sp->sx, sy = sp->sy;
-    float x1 = sp->p.x - (float)ta->cx * sx;
-    float y1 = sp->p.y - (float)ta->cy * sy;
+    float dx, dy; recvx_get_screen_offset(&dx, &dy);
+    float x1 = sp->p.x - (float)ta->cx * sx + dx;
+    float y1 = sp->p.y - (float)ta->cy * sy + dy;
     float x2 = x1 + (float)ta->sx * sx;
     float y2 = y1 + (float)ta->sy * sy;
 
@@ -710,9 +725,10 @@ void njDrawPolygon(NJS_POLYGON_VTX* p, Sint32 count, Sint32 trans) {
     if (!p || count <= 0) return;
     recvx_gfx_vtx vb[32];
     if (count > 32) count = 32;
+    float dx, dy; recvx_get_screen_offset(&dx, &dy);
     for (Sint32 i = 0; i < count; ++i) {
-        vb[i].x     = p[i].x;
-        vb[i].y     = p[i].y;
+        vb[i].x     = p[i].x + dx;
+        vb[i].y     = p[i].y + dy;
         vb[i].z     = p[i].z;
         vb[i].color = p[i].col;
     }

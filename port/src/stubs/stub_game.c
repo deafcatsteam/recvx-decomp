@@ -402,7 +402,33 @@ int          WpnTab[256];
 void  njFogDisable(void)          {}
 void  njFogEnable(void)           {}
 void  njWaitVSync(void)           {}
-void  njSetScreen(void* s)        { (void)s; }
+/* njSetScreen latches the projection center (cx, cy) so 2D draws can
+ * apply a per-sprite offset relative to PS2's default 320x240 origin.
+ * NJS_SCREEN layout from ninjastr.h:
+ *   { Float dist; Float w, h; Float cx, cy; }   -- 5 floats
+ *
+ * sub1.c:2872 (ItemTaskCheck) sets cx=235, cy=224 for the inventory's
+ * intended viewport. Without this latch our quad/sprite paths render
+ * against the default 320x240 origin -- which is why the inventory chrome
+ * appeared shifted ~85px right, ~16px down of where it should be. The
+ * draw paths read recvx_get_screen_offset() and add (dx, dy) to every
+ * vertex before submitting. Default = (0, 0) so non-inventory modes
+ * continue to render as before. */
+static float g_screen_dx = 0.0f;
+static float g_screen_dy = 0.0f;
+
+void recvx_get_screen_offset(float* dx, float* dy) {
+    if (dx) *dx = g_screen_dx;
+    if (dy) *dy = g_screen_dy;
+}
+
+void njSetScreen(void* s) {
+    if (!s) { g_screen_dx = g_screen_dy = 0.0f; return; }
+    const float* f = (const float*)s;
+    /* f[0]=dist, f[1]=w, f[2]=h, f[3]=cx, f[4]=cy */
+    g_screen_dx = f[3] - 320.0f;
+    g_screen_dy = f[4] - 240.0f;
+}
 float njSin(int brad)             { (void)brad; return 0.0f; }
 void  njMemCopy(void* d,void* s,int n) { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
 void  njChangeSystem(int mode,int frame,int count) { (void)mode;(void)frame;(void)count; }
