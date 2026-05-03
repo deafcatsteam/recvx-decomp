@@ -669,6 +669,14 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
      * left/up by (-85, -16) and land in their intended viewport. */
     float sx = sp->sx, sy = sp->sy;
     float dx, dy; recvx_get_screen_offset(&dx, &dy);
+    /* One-shot log so we can verify the offset is actually applied (not
+     * just the njSetScreen call site reached). Triggers on first non-zero
+     * offset seen, which means the inventory hook ran. */
+    static int logged_offset = 0;
+    if (!logged_offset && (dx != 0.0f || dy != 0.0f)) {
+        RX_LOG("spr", "screen offset live: dx=%.1f dy=%.1f (first sprite this frame)", dx, dy);
+        logged_offset = 1;
+    }
     float x1 = sp->p.x - (float)ta->cx * sx + dx;
     float y1 = sp->p.y - (float)ta->cy * sy + dy;
     float x2 = x1 + (float)ta->sx * sx;
