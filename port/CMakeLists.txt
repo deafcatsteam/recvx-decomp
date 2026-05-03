@@ -260,10 +260,6 @@ if(RECVX_BUILD_GAME)
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
         ${CMAKE_CURRENT_SOURCE_DIR}/src/game_texture_stubs.c
-        # Port-side overrides for sub1.c functions still stubbed upstream
-        # (DrawPoly2D + SpriteH/UV/OnOff + PulseInit). sub1.c calls these
-        # via #ifdef RECVX_PC_PORT shims, so this file MUST link with sub1.c.
-        ${CMAKE_CURRENT_SOURCE_DIR}/src/sub1_compat.c
         # Expand this list incrementally as each file compiles.
     )
 
