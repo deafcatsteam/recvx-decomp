@@ -1340,6 +1340,53 @@ void bhSysCallMovie()
                     }
                 }
 
+                /* Load font texture pack from SYSTEM.AFS file 1.
+                 * bhInitEffect (effect.c) normally walks effect data
+                 * blocks at the start, advances past them, then calls
+                 * bhSetMemPvpTexture on the trailing texture pack. We
+                 * skip pulling effect.c (it transitively requires ~250
+                 * bhEff* / 3D-model symbols) and instead scan the file
+                 * for the first PLI/TIM2 chunk -- the texture pack is
+                 * its own self-contained pvp blob at the file's tail. */
+                if (sys->ef_tlist.nbTexture == 0) {
+                    int sz = GetInsideFileSize(sys->sys_partid, 1);
+                    if (sz > 0) {
+                        unsigned char* buf = (unsigned char*)bhGetFreeMemory((unsigned)sz, 64);
+                        if (buf && RequestReadInsideFile(sys->sys_partid, 1, buf) == 0) {
+                            /* Scan 32-byte aligned offsets for the
+                             * 'PLI\0' magic that starts a pvp blob.
+                             * 'P'=0x50 'L'=0x4C 'I'=0x49 -> little-endian
+                             * uint32 0x00494C50 ('TIM2'=0x324D4954 also
+                             * works as fallback since palette-less
+                             * inventories skip the PLI block). */
+                            int found = -1;
+                            for (int off = 0; off + 32 < sz; off += 4) {
+                                unsigned int code = *(unsigned int*)(buf + off);
+                                if (code == 0x00494C50u || code == 0x324D4954u) {
+                                    /* Align down to 32-byte chunk-header
+                                     * boundary (chunks start at 32-byte
+                                     * multiples within a pvp blob). */
+                                    found = off & ~31;
+                                    break;
+                                }
+                            }
+                            if (found >= 0) {
+                                sys->ef_tlist.textures = sys->ef_tex;
+                                sys->ef_tlist.nbTexture = 0;
+                                int n = bhSetMemPvpTexture(&sys->ef_tlist, buf + found, 0);
+                                sys->ef_tlist.nbTexture = n;
+                                recvx_log("game",
+                                    "--inventory: loaded font textures from SYSTEM.AFS/1 "
+                                    "@offset %d -> %d textures in ef_tlist", found, n);
+                            } else {
+                                recvx_log("game",
+                                    "--inventory: SYSTEM.AFS/1 has no PLI/TIM2 magic "
+                                    "(sz=%d) -- font textures not loaded", sz);
+                            }
+                        }
+                    }
+                }
+
                 /* Load sysmes.ald (the message text bundle) from the
                  * ISO so message.c's bhDispItemName + bhDispMessage have
                  * real text data. bhSysCallMonitor case 5 mn_md1=1

@@ -256,6 +256,10 @@ if(RECVX_BUILD_GAME)
         # functions (bhCopy*, bhPushAllTexture, etc.) handle texmem
         # eviction/restoration which our GL backend doesn't need.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_texture.c
+        # NOT pulling effect.c -- it transitively requires ~250 bhEff*
+        # particle handlers, 3D model functions, and ninja math primitives
+        # that aren't in our build. Instead the --inventory hook
+        # extracts JUST the font texture pack from SYSTEM.AFS file 1.
         # Text/font rendering: bhDispItemName, bhDispMessage, bhDispFont,
         # bhDispTime + bhSetMessage. Drives the bottom item-name strip
         # ("Grenade Launcher"), status messages, and the inventory's
