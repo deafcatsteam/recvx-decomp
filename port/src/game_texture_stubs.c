@@ -537,20 +537,28 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
         return;
     }
 
-    /* Resolve current texture slot via the same chain njSetQuadTexture
-     * uses: g_active_tl[g_current_texnum].texaddr -> NJS_TEXMEMLIST -> slot. */
+    /* Resolve current texture slot + actual pixel dimensions via the same
+     * chain njSetQuadTexture uses. nWidth/nHeight come from the
+     * NJS_TEXMEMLIST so we don't have to guess the atlas size — KazariAnim
+     * for example draws a 32x2 strip out of inventory texture #2 which is
+     * 512x512, not 256, and a hardcoded /256 scale was tiling the strip
+     * across the whole panel. */
     int slot = -1;
+    int tex_w = 0, tex_h = 0;
     if (g_active_tl && g_current_texnum < g_active_tl->nbTexture) {
         NJS_TEXMEMLIST* ml =
             (NJS_TEXMEMLIST*)(uintptr_t)g_active_tl->textures[g_current_texnum].texaddr;
-        if (ml) slot = pool_slot_of(ml);
+        if (ml) {
+            slot  = pool_slot_of(ml);
+            tex_w = (int)ml->texinfo.texsurface.nWidth;
+            tex_h = (int)ml->texinfo.texsurface.nHeight;
+        }
     }
-    if (slot < 0) return;
+    if (slot < 0 || tex_w <= 0 || tex_h <= 0) return;
 
-    /* Compute axis-aligned screen + UV rect from the 4 verts. PS2 GS UVs
-     * are 16-bit fixed-point but the decomp also stores them as raw pixel
-     * coords for some calls — we normalize against the texture extent
-     * implied by the min/max UV span. */
+    /* Compute axis-aligned screen + UV rect from the 4 verts. NJS_COLOR.tex
+     * gives us int16 pixel coordinates that we normalize against the
+     * texture's actual size. */
     float x1 = p2c->p[0].x, y1 = p2c->p[0].y;
     float x2 = x1, y2 = y1;
     int   u1 = p2c->tex[0].tex.u, v1 = p2c->tex[0].tex.v;
@@ -561,13 +569,8 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
         if (p2c->tex[i].tex.u < u1) u1 = p2c->tex[i].tex.u; else if (p2c->tex[i].tex.u > u2) u2 = p2c->tex[i].tex.u;
         if (p2c->tex[i].tex.v < v1) v1 = p2c->tex[i].tex.v; else if (p2c->tex[i].tex.v > v2) v2 = p2c->tex[i].tex.v;
     }
-    /* Standard PS2 UV scale: 16 = 1 texel, so divide by texture pixel size.
-     * Without the actual size here, fall back to the TEXANIM hsize/vsize
-     * via the texlist if needed — for now assume the texlist's textures
-     * are 256-wide (most inventory atlases are) and let mismatch be a
-     * noticeable visual cue rather than a silent black. */
-    float fu1 = u1 / 256.0f, fv1 = v1 / 256.0f;
-    float fu2 = u2 / 256.0f, fv2 = v2 / 256.0f;
+    float fu1 = (float)u1 / (float)tex_w, fv1 = (float)v1 / (float)tex_h;
+    float fu2 = (float)u2 / (float)tex_w, fv2 = (float)v2 / (float)tex_h;
     uint32_t color = p2c->col[0].color;
     recvx_gfx_draw_quad(slot, x1, y1, x2, y2, fu1, fv1, fu2, fv2, pri, color, trans);
 }
