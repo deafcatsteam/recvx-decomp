@@ -969,7 +969,22 @@ void bhSysCallItemselect()
             }
             extern S_WORK swork;
             swork.statusflg &= ~(0x80 | 0x2000);
-            recvx_log("game", "--inventory: applied target-pos + cleared statusflg 0x80|0x2000");
+
+            /* Apply ItemTaskCheck's njSetScreen + njSetAspect setup that
+             * our shortcut bypassed. Without this every sprite renders
+             * against the default 320x240 origin, putting the inventory
+             * ~75px off (down-and-right of where it should be). The
+             * 235,224 / 352x184 viewport at dist=500 is the inventory's
+             * canonical projection (sub1.c:2872 in ItemTaskCheck). */
+            swork.scr.dist = 500.0f;
+            swork.scr.w    = 352.0f;
+            swork.scr.h    = 184.0f;
+            swork.scr.cx   = 235.0f;
+            swork.scr.cy   = 224.0f;
+            njSetScreen(&swork.scr);
+            njSetAspect(1.0f, 1.0f);
+
+            recvx_log("game", "--inventory: applied target-pos + cleared statusflg 0x80|0x2000 + njSetScreen(235,224)");
             g_recvx_inventory_force_target_pos = 0;
         }
 #endif

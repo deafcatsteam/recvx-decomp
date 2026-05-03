@@ -89,7 +89,34 @@ void njControl3D(int mode)                            { (void)mode; }
  * NJS_SPRITE / NJS_TEXANIM struct layout from ninjastr.h, which the
  * stubs target intentionally doesn't include. */
 void njSetConstantAttr(unsigned int a)                { (void)a; }
-void njSetConstantMaterial(void* m)                   { (void)m; }
+
+/* Latched per-sprite tint color set by sub1.c:3217 (and other 2D draw
+ * sites). NJS_ARGB layout from ninjastr.h is `{float a,r,g,b;}` in 0..1
+ * range. We pack to BGRA byte order matching NJS_COLOR.color and
+ * recvx_gfx_draw_quad's color arg. njDrawSprite2D reads
+ * recvx_get_constant_material_argb() instead of hardcoding 0xFFFFFFFF. */
+static unsigned int g_constant_material_argb = 0xFFFFFFFFu;
+
+unsigned int recvx_get_constant_material_argb(void) {
+    return g_constant_material_argb;
+}
+
+void njSetConstantMaterial(void* m) {
+    if (!m) { g_constant_material_argb = 0xFFFFFFFFu; return; }
+    const float* f = (const float*)m;
+    /* Clamp to [0,1] then quantize to bytes; NJS_ARGB ordering = a,r,g,b. */
+    float a = f[0] < 0.0f ? 0.0f : (f[0] > 1.0f ? 1.0f : f[0]);
+    float r = f[1] < 0.0f ? 0.0f : (f[1] > 1.0f ? 1.0f : f[1]);
+    float g = f[2] < 0.0f ? 0.0f : (f[2] > 1.0f ? 1.0f : f[2]);
+    float b = f[3] < 0.0f ? 0.0f : (f[3] > 1.0f ? 1.0f : f[3]);
+    /* recvx_gfx_draw_quad expects ARGB byte order in the uint32_t arg
+     * (top byte = alpha). Pack accordingly. */
+    g_constant_material_argb =
+        ((unsigned int)(a * 255.0f + 0.5f) << 24) |
+        ((unsigned int)(r * 255.0f + 0.5f) << 16) |
+        ((unsigned int)(g * 255.0f + 0.5f) <<  8) |
+        ((unsigned int)(b * 255.0f + 0.5f));
+}
 void njSetFogColor(unsigned int c)                    { (void)c; }
 void njSetPaletteBankNum(int n)                       { (void)n; }
 void njUserClipping(void* p)                          { (void)p; }

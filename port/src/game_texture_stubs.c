@@ -671,6 +671,14 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
      * Treat 0x04 as "alpha blended" and skip the rest for now. */
     int trans = (attr & 0x04) ? 1 : 0;
 
+    /* Per-sprite tint from the most recent njSetConstantMaterial call.
+     * sub1.c:3217 packs spr_t.col into a NJS_ARGB and sets it before
+     * each SpriteSet2D, giving items in the inventory grid distinct
+     * tints (selected vs. unselected vs. damaged). Defaults to
+     * 0xFFFFFFFF (opaque white = no tint) on cold start. */
+    extern unsigned int recvx_get_constant_material_argb(void);
+    uint32_t tint = recvx_get_constant_material_argb();
+
     /* Dedup: log first time we see each (slot, anim-id) pair so we can
      * see what's drawing post-hook without flooding the log. */
     {
@@ -692,7 +700,7 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
     }
 
     recvx_gfx_draw_quad(slot, x1, y1, x2, y2, u1, v1, u2, v2,
-                        pri, 0xFFFFFFFFu /* white tint */, trans);
+                        pri, tint, trans);
 }
 
 /* adv.c:447/687 njDrawPolygon — vertex-colored TRIANGLE_STRIP (usually 4
