@@ -7259,11 +7259,6 @@ void SbsTextureInit()
 // Start address: 0x2a7d30
 void PulseInit()
 {
-#ifdef RECVX_PC_PORT
-	extern void recvx_PulseInit(void);
-	recvx_PulseInit();
-	return;
-#endif
 	unsigned short i;
 	float panelpos[5][5];
 	// _anon29* pw;
