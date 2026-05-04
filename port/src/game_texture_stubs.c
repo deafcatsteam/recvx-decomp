@@ -584,6 +584,33 @@ void njDrawPolygon2D(NJS_POINT2COL* p2c, Sint32 n, Float pri, Uint32 attr) {
     float fu1 = (float)u1 / (float)tex_w, fv1 = (float)v1 / (float)tex_h;
     float fu2 = (float)u2 / (float)tex_w, fv2 = (float)v2 / (float)tex_h;
     uint32_t color = p2c->col[0].color;
+
+    /* Dedup: log first call per (slot, UV-bucket) so we can see which
+     * texture pages the font path is sampling vs the inventory atlas
+     * path. Useful for diagnosing why glyphs render as garbage. */
+    {
+        struct rec { int slot; int u1, v1; };
+        static struct rec seen[64];
+        static int nseen = 0;
+        int hit = 0;
+        for (int i = 0; i < nseen; ++i) {
+            if (seen[i].slot == slot && seen[i].u1 == u1 && seen[i].v1 == v1) {
+                hit = 1; break;
+            }
+        }
+        if (!hit && nseen < 64) {
+            seen[nseen].slot = slot;
+            seen[nseen].u1 = u1;
+            seen[nseen].v1 = v1;
+            nseen++;
+            RX_LOG("tex2d", "njDrawPolygon2D textured slot=%d tex=%dx%d "
+                   "uv_px=(%d,%d-%d,%d) -> uv=(%.4f,%.4f-%.4f,%.4f) "
+                   "screen=(%.0f,%.0f-%.0f,%.0f) attr=0x%x",
+                   slot, tex_w, tex_h, u1, v1, u2, v2,
+                   fu1, fv1, fu2, fv2, x1, y1, x2, y2, attr);
+        }
+    }
+
     recvx_gfx_draw_quad(slot, x1, y1, x2, y2, fu1, fv1, fu2, fv2, pri, color, trans);
 }
 
