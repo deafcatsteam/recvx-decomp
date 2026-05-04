@@ -1377,17 +1377,18 @@ void bhSysCallMovie()
                                 dp += 4;
                             }
                             if (blksz == -1) goto skip_font_load;
-                            /* 32-byte align (effect.c:139). On x64 the
-                             * mask MUST be uintptr_t-wide -- `~31u` is
-                             * 32-bit (0xFFFFFFE0), and AND-ing it with
-                             * a 64-bit pointer zeroes the high half,
-                             * truncating the pointer to a low-32 garbage
-                             * address (caused the previous crash at
-                             * bhSetMemPvpTexture+0xc1 reading a
-                             * 0x00000000xxxxxxxx pointer). */
-                            uintptr_t align = ((uintptr_t)dp + 31u) & ~(uintptr_t)31u;
-                            unsigned char* pvp = (unsigned char*)align;
-                            int off = (int)(pvp - buf);
+                            /* 32-byte align the offset within buf, not
+                             * the absolute address. The original PS2
+                             * code aligned absolute pointers, but our
+                             * bhGetFreeMemory uses calloc which returns
+                             * only 16-byte alignment -- absolute-address
+                             * alignment then lands ~16 bytes past the
+                             * intended file offset (we measured 8464
+                             * instead of 8448 due to buf being at
+                             * base+16 within its 32-byte slot). */
+                            int dp_off = (int)(dp - buf);
+                            int off = (dp_off + 31) & ~31;
+                            unsigned char* pvp = buf + off;
                             if (off + 32 < sz) {
                                 /* Sanity: pvp must start with PLI or TIM2
                                  * magic. Otherwise we landed in the wrong
