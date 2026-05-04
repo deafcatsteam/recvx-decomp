@@ -1377,8 +1377,15 @@ void bhSysCallMovie()
                                 dp += 4;
                             }
                             if (blksz == -1) goto skip_font_load;
-                            /* 32-byte align (effect.c:139). */
-                            uintptr_t align = ((uintptr_t)dp + 31u) & ~31u;
+                            /* 32-byte align (effect.c:139). On x64 the
+                             * mask MUST be uintptr_t-wide -- `~31u` is
+                             * 32-bit (0xFFFFFFE0), and AND-ing it with
+                             * a 64-bit pointer zeroes the high half,
+                             * truncating the pointer to a low-32 garbage
+                             * address (caused the previous crash at
+                             * bhSetMemPvpTexture+0xc1 reading a
+                             * 0x00000000xxxxxxxx pointer). */
+                            uintptr_t align = ((uintptr_t)dp + 31u) & ~(uintptr_t)31u;
                             unsigned char* pvp = (unsigned char*)align;
                             int off = (int)(pvp - buf);
                             if (off + 32 < sz) {
