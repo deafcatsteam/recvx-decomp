@@ -1341,57 +1341,51 @@ void bhSysCallMovie()
                 }
 
                 /* Load font texture pack from SYSTEM.AFS file 1.
-                 * bhInitEffect (effect.c) normally walks effect data
-                 * blocks at the start, advances past them, then calls
-                 * bhSetMemPvpTexture on the trailing texture pack. We
-                 * skip pulling effect.c (it transitively requires ~250
-                 * bhEff* / 3D-model symbols) and instead scan the file
-                 * for the first PLI/TIM2 chunk -- the texture pack is
-                 * its own self-contained pvp blob at the file's tail. */
+                 * Replicates bhSetFontTexture (effect.c:115) since
+                 * pulling effect.c into the build transitively requires
+                 * ~250 unresolved bhEff* / 3D symbols.
+                 *
+                 * File 1 layout: [size1][effect_data1][size2][effect_data2]
+                 *   ...[sizeN][effect_dataN][32-byte align][pvp pack]
+                 *
+                 * Only entries in ef_info[] with flg&1 carry inline data
+                 * blocks. Looking at effect.c:38, ef_info has 4 such
+                 * entries (indices 0, 1, 7, 13). After walking past those
+                 * 4 size-prefixed blocks and aligning to 32 bytes, the
+                 * remaining bytes are the pvp font/effect texture pack. */
                 if (sys->ef_tlist.nbTexture == 0) {
                     int sz = GetInsideFileSize(sys->sys_partid, 1);
                     if (sz > 0) {
                         unsigned char* buf = (unsigned char*)bhGetFreeMemory((unsigned)sz, 64);
                         if (buf && RequestReadInsideFile(sys->sys_partid, 1, buf) == 0) {
-                            /* Scan 32-byte aligned offsets for the
-                             * 'PLI\0' magic that starts a pvp blob.
-                             * 'P'=0x50 'L'=0x4C 'I'=0x49 -> little-endian
-                             * uint32 0x00494C50 ('TIM2'=0x324D4954 also
-                             * works as fallback since palette-less
-                             * inventories skip the PLI block). */
-                            int found = -1;
-                            for (int off = 0; off + 32 < sz; off += 4) {
-                                unsigned int code = *(unsigned int*)(buf + off);
-                                if (code == 0x00494C50u || code == 0x324D4954u) {
-                                    /* Align down to 32-byte chunk-header
-                                     * boundary (chunks start at 32-byte
-                                     * multiples within a pvp blob). */
-                                    found = off & ~31;
-                                    break;
-                                }
+                            /* Walk past 4 effect data blocks, mirroring
+                             * bhSetFontTexture's loop. */
+                            int blksz = *(int*)buf;
+                            unsigned char* dp = buf + 4;
+                            int nblocks = 4; /* ef_info entries with flg&1 */
+                            for (int b = 0; b < nblocks; ++b) {
+                                dp += blksz;
+                                blksz = *(int*)dp;
+                                dp += 4;
                             }
-                            if (found >= 0) {
+                            /* 32-byte align (effect.c:139). */
+                            uintptr_t align = ((uintptr_t)dp + 31u) & ~31u;
+                            unsigned char* pvp = (unsigned char*)align;
+                            int off = (int)(pvp - buf);
+                            if (off + 32 < sz) {
                                 sys->ef_tlist.textures = sys->ef_tex;
                                 sys->ef_tlist.nbTexture = 0;
-                                int n = bhSetMemPvpTexture(&sys->ef_tlist, buf + found, 0);
-                                /* bhSetFontTexture (effect.c:146) hardcodes
-                                 * nbTexture=4 -- the pvp blob holds 4 font
-                                 * textures first then ~36 effect textures,
-                                 * but only the fonts are valid font-atlas
-                                 * pages. Higher glyph codes (>=1296) would
-                                 * wrap into effect textures with garbage
-                                 * UVs otherwise. Inventory uses ASCII so
-                                 * page 0 (the first font texture) is what
-                                 * we actually need. */
+                                int n = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
                                 sys->ef_tlist.nbTexture = (n < 4) ? n : 4;
                                 recvx_log("game",
-                                    "--inventory: loaded font textures from SYSTEM.AFS/1 "
-                                    "@offset %d -> %d textures (clamped to %d for fonts)",
-                                    found, n, sys->ef_tlist.nbTexture);
+                                    "--inventory: font textures from SYSTEM.AFS/1 "
+                                    "after 4 effect blocks @offset %d -> %d total, "
+                                    "%d clamped for fonts",
+                                    off, n, sys->ef_tlist.nbTexture);
                             } else {
                                 recvx_log("game",
-                                    "--inventory: SYSTEM.AFS/1 has no PLI/TIM2 magic "
-                                    "(sz=%d) -- font textures not loaded", sz);
+                                    "--inventory: walked past file end finding pvp pack "
+                                    "(off=%d sz=%d)", off, sz);
                             }
                         }
                     }
