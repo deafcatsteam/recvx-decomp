@@ -774,6 +774,10 @@ void recvx_pump_pad(void) {
         Pad[0].l = 0;
         Pad[0].r = 0;
         Pad[0].x1 = Pad[0].y1 = 0;
+        {
+            extern SYS_WORK* sys;
+            sys->pad_on = sys->pad_oncpy = sys->pad_ps = sys->pad_old = 0;
+        }
         return;
     }
     Pad[0].on      = p->on;
@@ -785,6 +789,22 @@ void recvx_pump_pad(void) {
     Pad[0].y1      = p->y1;
     Pad[0].x2      = p->x2;
     Pad[0].y2      = p->y2;
+
+    /* Mirror sys->pad_* fields the same way pad.c:bhSetPad would.
+     * sub1.c CursorMove + most menu nav code reads sys->pad_ps (newly
+     * pressed bits this frame), not Pad[0]. Without this update,
+     * pad_ps stays 0 and inputs never reach the inventory cursor.
+     * Edge-detection from pad.c:275-278: ps = curr AND-NOT prev_on. */
+    extern SYS_WORK* sys;
+    unsigned int pad = p->on;
+    sys->pad_old   = sys->pad_on;
+    sys->pad_ps    = pad & ~sys->pad_oncpy;
+    sys->pad_rs    = pad ^ (sys->pad_oncpy | sys->pad_ps);
+    sys->pad_on    = sys->pad_oncpy = pad;
+    sys->pad_al    = p->l;
+    sys->pad_ar    = p->r;
+    sys->pad_ax    = -p->x1;
+    sys->pad_ay    = -p->y1;
 }
 
 /* ------------------------------------------------------------------ */
