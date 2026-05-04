@@ -1363,30 +1363,53 @@ void bhSysCallMovie()
                             int blksz = *(int*)buf;
                             unsigned char* dp = buf + 4;
                             int nblocks = 4; /* ef_info entries with flg&1 */
+                            recvx_log("game", "--inventory: SYSTEM.AFS/1 walk: initial blksz=%d (0x%x) sz=%d", blksz, (unsigned)blksz, sz);
                             for (int b = 0; b < nblocks; ++b) {
                                 dp += blksz;
+                                int off_now = (int)(dp - buf);
+                                if (off_now < 0 || off_now + 4 > sz) {
+                                    recvx_log("game", "--inventory: walk b=%d went out of bounds off=%d", b, off_now);
+                                    blksz = -1;
+                                    break;
+                                }
                                 blksz = *(int*)dp;
+                                recvx_log("game", "--inventory: walk b=%d off=%d next blksz=%d (0x%x)", b, off_now, blksz, (unsigned)blksz);
                                 dp += 4;
                             }
+                            if (blksz == -1) goto skip_font_load;
                             /* 32-byte align (effect.c:139). */
                             uintptr_t align = ((uintptr_t)dp + 31u) & ~31u;
                             unsigned char* pvp = (unsigned char*)align;
                             int off = (int)(pvp - buf);
                             if (off + 32 < sz) {
-                                sys->ef_tlist.textures = sys->ef_tex;
-                                sys->ef_tlist.nbTexture = 0;
-                                int n = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
-                                sys->ef_tlist.nbTexture = (n < 4) ? n : 4;
-                                recvx_log("game",
-                                    "--inventory: font textures from SYSTEM.AFS/1 "
-                                    "after 4 effect blocks @offset %d -> %d total, "
-                                    "%d clamped for fonts",
-                                    off, n, sys->ef_tlist.nbTexture);
+                                /* Sanity: pvp must start with PLI or TIM2
+                                 * magic. Otherwise we landed in the wrong
+                                 * place and bhSetMemPvpTexture would
+                                 * walk into garbage and crash. */
+                                unsigned int magic = *(unsigned int*)pvp;
+                                if (magic == 0x00494C50u || magic == 0x324D4954u) {
+                                    sys->ef_tlist.textures = sys->ef_tex;
+                                    sys->ef_tlist.nbTexture = 0;
+                                    int n = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
+                                    sys->ef_tlist.nbTexture = (n < 4) ? n : 4;
+                                    recvx_log("game",
+                                        "--inventory: font textures from SYSTEM.AFS/1 "
+                                        "@offset %d magic=0x%08x -> %d total, "
+                                        "%d clamped for fonts",
+                                        off, magic, n, sys->ef_tlist.nbTexture);
+                                } else {
+                                    recvx_log("game",
+                                        "--inventory: pvp magic check FAILED "
+                                        "@offset %d magic=0x%08x (expected PLI=0x00494C50 "
+                                        "or TIM2=0x324D4954) -- skipping font load",
+                                        off, magic);
+                                }
                             } else {
                                 recvx_log("game",
                                     "--inventory: walked past file end finding pvp pack "
                                     "(off=%d sz=%d)", off, sz);
                             }
+                            skip_font_load: ;
                         }
                     }
                 }
