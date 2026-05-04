@@ -1001,7 +1001,15 @@ float AdvEasyDispMessage(float PosX, float PosY, unsigned int MessageNo)
 
     temp2 = (ADV_WORK*)&AdvWork; 
 
-    smp = (unsigned char*)((int)temp2->MsgPtr + ((int*)temp2->MsgPtr)[MessageNo + 1]); 
+#ifdef RECVX_PC_PORT
+    /* (int)temp2->MsgPtr truncates a 64-bit pointer to 32 bits. The
+     * resulting address has zeroed high bits and points outside the
+     * actual MsgPtr block on x64 -- memcpy then reads from garbage.
+     * Use uintptr_t to preserve all 64 pointer bits. */
+    smp = (unsigned char*)((uintptr_t)temp2->MsgPtr + ((int*)temp2->MsgPtr)[MessageNo + 1]);
+#else
+    smp = (unsigned char*)((int)temp2->MsgPtr + ((int*)temp2->MsgPtr)[MessageNo + 1]);
+#endif
     
     dmp = syMalloc(1024); 
     
@@ -1087,7 +1095,12 @@ float AutoSaveLoadEasyDispMessage(float PosX, float PosY, unsigned char* ucpMsbT
 
     sy = PosY;
     
-    smp = (unsigned char*)((int)ucpMsbTop + ((int*)ucpMsbTop)[MessageNo + 1]); 
+#ifdef RECVX_PC_PORT
+    /* Same x64 truncation pattern as Adv_DrawMessage above. */
+    smp = (unsigned char*)((uintptr_t)ucpMsbTop + ((int*)ucpMsbTop)[MessageNo + 1]);
+#else
+    smp = (unsigned char*)((int)ucpMsbTop + ((int*)ucpMsbTop)[MessageNo + 1]);
+#endif
     
     dmp = syMalloc(1024); 
     
