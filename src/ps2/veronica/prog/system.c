@@ -986,22 +986,12 @@ void bhSysCallItemselect()
                 parts_07b[i].atr |= 0x20;
             }
 
-            /* The actual full-screen background is parts_22b[0] -- a
-             * 512x512 sprite (parts_num=22 -> testset[22]=parts_22[0]
-             * with sx=sy=512, full-UV samples subtx[0]). Its initial
-             * atr=0x80 lacks 0x20, AND StatusInit at sub1.c:1126
-             * EXPLICITLY clears 0x20 on parts_22b[0..4]. Whichever
-             * function would later OR 0x20 back (probably KazuSet or
-             * ArmsSet, both still UNIMPLEMENTED upstream) doesn't run.
-             * Force it visible after StatusInit so the wireframe/grid
-             * fill behind everything else actually appears. Also
-             * white-tint the col so it doesn't render solid black. */
-             extern PARTS parts_22b[6];
-             parts_22b[0].atr |= 0x20;
-             parts_22b[0].col.r = 1.0f;
-             parts_22b[0].col.g = 1.0f;
-             parts_22b[0].col.b = 1.0f;
-             parts_22b[0].col.a = 1.0f;
+            /* parts_22b is only iterated through filescreen[1] in the
+             * FILE tab (subscreenmode=0x80) -- not our main grid path
+             * (0x2). Whatever sprite is supposed to fill the
+             * full-screen wireframe-grid bg in subscreenmode=0x2 is
+             * still unidentified; pulling more upstream code or
+             * additional decomp output is needed to find it. */
 
             /* Apply ItemTaskCheck's njSetScreen + njSetAspect setup that
              * our shortcut bypassed. Without this every sprite renders
