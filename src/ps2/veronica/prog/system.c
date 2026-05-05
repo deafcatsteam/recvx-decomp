@@ -1324,8 +1324,50 @@ void bhSysCallMovie()
              * which loads inventory textures + parts. Without this hook
              * the game just sits in a black "Game task active but no
              * gameplay logic compiled" state. */
+            /* Phase 3 staged opening sequence: hold case 6 firing for
+             * a "dark cell" period before opening the inventory, so we
+             * mimic the real game's pacing. mvi_md stays at 6 (this
+             * case re-fires each frame) until init runs at stage 2;
+             * then mvi_md=7 stops re-entry. Other tasks stay suspended
+             * via ts_flg manipulation so Game/Itemselect don't try to
+             * advance during the dark-cell delay. */
             extern int g_recvx_open_inventory;
-            if (g_recvx_open_inventory) {
+            extern int g_recvx_opening_stage;
+            extern int g_recvx_opening_stage_ct;
+
+            if (!g_recvx_open_inventory) {
+                /* No --inventory flag: keep original immediate flow. */
+                sys->ts_flg = 0;
+                sys->mvi_md = 7;
+                recvx_log("game",
+                    "bhSysCallMovie case 6 done (no --inventory) — "
+                    "tk=0x%08x ts=0x%08x", sys->tk_flg, sys->ts_flg);
+                break;
+            }
+
+            /* --inventory mode: run staged opening sequence. */
+            if (g_recvx_opening_stage == 0) {
+                g_recvx_opening_stage = 1;
+                g_recvx_opening_stage_ct = 0;
+                /* Suspend every task EXCEPT Movie (bit 12 = 0x1000) so
+                 * we get a clean black screen during the dark-cell delay
+                 * and case 6 keeps firing next frame. */
+                sys->ts_flg = 0xFFFFEFFF;
+                recvx_log("game",
+                    "--inventory: stage 0->1 (dark cell, %d-frame delay)", 90);
+            } else if (g_recvx_opening_stage == 1) {
+                g_recvx_opening_stage_ct++;
+                sys->ts_flg = 0xFFFFEFFF;  /* hold all but Movie suspended */
+                if (g_recvx_opening_stage_ct >= 90) {
+                    g_recvx_opening_stage = 2;
+                    recvx_log("game",
+                        "--inventory: stage 1->2 (opening inventory after %d frames)",
+                        g_recvx_opening_stage_ct);
+                }
+            }
+
+            /* When stage advances to 2, run the inventory init below. */
+            if (g_recvx_opening_stage == 2) {
                 extern S_WORK swork;
                 /* parts_07b is declared as `PARTS parts_07b[8];` (no
                  * initializer), so all 8 elements zero-init and anim=0.
@@ -1539,6 +1581,14 @@ void bhSysCallMovie()
                 CallSystemSe(0, 3);
 
                 recvx_log("game", "--inventory: forcing swork.subscreenmode=1, flgtest=0, ts_flg=0x10000 (Option suspended) + skip-anim + open-SE");
+
+                /* Advance stage past inventory init so case 6 doesn't
+                 * loop. mvi_md=7 stops the Movie task from re-entering
+                 * case 6. */
+                g_recvx_opening_stage = 4;
+                sys->mvi_md = 7;
+                recvx_log("game",
+                    "--inventory: stage 2->4 (inventory open, mvi_md=7)");
             }
         }
 #endif

@@ -136,6 +136,20 @@ static bool        g_inventory     = false;  /* --inventory: force-open status s
 /* Read by system.c bhSysCallMovie case-6 port hook. int (not bool) so
  * the extern in C source compiles cleanly without including stdbool.h. */
 int g_recvx_open_inventory = 0;
+/* Phase 3 opening-sequence state machine. Drives a port-side scripted
+ * sequence that mimics the real game's opening: post-MV_000 dark cell
+ * scene -> "It's dark" text -> auto-open inventory -> equip lighter ->
+ * lit scene placeholder. Each stage holds for N frames or until input.
+ *  0 = MV_000 still playing or before
+ *  1 = dark scene fade-in, text fading in
+ *  2 = "It's dark" text visible, waiting for input/timeout
+ *  3 = transitioning to inventory (open it)
+ *  4 = inventory open (current shortcut behavior)
+ *  5 = inventory closed, lit scene placeholder
+ *  6 = sequence complete
+ */
+int g_recvx_opening_stage = 0;
+int g_recvx_opening_stage_ct = 0;  /* per-stage frame counter */
 /* One-shot flag for the --inventory hook's deferred cen_pos + statusflg
  * fixup (applied after first StatusMain). See bhSysCallItemselect /
  * bhSysCallMovie case 6. Cleared by the apply path so it only runs once. */
