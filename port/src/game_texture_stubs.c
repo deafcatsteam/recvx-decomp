@@ -709,11 +709,23 @@ void njDrawSprite2D(NJS_SPRITE* sp, Sint32 n, Float pri, Uint32 attr) {
     float x2 = x1 + (float)ta->sx * sx;
     float y2 = y1 + (float)ta->sy * sy;
 
-    /* Normalized UVs from the pixel-coord anim rect. */
-    float u1 = (float)ta->u1 / (float)tex_w;
-    float v1 = (float)ta->v1 / (float)tex_h;
-    float u2 = (float)ta->u2 / (float)tex_w;
-    float v2 = (float)ta->v2 / (float)tex_h;
+    /* UV normalization assumes the source atlas was 256x256 (PS2 game's
+     * internal "logical" texture base). Our extracted TIM2 atlases are
+     * 512x512 (or 1024x512), and PARTS NJS_TEXANIM data has UV pixel
+     * coords in the 0..256 range. Normalizing by tex_w would only
+     * sample the upper-left 1/(tex_w/256) of each texture, leaving the
+     * rest of the atlas content unreferenced -- which is why inventory
+     * chrome rendered as "fragments of multiple characters" with the
+     * wooden background sliver missing. Same root cause as the font
+     * 14->28 cell fix in message.c, applied uniformly to all sprite UV
+     * coords. Fall back to actual tex_w if it's <=256 (no scaling
+     * needed for true-256 atlases). */
+    int uv_base_w = tex_w > 256 ? 256 : tex_w;
+    int uv_base_h = tex_h > 256 ? 256 : tex_h;
+    float u1 = (float)ta->u1 / (float)uv_base_w;
+    float v1 = (float)ta->v1 / (float)uv_base_h;
+    float u2 = (float)ta->u2 / (float)uv_base_w;
+    float v2 = (float)ta->v2 / (float)uv_base_h;
 
     /* attr bit layout in sub1.c's SpriteSet2D:
      *   bit 0=0x01 hidden     bit 1=0x02 inv x  bit 2=0x04 transparent
