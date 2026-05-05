@@ -28,10 +28,11 @@ static int dump_enabled(void) {
         const char* e = getenv("RECVX_DUMP_TEX");
         on = (e && e[0] && e[0] != '0');
         if (on) {
-            (void)_mkdir("port");
-            (void)_mkdir("port/debug");
-            (void)_mkdir("port/debug/tex");
-            RX_LOG("dump", "RECVX_DUMP_TEX on -> port/debug/tex/");
+            /* Path is relative to the exe's cwd. run.ps1 cds into port/
+             * so "debug/tex" lands at port/debug/tex/. */
+            (void)_mkdir("debug");
+            (void)_mkdir("debug/tex");
+            RX_LOG("dump", "RECVX_DUMP_TEX on -> debug/tex/");
         }
         checked = 1;
     }
@@ -43,7 +44,7 @@ void recvx_dump_rgba_tga(int slot, int w, int h, const void* rgba_in) {
     const uint8_t* rgba = (const uint8_t*)rgba_in;
 
     char path[160];
-    snprintf(path, sizeof(path), "port/debug/tex/tex_%02d_%dx%d.tga",
+    snprintf(path, sizeof(path), "debug/tex/tex_%02d_%dx%d.tga",
              slot, w, h);
     FILE* f = fopen(path, "wb");
     if (!f) { RX_LOG("dump", "open %s FAILED", path); return; }

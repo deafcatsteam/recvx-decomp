@@ -10,8 +10,17 @@ param(
     [string]$Iso       = "C:\Claude\codeveronica\recvx\recvx.iso",
     [string]$Config    = "Debug",
     [string]$ExtraArgs = "",
-    [string]$Log       = "runtime.log"
+    [string]$Log       = "runtime.log",
+    [switch]$DumpTex
 )
+
+# RECVX_DUMP_TEX=1 makes recvx_dump_rgba_tga write each decoded TIM2 to
+# port/debug/tex/tex_NN_WxH.tga so we can inspect what's actually being
+# rendered.
+if ($DumpTex) {
+    $env:RECVX_DUMP_TEX = "1"
+    Write-Host "-- Texture dump enabled: TGAs will land in port/debug/tex/ --" -ForegroundColor Yellow
+}
 
 $exe = ".\build\$Config\recvx_pc.exe"
 if (-not (Test-Path $exe)) {
