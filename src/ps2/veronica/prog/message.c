@@ -433,19 +433,35 @@ void bhDispFont(NJS_POINT2* pos, int code, int color, float pri)
     }
 
     code %= 324;
-    
-    uv[0].tex.u = (code % 18) * 14;
-    uv[0].tex.v = (code / 18) * 14;
-    
-    uv[1].tex.u = uv[0].tex.u + 14;
+
+#ifdef RECVX_PC_PORT
+    /* Our extracted SYSTEM.AFS/1 font atlas is 512x512 with 28x28
+     * glyph cells (visually verified via tex_dump TGA). Upstream's
+     * literal 14 here was correct for a 256x256 atlas with 14x14
+     * cells -- in either case the screen quad stays 28x28 (set
+     * earlier in this function), only the UV sampling rect changes.
+     * Without this scale-up the textured quad samples the upper-left
+     * 14x14 quadrant of each 28x28 glyph -> readable letter shapes
+     * with wrong/cropped strokes. */
+    #define FONT_CELL 28
+#else
+    #define FONT_CELL 14
+#endif
+
+    uv[0].tex.u = (code % 18) * FONT_CELL;
+    uv[0].tex.v = (code / 18) * FONT_CELL;
+
+    uv[1].tex.u = uv[0].tex.u + FONT_CELL;
     uv[1].tex.v = uv[0].tex.v;
-    
-    uv[2].tex.u = uv[0].tex.u + 14;
-    uv[2].tex.v = uv[0].tex.v + 14;
-    
-    uv[3].tex.u = uv[0].tex.u; 
-    uv[3].tex.v = uv[0].tex.v + 14;
-    
+
+    uv[2].tex.u = uv[0].tex.u + FONT_CELL;
+    uv[2].tex.v = uv[0].tex.v + FONT_CELL;
+
+    uv[3].tex.u = uv[0].tex.u;
+    uv[3].tex.v = uv[0].tex.v + FONT_CELL;
+
+#undef FONT_CELL
+
     njDrawPolygon2DM(&p2c, 4, pri, 0x80000060);
 }
 
@@ -492,19 +508,28 @@ void bhDispFontEx(NJS_POINT2* pos, int code, unsigned int argb, float pri)
     col[1].color = argb;
     col[2].color = argb;
     col[3].color = argb;
-    
-    uv[0].tex.u = (code % 18) * 14;
-    uv[0].tex.v = (code / 18) * 14;
-    
-    uv[1].tex.u = uv[0].tex.u + 14;
+
+#ifdef RECVX_PC_PORT
+    /* Same 28-pixel glyph cells as bhDispFont above. */
+    #define FONT_CELL 28
+#else
+    #define FONT_CELL 14
+#endif
+
+    uv[0].tex.u = (code % 18) * FONT_CELL;
+    uv[0].tex.v = (code / 18) * FONT_CELL;
+
+    uv[1].tex.u = uv[0].tex.u + FONT_CELL;
     uv[1].tex.v = uv[0].tex.v;
-    
-    uv[2].tex.u = uv[0].tex.u + 14;
-    uv[2].tex.v = uv[0].tex.v + 14;
-    
-    uv[3].tex.u = uv[0].tex.u; 
-    uv[3].tex.v = uv[0].tex.v + 14;
-    
+
+    uv[2].tex.u = uv[0].tex.u + FONT_CELL;
+    uv[2].tex.v = uv[0].tex.v + FONT_CELL;
+
+    uv[3].tex.u = uv[0].tex.u;
+    uv[3].tex.v = uv[0].tex.v + FONT_CELL;
+
+#undef FONT_CELL
+
     njDrawPolygon2DM(&p2c, 4, pri, 0x80000060);
 }
 
