@@ -970,6 +970,21 @@ void bhSysCallItemselect()
             extern S_WORK swork;
             swork.statusflg &= ~(0x80 | 0x2000);
 
+            /* Background tile fade-in: parts_07b[0..5] are the 6 tiles
+             * making up the wooden-bg / metal-grid background. They
+             * initialize at col=(a=1,r=0,g=0,b=0) (transparent black)
+             * and BGFadeIn ramps RGB to ~1.0 over 17 frames, gated on
+             * statusflg & 0x1. Our hook clears statusflg so BGFadeIn
+             * never runs; force the tiles to full-white opacity so the
+             * background texture shows up immediately. */
+            extern PARTS parts_07b[8];
+            for (int i = 0; i < 6; ++i) {
+                parts_07b[i].col.r = 1.0f;
+                parts_07b[i].col.g = 1.0f;
+                parts_07b[i].col.b = 1.0f;
+                parts_07b[i].col.a = 1.0f;
+            }
+
             /* Apply ItemTaskCheck's njSetScreen + njSetAspect setup that
              * our shortcut bypassed. Without this every sprite renders
              * against the default 320x240 origin, putting the inventory
