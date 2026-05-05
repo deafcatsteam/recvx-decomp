@@ -90,14 +90,45 @@ void njControl3D(int mode)                            { (void)mode; }
  * stubs target intentionally doesn't include. */
 void njSetConstantAttr(unsigned int a)                { (void)a; }
 
-/* Pulse00/PulseHealAnim/PulsePoisonHealAnim (sub1.c:7765, 7848, 7897) draw
- * the inventory's heart-rate / condition waveform via njDrawTextureH with
- * a NJS_TEXTUREH_VTX[4] poly and a hardcoded tex ID (200004). Real impl
- * would route to a textured quad with the active palette/tex lookup.
- * Stubbed to no-op so the inventory builds; the heart-rate waveform
- * just won't animate visually until we resolve tex IDs to slots. */
+/* Pulse00/PulseHealAnim/PulsePoisonHealAnim (sub1.c) draw the inventory's
+ * heart-rate / condition waveform as a series of textured 4-vertex
+ * polygons. Per-vertex `bcol` is what gives the waveform its
+ * characteristic fading-edge look (verts 0..1 = transparent black,
+ * verts 2..3 = saturated green/yellow/red), so we route through the
+ * vertex-colored polygon path and ignore the texture sample point.
+ * Visually identical for purposes of the waveform line.
+ *
+ * NJS_TEXTUREH_VTX layout: { float x,y,z, u,v; uint32 bcol, ocol; }
+ * Call sites use TL-BL-TR-BR zigzag order which is what
+ * recvx_gfx_draw_polygon's GL_TRIANGLE_STRIP wants. */
+struct _njs_textureh_vtx {
+    float    x, y, z;
+    float    u, v;
+    unsigned int bcol;
+    unsigned int ocol;
+};
+
+struct _recvx_gfx_vtx_local {
+    float    x, y, z;
+    unsigned int color;
+};
+extern void recvx_gfx_draw_polygon(const struct _recvx_gfx_vtx_local* v,
+                                   int n, int trans);
+
 void njDrawTextureH(void* polygon, int count, int tex, int flag) {
-    (void)polygon; (void)count; (void)tex; (void)flag;
+    (void)tex; (void)flag;
+    if (!polygon || count < 3) return;
+    if (count > 32) count = 32;
+    const struct _njs_textureh_vtx* p =
+        (const struct _njs_textureh_vtx*)polygon;
+    struct _recvx_gfx_vtx_local v[32];
+    for (int i = 0; i < count; ++i) {
+        v[i].x = p[i].x;
+        v[i].y = p[i].y;
+        v[i].z = p[i].z;
+        v[i].color = p[i].bcol;
+    }
+    recvx_gfx_draw_polygon(v, count, 1);
 }
 
 /* njColorBlendingMode(channel, mode) sets per-channel blending factors

@@ -983,6 +983,15 @@ void bhSysCallItemselect()
                 parts_07b[i].col.g = 1.0f;
                 parts_07b[i].col.b = 1.0f;
                 parts_07b[i].col.a = 1.0f;
+                /* The atr & 0x20 bit is the sprite-iterator's visibility
+                 * gate. parts_07b's static initializer at sub1.c:461
+                 * only sets atr=0x04 (transparent flag); whichever
+                 * function would normally OR-in 0x20 lives outside
+                 * sub1.c (no writes to parts_07b.atr exist anywhere in
+                 * the compiled tree). Without it the iterator skips
+                 * every background tile, leaving the screen black where
+                 * the metal-grid pattern should appear. */
+                parts_07b[i].atr |= 0x20;
             }
 
             /* Apply ItemTaskCheck's njSetScreen + njSetAspect setup that
