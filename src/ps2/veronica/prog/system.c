@@ -1312,18 +1312,7 @@ void bhSysCallMovie()
          * past 6 so this hook only fires once per kicked movie. */
         {
             extern void recvx_log(const char* tag, const char* fmt, ...);
-            sys->ts_flg = 0;
-            sys->mvi_md = 7;
-            recvx_log("game",
-                "bhSysCallMovie case 6 done — port-unsuspending all tasks (tk=0x%08x ts=0x%08x)",
-                sys->tk_flg, sys->ts_flg);
 
-            /* --inventory mode: kick the inventory open right here. Sets
-             * subscreenmode=1 so StatusMain's case-1 init runs, and
-             * cb_flg bit 0x10 selects the StatusInit branch within case 1
-             * which loads inventory textures + parts. Without this hook
-             * the game just sits in a black "Game task active but no
-             * gameplay logic compiled" state. */
             /* Phase 3 staged opening sequence: hold case 6 firing for
              * a "dark cell" period before opening the inventory, so we
              * mimic the real game's pacing. mvi_md stays at 6 (this
