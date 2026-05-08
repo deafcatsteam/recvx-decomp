@@ -120,7 +120,12 @@ static void audio_sink_to_backend(void* opaque, int rate,
 
 static const char* g_iso_path      = NULL;
 static const char* g_gamedata_path = NULL;
-static bool        g_run_game      = false;
+/* Default to "real game" flow: no flag required. The exe should run
+ * normal release-style boot (logos -> opening FMV -> main menu) when
+ * launched without args. --inventory and --battle are testing
+ * shortcuts. Set to false only if a non-game mode is selected
+ * (--gallery / --list-afs / --dump-afs / --play-movie). */
+static bool        g_run_game      = true;
 static int         g_msa_rate      = 0;   /* 0 = use Smpl-derived rate */
 static const char* g_se_remap_str  = NULL; /* "N:M[,N:M...]"; NULL → use msa_init defaults */
 
@@ -132,10 +137,15 @@ static int         g_dump_afs      = -1;  /* 0..6: extract every entry of AFS pa
 static const char* g_dump_afs_dir  = NULL; /* output dir for --dump-afs */
 static int         g_gallery       = -2;  /* -2 unset; -1 all parts; 0..6 specific */
 static bool        g_inventory     = false;  /* --inventory: force-open status screen post-MV_000 */
+static bool        g_battle_mode   = false;  /* --battle: launch into Battle Mode (gm_mode=3) */
 
 /* Read by system.c bhSysCallMovie case-6 port hook. int (not bool) so
  * the extern in C source compiles cleanly without including stdbool.h. */
 int g_recvx_open_inventory = 0;
+/* --battle launch flag readable from system.c hooks. Set by --battle CLI
+ * arg. When true, our hooks force sys->gm_mode = 3 to land in Battle Mode
+ * rather than normal play. Bypasses the title menu's "Extra Game" gate. */
+int g_recvx_battle_mode = 0;
 /* Phase 3 opening-sequence state machine. Drives a port-side scripted
  * sequence that mimics the real game's opening: post-MV_000 dark cell
  * scene -> "It's dark" text -> auto-open inventory -> equip lighter ->
@@ -195,10 +205,13 @@ static void parse_args(int argc, char** argv) {
             g_se_remap_str = argv[++i];
         } else if (strcmp(argv[i], "--play-movie") == 0 && i + 1 < argc) {
             g_play_movie = atoi(argv[++i]);
+            g_run_game = false;
         } else if (strcmp(argv[i], "--list-afs") == 0) {
             g_list_afs = true;
+            g_run_game = false;
         } else if (strcmp(argv[i], "--dump-afs") == 0 && i + 1 < argc) {
             g_dump_afs = atoi(argv[++i]);
+            g_run_game = false;
         } else if (strcmp(argv[i], "--dump-afs-dir") == 0 && i + 1 < argc) {
             g_dump_afs_dir = argv[++i];
         } else if (strcmp(argv[i], "--gallery") == 0) {
@@ -209,8 +222,17 @@ static void parse_args(int argc, char** argv) {
             } else {
                 g_gallery = -1;
             }
+            g_run_game = false;
         } else if (strcmp(argv[i], "--inventory") == 0) {
             g_inventory = true;
+            g_run_game = true;
+        } else if (strcmp(argv[i], "--battle") == 0) {
+            /* --battle: launch directly into Battle Mode by setting
+             * sys->gm_mode = 3 (the "Extra Game" path normally
+             * unlocked after beating the main game). Title menu's
+             * Extra Game cursor would normally also need to be
+             * unlocked, but a CLI shortcut bypasses that gate. */
+            g_battle_mode = true;
             g_run_game = true;
         } else if (strcmp(argv[i], "--help") == 0) {
             printf("usage: recvx_pc [--iso path\\to\\recvx.iso]\n"
@@ -678,6 +700,7 @@ int main(int argc, char** argv) {
     /* Tell the system.c case-6 port hook whether to flip subscreenmode=1
      * after MV_000 ends. Read by extern in src/ps2/veronica/prog/system.c. */
     g_recvx_open_inventory = g_inventory ? 1 : 0;
+    g_recvx_battle_mode    = g_battle_mode ? 1 : 0;
 
     int rc;
     if (g_run_game) {

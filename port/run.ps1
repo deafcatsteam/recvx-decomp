@@ -11,7 +11,9 @@ param(
     [string]$Config    = "Debug",
     [string]$ExtraArgs = "",
     [string]$Log       = "runtime.log",
-    [switch]$DumpTex
+    [switch]$DumpTex,
+    [switch]$Inventory,   # -Inventory: skip menu, force --inventory boot mode
+    [switch]$Battle       # -Battle:    skip menu, force --battle boot mode
 )
 
 # RECVX_DUMP_TEX=1 makes recvx_dump_rgba_tga write each decoded TIM2 to
@@ -32,25 +34,38 @@ if (-not (Test-Path $exe)) {
 # code path is being exercised. Each entry maps to the literal CLI flag(s)
 # that main_pc.c parses.
 $bootArgs = $null
+
+# Skip the menu entirely when an explicit -Inventory or -Battle switch is
+# passed -- useful for scripted testing.
+if ($Inventory) {
+    $bootArgs = @("--inventory")
+    Write-Host "-- -Inventory switch: forcing --inventory boot mode --" -ForegroundColor Yellow
+} elseif ($Battle) {
+    $bootArgs = @("--battle")
+    Write-Host "-- -Battle switch: forcing --battle boot mode --" -ForegroundColor Yellow
+}
+
 while ($null -eq $bootArgs) {
     Write-Host ""
     Write-Host "== RECVX PC port -- boot mode ==" -ForegroundColor Cyan
-    Write-Host "  1) --game         regular gameplay (njUserInit/njUserMain task loop)"
-    Write-Host "  2) --inventory    --game + force-open inventory once gameplay starts"
-    Write-Host "  3) --gallery      TIM2 texture viewer, scans every AFS partition"
-    Write-Host "  4) --list-afs     print AFS partition TOCs to stdout, then exit"
-    Write-Host "  5) --play-movie   pick a movie index (0=opening, 16=Capcom presents)"
-    Write-Host "  6) custom         type your own flag string"
+    Write-Host "  1) (default)      real game flow (logos -> FMV -> title menu -> game)"
+    Write-Host "  2) --inventory    skip to inventory STATUS screen post-MV_000"
+    Write-Host "  3) --battle       skip to Battle Mode (gm_mode=3, normally unlockable)"
+    Write-Host "  4) --gallery      TIM2 texture viewer, scans every AFS partition"
+    Write-Host "  5) --list-afs     print AFS partition TOCs to stdout, then exit"
+    Write-Host "  6) --play-movie   pick a movie index (0=opening, 16=Capcom presents)"
+    Write-Host "  7) custom         type your own flag string"
     Write-Host ""
     $sel = Read-Host "Choose [1]"
     if ([string]::IsNullOrWhiteSpace($sel)) { $sel = "1" }
 
     switch ($sel) {
-        "1" { $bootArgs = @("--game") }
+        "1" { $bootArgs = @() }                 # no flag -> default = --game flow
         "2" { $bootArgs = @("--inventory") }
-        "3" { $bootArgs = @("--gallery") }
-        "4" { $bootArgs = @("--list-afs") }
-        "5" {
+        "3" { $bootArgs = @("--battle") }
+        "4" { $bootArgs = @("--gallery") }
+        "5" { $bootArgs = @("--list-afs") }
+        "6" {
             $idx = Read-Host "Movie index (0-99)"
             if ($idx -match '^\d+$') {
                 $bootArgs = @("--play-movie", $idx)
@@ -58,7 +73,7 @@ while ($null -eq $bootArgs) {
                 Write-Host "Not a number - try again." -ForegroundColor Yellow
             }
         }
-        "6" {
+        "7" {
             $custom = Read-Host "Enter raw flags (e.g. '--game --msa-rate 32000')"
             if (-not [string]::IsNullOrWhiteSpace($custom)) {
                 $bootArgs = $custom.Split(' ') | Where-Object { $_ -ne "" }

@@ -1325,12 +1325,27 @@ void bhSysCallMovie()
             extern int g_recvx_opening_stage_ct;
 
             if (!g_recvx_open_inventory) {
-                /* No --inventory flag: keep original immediate flow. */
+                /* No --inventory flag: keep original immediate flow.
+                 * Game task takes over and runs whatever post-MV_000
+                 * logic exists. */
                 sys->ts_flg = 0;
                 sys->mvi_md = 7;
+
+                /* --battle: jump straight to Battle Mode by forcing
+                 * sys->gm_mode = 3 here. The Game task / title flow
+                 * normally requires the player to navigate Title ->
+                 * Extra Game -> Player Select to reach this state, but
+                 * the CLI shortcut bypasses the menu. */
+                extern int g_recvx_battle_mode;
+                if (g_recvx_battle_mode) {
+                    sys->gm_mode = 3;
+                    recvx_log("game",
+                        "--battle: forced sys->gm_mode = 3 (Battle Mode)");
+                }
+
                 recvx_log("game",
-                    "bhSysCallMovie case 6 done (no --inventory) — "
-                    "tk=0x%08x ts=0x%08x", sys->tk_flg, sys->ts_flg);
+                    "bhSysCallMovie case 6 done — tk=0x%08x ts=0x%08x gm_mode=%d",
+                    sys->tk_flg, sys->ts_flg, sys->gm_mode);
                 break;
             }
 
