@@ -131,6 +131,15 @@ void njDrawTextureH(void* polygon, int count, int tex, int flag) {
     recvx_gfx_draw_polygon(v, count, 1);
 }
 
+/* njDrawLine2D draws a line strip in 2D (NJS_POINT2COL with N verts).
+ * BorderLineSet (sub1.c:6656) uses it for inventory border decorations.
+ * Stub as no-op so build links; lines won't render visually. Same path
+ * as njDrawPolygon2D could handle this if we wanted but lines aren't
+ * critical to inventory layout. */
+void njDrawLine2D(void* p2c, int n, float pri, unsigned int attr) {
+    (void)p2c; (void)n; (void)pri; (void)attr;
+}
+
 /* njColorBlendingMode(channel, mode) sets per-channel blending factors
  * on PS2 GS (channel 0=src, 1=dst; mode 6=ZERO, 8=PASS, etc). For our
  * GL backend we already use a single GL_SRC_ALPHA / GL_ONE_MINUS_SRC_ALPHA

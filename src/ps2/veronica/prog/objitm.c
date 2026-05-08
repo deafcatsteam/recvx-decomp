@@ -1,15 +1,18 @@
 #include "../../../ps2/veronica/prog/objitm.h"
-#include "../../../ps2/veronica/prog/njplus.h"
+#include "../../../ps2/veronica/prog/MdlPut.h"
+#include "../../../ps2/veronica/prog/flag.h"
 #include "../../../ps2/veronica/prog/main.h"
+#include "../../../ps2/veronica/prog/njplus.h"
+#include "../../../ps2/veronica/prog/ps2_NaFog.h"
+#include "../../../ps2/veronica/prog/ps2_NaMath.h"
+#include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/ps2_NinjaCnk.h"
+#include "../../../ps2/veronica/prog/sdfunc.h"
+#include "../../../ps2/veronica/prog/system.h"
 
 /*void(*bhJumpObject)()[101];
 void(*bhJumpObject2)()[13];*/
 unsigned int ulDrawGeneralPurposeWater;
-/*_anon1* sys;
-_anon4* rom;
-unsigned char pl_sleep_cnt;
-_anon41 cam;
-BH_PWORK* plp;*/
 
 // 100% matching! 
 void bhInitObjItm()
@@ -348,77 +351,113 @@ void bhDrawObjItm()
 	scePrintf("bhDrawObjItm - UNIMPLEMENTED!\n");
 }
 
-/*// 
-// Start address: 0x284270
-void bhDrawObject(_anon0* op)
+// 100% matching! 
+void bhDrawObject(O_WRK* op) 
 {
-	// Line 548, Address: 0x284270, Func Offset: 0
-	// Line 551, Address: 0x28427c, Func Offset: 0xc
-	// Line 553, Address: 0x28428c, Func Offset: 0x1c
-	// Line 554, Address: 0x2842b4, Func Offset: 0x44
-	// Line 555, Address: 0x2842c8, Func Offset: 0x58
-	// Line 560, Address: 0x2842ec, Func Offset: 0x7c
-	// Line 563, Address: 0x284338, Func Offset: 0xc8
-	// Line 571, Address: 0x284340, Func Offset: 0xd0
-	// Line 575, Address: 0x28436c, Func Offset: 0xfc
-	// Line 583, Address: 0x2843a0, Func Offset: 0x130
-	// Line 584, Address: 0x2843b0, Func Offset: 0x140
-	// Line 587, Address: 0x2843b8, Func Offset: 0x148
-	// Line 598, Address: 0x2843e8, Func Offset: 0x178
-	// Line 603, Address: 0x2843f4, Func Offset: 0x184
-	// Line 604, Address: 0x2843fc, Func Offset: 0x18c
-	// Line 605, Address: 0x284428, Func Offset: 0x1b8
-	// Func End, Address: 0x284438, Func Offset: 0x1c8
-}*/
+    O_WRK* opp; // not from DWARF
+    
+    if ((op->flg & 0x80))
+    {
+        opp = (O_WRK*)op->lkwkp;
+        
+        if ((opp->stflg & 0x1000000)) 
+        {
+            op->stflg |= 0x1000000;
+        }
+        else
+        {
+            op->stflg &= ~0x1000000;
+        }
 
-// 
-// Start address: 0x284440
-void bhDrawSpObject(O_WRK* op)
-{
-	//_anon32 vec;
-	//_anon3* lp;
-	// Line 611, Address: 0x284440, Func Offset: 0
-	// Line 620, Address: 0x284454, Func Offset: 0x14
-	// Line 624, Address: 0x284494, Func Offset: 0x54
-	// Line 632, Address: 0x2844cc, Func Offset: 0x8c
-	// Line 637, Address: 0x2844e4, Func Offset: 0xa4
-	// Line 638, Address: 0x2844f0, Func Offset: 0xb0
-	// Line 637, Address: 0x2844f4, Func Offset: 0xb4
-	// Line 638, Address: 0x284504, Func Offset: 0xc4
-	// Line 639, Address: 0x28450c, Func Offset: 0xcc
-	// Line 640, Address: 0x28451c, Func Offset: 0xdc
-	// Line 641, Address: 0x28452c, Func Offset: 0xec
-	// Line 642, Address: 0x284540, Func Offset: 0x100
-	// Line 643, Address: 0x28454c, Func Offset: 0x10c
-	// Line 644, Address: 0x284554, Func Offset: 0x114
-	// Line 645, Address: 0x28455c, Func Offset: 0x11c
-	// Line 646, Address: 0x284570, Func Offset: 0x130
-	// Line 647, Address: 0x284580, Func Offset: 0x140
-	// Line 648, Address: 0x28459c, Func Offset: 0x15c
-	// Line 651, Address: 0x2845ac, Func Offset: 0x16c
-	// Line 654, Address: 0x2845b8, Func Offset: 0x178
-	// Func End, Address: 0x2845cc, Func Offset: 0x18c
-	scePrintf("bhDrawSpObject - UNIMPLEMENTED!\n");
+        if (!((op->id < 1210) || ((sys->pt_flg & 0x1)))) 
+        {
+            return;
+        }
+    }
+
+    if ((((op->stflg & 0x1000000)) && (pl_sleep_cnt == 0)) || (((sys->gm_flg & 0x4000)) && ((op->mdflg & 0x40)))) 
+    {
+        return;
+    }
+    
+    if ((!(op->flg & 0x40000000)) || ((sys->gm_flg & 0x40)) || ((cam.flg & 0x46)) || ((cam.ncut == op->hide[0]) || (cam.ncut == op->hide[1]) || (cam.ncut == op->hide[2]) || (cam.ncut == op->hide[3])))
+    {
+        if ((op->mdflg & 0x8)) 
+        {
+            njControl3D(0x2500);
+        }
+        
+        if (((op->mdflg & 0x10)) && ((sys->st_flg & 0x2))) 
+        {
+            njFogDisable();
+        }
+        
+        bhPutModel((BH_PWORK*)op);
+        
+        njControl3D(0x100);
+        
+        if (((op->mdflg & 0x10)) && ((sys->st_flg & 0x2))) 
+        {
+            njFogEnable();
+        }
+    }
 }
 
-// 
-// Start address: 0x2845d0
+// 100% matching!
+void bhDrawSpObject(O_WRK* op) 
+{
+    LGT_WORK* lp;
+    NJS_VECTOR vec;
+
+    if (!((!(op->flg & 0x40000000)) || ((sys->gm_flg & 0x40)) || ((cam.flg & 0x46)) || ((cam.ncut == op->hide[0]) || (cam.ncut == op->hide[1]) || (cam.ncut == op->hide[2]) || (cam.ncut == op->hide[3]))))
+    {
+        return;
+    }
+
+    switch (op->type) 
+    {
+    case 5:
+        lp = &rom->lgtp[op->aspd];
+        
+        if (op->draw_tp == 0) 
+        {
+            njSetMatrix(NULL, cam.mtx);
+            
+            njCnkSetEasyMultiLightVector(lp->vx, lp->vy, lp->vz);
+            njCnkSetEasyMultiLightColor(1, lp->r, lp->g, lp->b);
+            njCnkSetEasyMultiLightSwitch(1, 1);
+            njCnkSetEasyMultiLightMatrices();
+        } 
+        else 
+        {
+            njCalcVector(cam.mtx, (NJS_VECTOR*)&lp->vx, &vec);
+            
+            njCnkSetEasyLightColor(lp->r, lp->g, lp->b);
+            njCnkSetEasyLightIntensity(1.0f, 0.2f);
+            njCnkSetEasyLight(vec.x, vec.y, vec.z);
+        }
+        
+        bhPutModel((BH_PWORK*)op);
+    }
+}
+
+// 100% matching!
 void bhSetAlphaFadeObject(O_WRK* op, int jntno, int jnt_n, int alpha, int count)
 {
-	float* fwk;
 	int* iwk;
-	// Line 694, Address: 0x2845d0, Func Offset: 0
-	// Line 695, Address: 0x2845d4, Func Offset: 0x4
-	// Line 689, Address: 0x2845d8, Func Offset: 0x8
-	// Line 694, Address: 0x2845e0, Func Offset: 0x10
-	// Line 689, Address: 0x2845e4, Func Offset: 0x14
-	// Line 692, Address: 0x2845ec, Func Offset: 0x1c
-	// Line 693, Address: 0x2845f0, Func Offset: 0x20
-	// Line 695, Address: 0x2845f4, Func Offset: 0x24
-	// Line 694, Address: 0x2845f8, Func Offset: 0x28
-	// Line 696, Address: 0x2845fc, Func Offset: 0x2c
-	// Func End, Address: 0x284604, Func Offset: 0x34
-	scePrintf("bhSetAlphaFadeObject - UNIMPLEMENTED!\n");
+	float* fwk;
+
+	op->flg |= 0x200000;
+
+	iwk = (int*)&op->pv[0];
+
+    iwk[0] = jntno;
+    iwk[1] = jnt_n;
+
+	fwk = (float*)&op->pv[1];
+
+    fwk[0] = alpha;
+    fwk[1] = count;
 }
 
 /*// 
@@ -464,30 +503,43 @@ void bhObjDmy()
 
 }
 
-/*// 
-// Start address: 0x2847c0
-void bhObjItmBox(_anon0* op)
+// 100% matching!
+void bhObjItmBox(O_WRK* op)
 {
-	// Line 753, Address: 0x2847c0, Func Offset: 0
-	// Line 754, Address: 0x2847d0, Func Offset: 0x10
-	// Line 756, Address: 0x284808, Func Offset: 0x48
-	// Line 758, Address: 0x28480c, Func Offset: 0x4c
-	// Line 757, Address: 0x284810, Func Offset: 0x50
-	// Line 758, Address: 0x284814, Func Offset: 0x54
-	// Line 760, Address: 0x284820, Func Offset: 0x60
-	// Line 761, Address: 0x28482c, Func Offset: 0x6c
-	// Line 762, Address: 0x284844, Func Offset: 0x84
-	// Line 763, Address: 0x284878, Func Offset: 0xb8
-	// Line 765, Address: 0x284880, Func Offset: 0xc0
-	// Line 767, Address: 0x284898, Func Offset: 0xd8
-	// Line 769, Address: 0x2848a0, Func Offset: 0xe0
-	// Line 770, Address: 0x2848bc, Func Offset: 0xfc
-	// Line 771, Address: 0x2848c0, Func Offset: 0x100
-	// Line 774, Address: 0x2848c4, Func Offset: 0x104
-	// Func End, Address: 0x2848d4, Func Offset: 0x114
+    switch (op->mode0) 
+    {                            
+    case 0:
+        op->ct0 = 0;
+        
+        op->mode0 = 1;
+        
+        CallSystemSe(0, 0x80000240);
+    case 1:
+        op->ct0 += 384;
+        
+        if (op->ct0 > 15360) 
+        {
+            op->mode0 = 2;
+        }
+        
+        op->ax = -((int)(182.04445f * (80.0f * njSin(op->ct0))) & 0xFFFF);
+        break;
+    case 2:
+        sys->cb_flg |= 0x40000;
+        
+        op->mode0 = 3;
+        break;
+    case 3:
+        plp->stflg &= ~0x10000;
+        
+        op->ax = 0;
+        
+        op->type = 0;
+        break;
+    }
 }
 
-// 
+/*// 
 // Start address: 0x2848e0
 void bhObj001(_anon0* op)
 {
@@ -794,24 +846,27 @@ void bhObj003(O_WRK* op)
     op->ct0 += 1024;
 }
 
-/*// 
-// Start address: 0x2855f0
-void bhObj004(_anon0* op)
+// 100% matching!
+void bhObj004(O_WRK* op)
 {
-	// Line 1047, Address: 0x2855f0, Func Offset: 0
-	// Line 1048, Address: 0x285600, Func Offset: 0x10
-	// Line 1050, Address: 0x285620, Func Offset: 0x30
-	// Line 1051, Address: 0x285624, Func Offset: 0x34
-	// Line 1052, Address: 0x285628, Func Offset: 0x38
-	// Line 1053, Address: 0x28562c, Func Offset: 0x3c
-	// Line 1054, Address: 0x285640, Func Offset: 0x50
-	// Line 1055, Address: 0x285644, Func Offset: 0x54
-	// Line 1057, Address: 0x28564c, Func Offset: 0x5c
-	// Line 1060, Address: 0x285670, Func Offset: 0x80
-	// Func End, Address: 0x285680, Func Offset: 0x90
+    switch (op->mode0) 
+    {                            
+    case 0:
+        op->px = 0;
+        op->py = 0;
+        op->pz = 0;
+        
+        npChangeMatAlphaColor(op->mlwP->objP, op->mlwP->obj_num, 0);
+        
+        op->mode0 = 1;
+        break;
+    case 1:
+        npChangeMatAlphaColor(op->mlwP->objP, op->mlwP->obj_num, sys->thunder);
+        break;
+    }
 }
 
-// 
+/*// 
 // Start address: 0x285680
 void bhObj005(_anon0* op)
 {
@@ -1258,65 +1313,63 @@ void bhObj007(_anon0* op)
 	// Line 2311, Address: 0x286980, Func Offset: 0x820
 	// Line 2319, Address: 0x286984, Func Offset: 0x824
 	// Func End, Address: 0x2869bc, Func Offset: 0x85c
-}
+}*/
 
-// 
-// Start address: 0x2869c0
-void bhObj008(_anon0* op)
+// 100% matching!
+void bhObj008(O_WRK* op) 
 {
-	_anon22* hp;
-	// Line 2328, Address: 0x2869c0, Func Offset: 0
-	// Line 2329, Address: 0x2869cc, Func Offset: 0xc
-	// Line 2330, Address: 0x2869e0, Func Offset: 0x20
-	// Line 2331, Address: 0x2869e4, Func Offset: 0x24
-	// Line 2333, Address: 0x2869ec, Func Offset: 0x2c
-	// Line 2334, Address: 0x2869f4, Func Offset: 0x34
-	// Line 2343, Address: 0x2869f8, Func Offset: 0x38
-	// Line 2337, Address: 0x286a00, Func Offset: 0x40
-	// Line 2339, Address: 0x286a04, Func Offset: 0x44
-	// Line 2334, Address: 0x286a08, Func Offset: 0x48
-	// Line 2335, Address: 0x286a0c, Func Offset: 0x4c
-	// Line 2345, Address: 0x286a10, Func Offset: 0x50
-	// Line 2346, Address: 0x286a18, Func Offset: 0x58
-	// Line 2347, Address: 0x286a1c, Func Offset: 0x5c
-	// Line 2348, Address: 0x286a20, Func Offset: 0x60
-	// Line 2335, Address: 0x286a24, Func Offset: 0x64
-	// Line 2336, Address: 0x286a28, Func Offset: 0x68
-	// Line 2353, Address: 0x286a2c, Func Offset: 0x6c
-	// Line 2336, Address: 0x286a30, Func Offset: 0x70
-	// Line 2337, Address: 0x286a34, Func Offset: 0x74
-	// Line 2338, Address: 0x286a58, Func Offset: 0x98
-	// Line 2339, Address: 0x286a80, Func Offset: 0xc0
-	// Line 2340, Address: 0x286a84, Func Offset: 0xc4
-	// Line 2341, Address: 0x286a88, Func Offset: 0xc8
-	// Line 2344, Address: 0x286a8c, Func Offset: 0xcc
-	// Line 2341, Address: 0x286a90, Func Offset: 0xd0
-	// Line 2342, Address: 0x286a94, Func Offset: 0xd4
-	// Line 2343, Address: 0x286a98, Func Offset: 0xd8
-	// Line 2344, Address: 0x286aa4, Func Offset: 0xe4
-	// Line 2345, Address: 0x286abc, Func Offset: 0xfc
-	// Line 2346, Address: 0x286ac8, Func Offset: 0x108
-	// Line 2347, Address: 0x286acc, Func Offset: 0x10c
-	// Line 2348, Address: 0x286ad0, Func Offset: 0x110
-	// Line 2349, Address: 0x286ad4, Func Offset: 0x114
-	// Line 2354, Address: 0x286ae4, Func Offset: 0x124
-	// Line 2356, Address: 0x286aec, Func Offset: 0x12c
-	// Line 2355, Address: 0x286af4, Func Offset: 0x134
-	// Line 2358, Address: 0x286af8, Func Offset: 0x138
-	// Line 2356, Address: 0x286b00, Func Offset: 0x140
-	// Line 2355, Address: 0x286b04, Func Offset: 0x144
-	// Line 2356, Address: 0x286b14, Func Offset: 0x154
-	// Line 2355, Address: 0x286b18, Func Offset: 0x158
-	// Line 2356, Address: 0x286b20, Func Offset: 0x160
-	// Line 2355, Address: 0x286b24, Func Offset: 0x164
-	// Line 2356, Address: 0x286b30, Func Offset: 0x170
-	// Line 2357, Address: 0x286b38, Func Offset: 0x178
-	// Line 2358, Address: 0x286b48, Func Offset: 0x188
-	// Line 2360, Address: 0x286b5c, Func Offset: 0x19c
-	// Func End, Address: 0x286b64, Func Offset: 0x1a4
+    ATR_WORK* hp;
+    
+    if (op->mode0 == 0) 
+    {
+        if ((op->flg & 0x100000)) 
+        {
+            op->mode0 = 1;
+            return;
+        }
+        
+        op->flg |= 0x100000;
+        
+        op->gpx = op->px;
+        op->gpy = op->py;
+        op->gpz = op->pz;
+        
+        op->ct0 = sys->mwal_n++;
+        
+        hp = &sys->mwalp[op->ct0];
+        
+        hp->flg = 129;
+        hp->type = 0;
+        
+        hp->flr_no = op->flr_no;
+        
+        hp->attr = 0;
+        
+        hp->px = op->px - 6.0f;
+        hp->py = rom->grand[hp->flr_no + 2];
+        hp->pz = op->pz - 11.0f;
+        
+        hp->w = 12.0f;
+        hp->h = 20.0f;
+        hp->d = 22.0f;
+        
+        hp->prm3 = 0;
+        hp->prm2 = 0;
+        hp->prm1 = 0;
+        hp->prm0 = 0;
+        
+        op->mode0 = 1;
+        return;
+    }
+    
+    hp = &sys->mwalp[op->ct0];
+    
+    hp->px = op->mlwP->owP->mtx[12] - 6.0f;
+    hp->py = op->mlwP->owP->mtx[13]; 
+    hp->pz = op->mlwP->owP->mtx[14] - 11.0f;
 }
 
-// 
+/*// 
 // Start address: 0x286b70
 void bhObj009(_anon0* op)
 {
@@ -1404,21 +1457,23 @@ void bhObj009(_anon0* op)
 	// Line 2460, Address: 0x287070, Func Offset: 0x500
 	// Line 2465, Address: 0x287074, Func Offset: 0x504
 	// Func End, Address: 0x287090, Func Offset: 0x520
-}
-
-// 
-// Start address: 0x287090
-void bhObj010(_anon0* op)
-{
-	// Line 2472, Address: 0x287090, Func Offset: 0
-	// Line 2473, Address: 0x28709c, Func Offset: 0xc
-	// Line 2474, Address: 0x2870bc, Func Offset: 0x2c
-	// Line 2475, Address: 0x2870d4, Func Offset: 0x44
-	// Line 2476, Address: 0x2870e4, Func Offset: 0x54
-	// Line 2477, Address: 0x2870f0, Func Offset: 0x60
-	// Line 2480, Address: 0x287108, Func Offset: 0x78
-	// Func End, Address: 0x287118, Func Offset: 0x88
 }*/
+
+// 100% matching!
+void bhObj010(O_WRK* op)
+{
+	if (bhCkFlg(&sys->rm_flg, 31) != 0)
+    {
+        npSetOffsetUV(op->mlwP->objP->model, 32, 0);
+
+        op->ct0 = (op->ct0 + 32) & 0x3FF;
+
+        if (op->ct0 == 0)
+        {
+            npSetOffsetUV(op->mlwP->objP->model, -1024, 0);
+        }
+    }
+}
 
 // 100% matching!
 void bhObj011(O_WRK* op)
@@ -1426,57 +1481,57 @@ void bhObj011(O_WRK* op)
 	op->mdflg |= 0x8;
 }
 
-/*// 
-// Start address: 0x287130
-void bhObj012(_anon0* op)
+// 100% matching!
+void bhObj012(O_WRK* op) 
 {
-	_anon22* hp;
-	// Line 2498, Address: 0x287130, Func Offset: 0
-	// Line 2499, Address: 0x28713c, Func Offset: 0xc
-	// Line 2507, Address: 0x287150, Func Offset: 0x20
-	// Line 2508, Address: 0x287154, Func Offset: 0x24
-	// Line 2510, Address: 0x28715c, Func Offset: 0x2c
-	// Line 2511, Address: 0x287164, Func Offset: 0x34
-	// Line 2513, Address: 0x28716c, Func Offset: 0x3c
-	// Line 2514, Address: 0x287170, Func Offset: 0x40
-	// Line 2516, Address: 0x287174, Func Offset: 0x44
-	// Line 2511, Address: 0x287178, Func Offset: 0x48
-	// Line 2520, Address: 0x287184, Func Offset: 0x54
-	// Line 2521, Address: 0x287188, Func Offset: 0x58
-	// Line 2527, Address: 0x28718c, Func Offset: 0x5c
-	// Line 2511, Address: 0x287190, Func Offset: 0x60
-	// Line 2512, Address: 0x2871a4, Func Offset: 0x74
-	// Line 2513, Address: 0x2871cc, Func Offset: 0x9c
-	// Line 2514, Address: 0x2871d0, Func Offset: 0xa0
-	// Line 2515, Address: 0x2871d4, Func Offset: 0xa4
-	// Line 2518, Address: 0x2871d8, Func Offset: 0xa8
-	// Line 2515, Address: 0x2871dc, Func Offset: 0xac
-	// Line 2516, Address: 0x2871e0, Func Offset: 0xb0
-	// Line 2517, Address: 0x2871e4, Func Offset: 0xb4
-	// Line 2518, Address: 0x2871ec, Func Offset: 0xbc
-	// Line 2526, Address: 0x287200, Func Offset: 0xd0
-	// Line 2518, Address: 0x287204, Func Offset: 0xd4
-	// Line 2519, Address: 0x287208, Func Offset: 0xd8
-	// Line 2520, Address: 0x287210, Func Offset: 0xe0
-	// Line 2521, Address: 0x287214, Func Offset: 0xe4
-	// Line 2522, Address: 0x287218, Func Offset: 0xe8
-	// Line 2523, Address: 0x28721c, Func Offset: 0xec
-	// Line 2526, Address: 0x287228, Func Offset: 0xf8
-	// Line 2528, Address: 0x28723c, Func Offset: 0x10c
-	// Line 2530, Address: 0x287244, Func Offset: 0x114
-	// Line 2529, Address: 0x287248, Func Offset: 0x118
-	// Line 2530, Address: 0x287254, Func Offset: 0x124
-	// Line 2529, Address: 0x287258, Func Offset: 0x128
-	// Line 2530, Address: 0x287268, Func Offset: 0x138
-	// Line 2529, Address: 0x28726c, Func Offset: 0x13c
-	// Line 2530, Address: 0x287278, Func Offset: 0x148
-	// Line 2531, Address: 0x28727c, Func Offset: 0x14c
-	// Line 2532, Address: 0x28728c, Func Offset: 0x15c
-	// Line 2534, Address: 0x28729c, Func Offset: 0x16c
-	// Func End, Address: 0x2872a4, Func Offset: 0x174
+    ATR_WORK* hp;
+    
+    if (op->mode0 == 0) 
+    {
+        if ((op->flg & 0x100000)) 
+        {
+            op->mode0 = 1;
+            return;
+        }
+        
+        op->flg |= 0x100000;
+        
+        op->ct0 = sys->mwal_n++;
+        
+        hp = &sys->mwalp[op->ct0];
+        
+        hp->flg = 129;
+        hp->type = 2;
+        
+        hp->flr_no = op->flr_no;
+        
+        hp->attr = 0x1000000;
+        
+        hp->px = op->px;
+        hp->py = rom->grand[hp->flr_no + 2];
+        hp->pz = op->pz;
+        
+        hp->w = 4.0f;
+        hp->h = 15.0f;
+        hp->d = 0;
+        
+        hp->prm2 = 0;
+        hp->prm1 = 0;
+        hp->prm0 = 0;
+        hp->prm3 = sys->onow;
+        
+        op->mode0 = 1;
+        return;
+    }
+    
+    hp = &sys->mwalp[op->ct0];
+    
+    hp->px = op->mlwP->owP->mtx[12]; 
+    hp->py = op->mlwP->owP->mtx[13];
+    hp->pz = op->mlwP->owP->mtx[14];
 }
 
-// 
+/*// 
 // Start address: 0x2872b0
 void bhObjClpn(_anon0* op)
 {
