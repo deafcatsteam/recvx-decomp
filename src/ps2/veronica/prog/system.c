@@ -1269,17 +1269,19 @@ void bhSysCallMovie()
                     "--battle: forced sys->gm_mode = 3 (Battle Mode)");
             }
 
-            /* Battle Mode (gm_mode==3) never opens the inventory before
-             * StatusInit runs, so swork.bxp is NULL. If Itemselect (bit 9
-             * = 0x200) gets unsuspended here, bhSysCallItemselect's
-             * StatusMain path dereferences st->bxp[127] in SpriteOnOff
-             * and segfaults. Keep Itemselect suspended for Battle Mode.
+            /* Keep Itemselect (bit 9 = 0x200) suspended for both modes.
+             * Neither path runs StatusInit before this point, so
+             * swork.bxp is NULL — if Itemselect dispatches,
+             * bhSysCallItemselect's StatusMain → SpriteOnOff
+             * dereferences st->bxp[127] (= NULL + 0x1FC) and segfaults.
              *
-             * Normal New Game gets ts_flg=0 (all tasks unsuspended) so
-             * gameplay can run. The real PS2 typewriter/event chain
-             * would do this more gradually but we don't have it
-             * compiled yet. */
-            sys->ts_flg = (sys->gm_mode == 3) ? 0x200 : 0;
+             * The real PS2 game keeps Itemselect suspended during normal
+             * gameplay and only unsuspends it when the player opens the
+             * inventory (probably handled in bhSysCallGame on button
+             * press; we don't have that path wired up yet). Keeping it
+             * suspended here lets the game world render without crashing;
+             * inventory-open from gameplay is a separate problem. */
+            sys->ts_flg = 0x200;
             sys->mvi_md = 7;
 
             recvx_log("game",
