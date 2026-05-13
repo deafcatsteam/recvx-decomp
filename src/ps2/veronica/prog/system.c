@@ -429,19 +429,29 @@ void bhSysCallOpening()
      * cinematic instead of a black screen. */
     {
         extern void recvx_log(const char* tag, const char* fmt, ...);
+        extern int g_recvx_battle_mode;
         static int mv000_kicked = 0;
         if (!mv000_kicked) {
             mv000_kicked = 1;
+            /* Battle Mode (gm_mode==3, set either by adv.c when the user
+             * picks Extra Game in the title menu, or by g_recvx_battle_mode
+             * when launched with --battle) skips the opening cinematic
+             * entirely. Kick the Movie task with mvi_md=6 so it dispatches
+             * straight to the post-movie case-6 hook without calling
+             * PlayStartMovieEx — no FMV plays. Normal New Game keeps
+             * mvi_md=0 to play MV_000. */
+            int skip_movie = (sys->gm_mode == 3) || g_recvx_battle_mode;
             sys->mvi_no  = 0;
             sys->mvi_tp  = 0;
-            sys->mvi_md  = 0;
+            sys->mvi_md  = skip_movie ? 6 : 0;
             sys->mvi_tsb = sys->ts_flg;       /* restored at mvi_md=6 */
             sys->mvi_spb = sys->sp_flg;
             sys->ts_flg &= ~0x1000;           /* unsuspend Movie task */
             sys->ts_flg |= 0x7CF00;            /* match real Event-task setup */
             recvx_log("game",
-                "bhSysCallOpening port-shortcut: kicked MV_000 (tk=0x%08x ts=0x%08x)",
-                sys->tk_flg, sys->ts_flg);
+                "bhSysCallOpening port-shortcut: kicked %s (tk=0x%08x ts=0x%08x gm_mode=%d)",
+                skip_movie ? "(skip-to-case6 for Battle Mode)" : "MV_000",
+                sys->tk_flg, sys->ts_flg, sys->gm_mode);
         }
     }
 #endif
@@ -1250,19 +1260,27 @@ void bhSysCallMovie()
             extern void recvx_log(const char* tag, const char* fmt, ...);
             extern int g_recvx_battle_mode;
 
-            sys->ts_flg = 0;
-            sys->mvi_md = 7;
-
-            /* --battle: jump straight to Battle Mode by forcing
-             * sys->gm_mode = 3 here, bypassing the title menu's Extra
-             * Game gate entirely. The title menu also surfaces Extra
-             * Game (see adv.c's ExtraFlag), so this CLI shortcut is
-             * just for one-key launching. */
+            /* --battle: force gm_mode=3 here so the rest of this hook
+             * (and downstream task dispatch) sees Battle Mode. The
+             * title-menu path sets gm_mode=3 earlier in adv.c. */
             if (g_recvx_battle_mode) {
                 sys->gm_mode = 3;
                 recvx_log("game",
                     "--battle: forced sys->gm_mode = 3 (Battle Mode)");
             }
+
+            /* Battle Mode (gm_mode==3) never opens the inventory before
+             * StatusInit runs, so swork.bxp is NULL. If Itemselect (bit 9
+             * = 0x200) gets unsuspended here, bhSysCallItemselect's
+             * StatusMain path dereferences st->bxp[127] in SpriteOnOff
+             * and segfaults. Keep Itemselect suspended for Battle Mode.
+             *
+             * Normal New Game gets ts_flg=0 (all tasks unsuspended) so
+             * gameplay can run. The real PS2 typewriter/event chain
+             * would do this more gradually but we don't have it
+             * compiled yet. */
+            sys->ts_flg = (sys->gm_mode == 3) ? 0x200 : 0;
+            sys->mvi_md = 7;
 
             recvx_log("game",
                 "bhSysCallMovie case 6 done — tk=0x%08x ts=0x%08x gm_mode=%d",
