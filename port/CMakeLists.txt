@@ -20,6 +20,15 @@ set(CMAKE_CXX_STANDARD 17)
 if(MSVC)
     add_compile_options(/W3 /wd4244 /wd4267 /wd4305 /wd4018 /wd4101 /wd4133)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS _CRT_NONSTDC_NO_DEPRECATE)
+    # Strip /RTC1 from CMake's default Debug flags. PS2 decomp has if/else
+    # chains that leave locals uninit on paths the original game never
+    # exercised (e.g. KazuSet's `flg` switch only handles 0/1) — /RTCu
+    # (the uninit-read check inside /RTC1) fires a runtime popup on those
+    # false positives. /RTCs (stack frame check) goes too; not worth the
+    # split since the codebase is small and CRT heap checks still apply.
+    foreach(flag_var CMAKE_C_FLAGS_DEBUG CMAKE_CXX_FLAGS_DEBUG)
+        string(REGEX REPLACE "/RTC[^ ]*" "" ${flag_var} "${${flag_var}}")
+    endforeach()
 endif()
 
 # Port owns this preprocessor define so decomp source can branch on it later

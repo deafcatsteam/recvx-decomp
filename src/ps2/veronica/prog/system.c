@@ -429,18 +429,24 @@ void bhSysCallOpening()
      * cinematic instead of a black screen. */
     {
         extern void recvx_log(const char* tag, const char* fmt, ...);
+        extern int g_recvx_open_inventory;
         static int mv000_kicked = 0;
         if (!mv000_kicked) {
             mv000_kicked = 1;
             sys->mvi_no  = 0;
             sys->mvi_tp  = 0;
-            sys->mvi_md  = 0;
+            /* --inventory: jump straight to mvi_md=6 so the Movie task
+             * fires our case-6 inventory hook without ever calling
+             * PlayStartMovieEx/PlayMovieMain. Skips logos + opening FMV
+             * entirely. Normal boot keeps mvi_md=0 to play MV_000. */
+            sys->mvi_md  = g_recvx_open_inventory ? 6 : 0;
             sys->mvi_tsb = sys->ts_flg;       /* restored at mvi_md=6 */
             sys->mvi_spb = sys->sp_flg;
             sys->ts_flg &= ~0x1000;           /* unsuspend Movie task */
             sys->ts_flg |= 0x7CF00;            /* match real Event-task setup */
             recvx_log("game",
-                "bhSysCallOpening port-shortcut: kicked MV_000 (tk=0x%08x ts=0x%08x)",
+                "bhSysCallOpening port-shortcut: kicked %s (tk=0x%08x ts=0x%08x)",
+                g_recvx_open_inventory ? "(skip-to-case6 for --inventory)" : "MV_000",
                 sys->tk_flg, sys->ts_flg);
         }
     }
