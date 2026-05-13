@@ -469,18 +469,9 @@ void SetVolumeAdx2(unsigned int slot, float vol)   {
     recvx_adx_set_volume((int)slot, vol);
 }
 
-/* bh helpers not yet in a compiled .c. bhSetFontTexture is the first
- * resource-touching call in Adv_FirstWarningMessage mode 3 — logging
- * the pointer lets us see whether ap->ptr[0] (SYSTEM.AFS entry 1 payload)
- * actually survived the read. */
-void bhSetFontTexture(void* p) {
-    RX_LOG("bh", "bhSetFontTexture p=%p first8=%02x%02x%02x%02x%02x%02x%02x%02x",
-           p,
-           p ? ((unsigned char*)p)[0] : 0, p ? ((unsigned char*)p)[1] : 0,
-           p ? ((unsigned char*)p)[2] : 0, p ? ((unsigned char*)p)[3] : 0,
-           p ? ((unsigned char*)p)[4] : 0, p ? ((unsigned char*)p)[5] : 0,
-           p ? ((unsigned char*)p)[6] : 0, p ? ((unsigned char*)p)[7] : 0);
-}
+/* bhSetFontTexture has been moved to port/src/game_texture_stubs.c
+ * (which is in recvx_game and has full SYS_WORK / ef_tlist visibility).
+ * Linker resolves to the real impl there. */
 void bhReleaseFreeMemory(void* p)                  { (void)p; }
 
 /* Memory card — simulate a card present on port/slot 0 so NEW GAME is

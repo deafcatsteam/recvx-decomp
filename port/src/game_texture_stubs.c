@@ -858,20 +858,111 @@ void recvx_pump_pad(void) {
  * Called from main_pc.c per-frame, after recvx_pump_pad. */
 extern S_WORK swork;
 
+/* ------------------------------------------------------------------ */
+/* Real bhSetFontTexture: mirrors effect.c:115 without depending on    */
+/* effect.c's ef_info[] table. Loads SYSTEM.AFS file 1's PVP pack into */
+/* sys->ef_tlist so EVERY text draw (Adv menus, inventory tabs, status */
+/* messages, character names) has real font glyphs to sample.          */
+/* ------------------------------------------------------------------ */
+extern int  bhSetMemPvpTexture(void* tlist, unsigned char* dp, int);
+extern void recvx_log(const char* tag, const char* fmt, ...);
+
+void bhSetFontTexture(void* datp) {
+    extern SYS_WORK* sys;
+    if (!datp) {
+        recvx_log("bh", "bhSetFontTexture: NULL datp (no font load)");
+        return;
+    }
+    if (sys->ss_flg & 0x40) {
+        return;  /* idempotent — real impl gates on this same bit */
+    }
+    unsigned char* buf = (unsigned char*)datp;
+    int blksz = *(int*)buf;
+    unsigned char* dp = buf + 4;
+    /* Skip 4 effect data blocks (ef_info[] entries with flg & 1 in
+     * effect.c — hardcoded since that table isn't compiled). */
+    for (int i = 0; i < 4; ++i) {
+        dp += blksz;
+        blksz = *(int*)dp;
+        dp += 4;
+    }
+    /* 32-byte align relative to buf, not absolute pointer. bhGetFreeMemory
+     * uses calloc (16-byte alignment) on x64, so absolute-pointer alignment
+     * would land ~16 bytes past the intended file offset. */
+    int dp_off = (int)(dp - buf);
+    int aligned = (dp_off + 31) & ~31;
+    unsigned char* pvp = buf + aligned;
+
+    unsigned int magic = *(unsigned int*)pvp;
+    if (magic != 0x00494C50u && magic != 0x324D4954u) {
+        recvx_log("bh",
+            "bhSetFontTexture: magic check FAILED @off=%d magic=0x%08x",
+            aligned, magic);
+        return;
+    }
+    sys->ef_tlist.textures = sys->ef_tex;
+    sys->ef_tlist.nbTexture = 0;
+    sys->ef_ct = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
+    sys->ef_tlist.nbTexture = 4;
+    sys->ss_flg |= 0x40;
+    recvx_log("bh",
+        "bhSetFontTexture OK: pvp @off=%d magic=0x%08x -> %d textures",
+        aligned, magic, sys->ef_ct);
+}
+
+/* Load ITEM1.AFS file 145 — the inventory texture pack — into sys->subtxp
+ * and run SbsTextureInit so swork.subtx_list gets populated. bup_00.c does
+ * this in the real game (line 292: sys->subtxp = sys->memp; then
+ * SbsTextureInit fires from a later state) but bup_00 isn't compiled.
+ * One-shot: only does the load if sys->subtxp is still NULL. */
+extern void SbsTextureInit(void);
+extern int  RequestReadInsideFile(unsigned int, unsigned int, void*);
+extern int  GetInsideFileSize(unsigned int, unsigned int);
+extern void* bhGetFreeMemory(unsigned int, int);
+extern void  recvx_log(const char* tag, const char* fmt, ...);
+
+static void port_load_inventory_textures(void) {
+    extern SYS_WORK* sys;
+    if (sys->subtxp) return;  /* already loaded */
+    int sz = GetInsideFileSize(sys->itm_partid, 145);
+    if (sz <= 0) {
+        recvx_log("game",
+            "port inv-tex: ITEM1.AFS/145 missing (sz=%d, partid=%d)",
+            sz, sys->itm_partid);
+        return;
+    }
+    void* buf = bhGetFreeMemory((unsigned)sz, 32);
+    if (!buf) {
+        recvx_log("game", "port inv-tex: bhGetFreeMemory(%d) FAILED", sz);
+        return;
+    }
+    if (RequestReadInsideFile(sys->itm_partid, 145, buf) != 0) {
+        recvx_log("game", "port inv-tex: AFS read failed for partid=%d id=145",
+                  sys->itm_partid);
+        return;
+    }
+    sys->subtxp = (unsigned char*)buf;
+    SbsTextureInit();
+    recvx_log("game",
+        "port inv-tex: loaded ITEM1.AFS/145 (%d B) + SbsTextureInit done", sz);
+}
+
 void recvx_port_check_inventory_toggle(void) {
     extern SYS_WORK* sys;
     /* Press, not held — edge-triggered. */
     if (!(Pad[0].press & 0x10)) return;
-    /* Already open (or in process of opening)? Don't re-fire. */
-    if (!(sys->ts_flg & 0x200)) return;
-    /* Unsuspend Itemselect + arm ItemTaskCheck's init branch. The init
-     * branch (sub1.c:3041) is what calls CallSystemSe(0,3), njSetScreen,
-     * StatusInit indirectly via subscreenmode bits. Without subscreenmode
-     * bit 0x40 set, ItemTaskCheck takes the gameplay branch and skips
-     * init — leaving swork.bxp NULL and crashing in SpriteOnOff. */
+
+    /* Always re-arm on press. Earlier check `if (!(ts_flg & 0x200)) return`
+     * meant Triangle worked only once: after the in-game close path, our
+     * compiled subset doesn't always restore ts_flg | 0x200 (the suspend
+     * code at sub1.c:3145 lives inside a `statusflg & 0x80000 && taskloop ==
+     * 4 && mn_md0 == 0` branch that requires player state we don't run).
+     * Unconditionally clearing ts_flg and arming subscreenmode lets a
+     * second press re-trigger ItemTaskCheck's init even when Itemselect
+     * is technically still dispatching with no inventory visible. */
+    port_load_inventory_textures();
     sys->ts_flg &= ~0x200u;
     swork.subscreenmode |= 0x40;
-    extern void recvx_log(const char* tag, const char* fmt, ...);
     recvx_log("game",
         "port inventory toggle: cleared ts_flg bit 0x200, set subscreenmode 0x40");
 }
