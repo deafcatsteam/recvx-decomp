@@ -1228,15 +1228,15 @@ struct _anon33
 	float r;
 };
 
-void(*bhEne01_MoveTypeB)(BH_PWORK*)[16];
-void(*bhEne01_MoveMode2B)(BH_PWORK*)[17];
-void(*bhEne01_NageTypeB)(BH_PWORK*)[16];
+void(*bhEne01_MoveTypeB)(BH_PWORK*)[16];*/
+void (*bhEne01_MoveMode2B[17])(BH_PWORK*); // DATA
+/*void(*bhEne01_NageTypeB)(BH_PWORK*)[16];
 void(*bhEne01_NageMode2B)(BH_PWORK*)[4];
-void(*bhEne01_DamageTypeB)(BH_PWORK*)[16];
-void(*bhEne01_DamageMode2B)(BH_PWORK*)[17];
-void(*bhEne01_DieTypeB)(BH_PWORK*)[16];
-void(*bhEne01_DieMode2B)(BH_PWORK*)[4];
-BH_PWORK* plp;
+void(*bhEne01_DamageTypeB)(BH_PWORK*)[16];*/
+void (*bhEne01_DamageMode2B[17])(BH_PWORK*); // DATA
+/*void(*bhEne01_DieTypeB)(BH_PWORK*)[16];*/
+void (*bhEne01_DieMode2B[4])(BH_PWORK*); // DATA
+/*BH_PWORK* plp;
 _anon9* sys;
 _anon23 en01_BldTbl;
 
@@ -1258,17 +1258,15 @@ void bhEne01_DG13B(BH_PWORK* epw);
 void bhEne01_DD02B(BH_PWORK* epw);
 void bhEne01_RotNeck(BH_PWORK* epw, int neck_no, BH_PWORK* ply, int ply_neck_no);
 int bhEne01_SideRotNeck(BH_PWORK* epw, int neck_no, _anon14* trg, int neck_ry, int neck_ry_max, int ang);
-int bhSearchPlayer2(BH_PWORK* epw, _anon14* pp, int pp_r, int r);
+int bhSearchPlayer2(BH_PWORK* epw, _anon14* pp, int pp_r, int r);*/
 
-// 
-// Start address: 0x18a460
+// 100% matching!
 void bhEne01_Dummy()
 {
-	// Line 101, Address: 0x18a460, Func Offset: 0
-	// Func End, Address: 0x18a468, Func Offset: 0x8
+	
 }
 
-// 
+/*// 
 // Start address: 0x18a470
 void bhEne01_Brain02B(BH_PWORK* epw)
 {
@@ -1287,17 +1285,15 @@ void bhEne01_Brain02B(BH_PWORK* epw)
 	// Line 281, Address: 0x18a4fc, Func Offset: 0x8c
 	// Line 284, Address: 0x18a50c, Func Offset: 0x9c
 	// Func End, Address: 0x18a51c, Func Offset: 0xac
-}
+}*/
 
-// 
-// Start address: 0x18a520
+// 100% matching!
 void bhEne01_MVType00B(BH_PWORK* epw)
 {
-	// Line 301, Address: 0x18a520, Func Offset: 0
-	// Func End, Address: 0x18a540, Func Offset: 0x20
+	bhEne01_MoveMode2B[epw->mode2](epw);
 }
 
-// 
+/*// 
 // Start address: 0x18a540
 void bhEne01_MVType02B(BH_PWORK* epw)
 {
@@ -1437,41 +1433,33 @@ void bhEne01_NG03B(BH_PWORK* epw)
 	// Line 563, Address: 0x18ab1c, Func Offset: 0x37c
 	// Line 567, Address: 0x18ab20, Func Offset: 0x380
 	// Func End, Address: 0x18ab38, Func Offset: 0x398
-}
+}*/
 
-// 
-// Start address: 0x18ab40
+// 100% matching!
 void bhEne01_DGType00B(BH_PWORK* epw)
 {
-	// Line 586, Address: 0x18ab40, Func Offset: 0
-	// Func End, Address: 0x18ab60, Func Offset: 0x20
+	bhEne01_DamageMode2B[epw->mode2](epw);
 }
 
-// 
-// Start address: 0x18ab60
+// 100% matching!
 void bhEne01_DGType02B(BH_PWORK* epw)
 {
-	// Line 604, Address: 0x18ab60, Func Offset: 0
-	// Func End, Address: 0x18ab80, Func Offset: 0x20
+	bhEne01_DamageMode2B[epw->mode2 + 10](epw);
 }
 
-// 
-// Start address: 0x18ab80
+// 100% matching!
 void bhEne01_DDType00B(BH_PWORK* epw)
 {
-	// Line 625, Address: 0x18ab80, Func Offset: 0
-	// Func End, Address: 0x18aba0, Func Offset: 0x20
+	bhEne01_DieMode2B[epw->mode2](epw);
 }
 
-// 
-// Start address: 0x18aba0
+// 100% matching!
 void bhEne01_DDType02B(BH_PWORK* epw)
 {
-	// Line 643, Address: 0x18aba0, Func Offset: 0
-	// Func End, Address: 0x18abc0, Func Offset: 0x20
+	bhEne01_DieMode2B[epw->mode2](epw);
 }
 
-// 
+/*// 
 // Start address: 0x18abc0
 void bhEne01_DG05B(BH_PWORK* epw)
 {
@@ -1890,4 +1878,3 @@ int bhSearchPlayer2(BH_PWORK* epw, _anon14* pp, int pp_r, int r)
 	// Line 1385, Address: 0x18bc44, Func Offset: 0x64
 	// Func End, Address: 0x18bc64, Func Offset: 0x84
 }*/
-

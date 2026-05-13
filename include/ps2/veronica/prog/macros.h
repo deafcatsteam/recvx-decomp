@@ -33,4 +33,20 @@
 #define SET_VEC4_AT(_src, _off, _data) (*((u_long128*)(((unsigned char*)(_src)) + _off)) = *(u_long128*)_data)
 #define SET_DATA_AT(_src, _off, _type, _data) (*((_type*)(((unsigned char*)(_src)) + _off)) = _data)
 
+#define EXP0_UC(o) (*(unsigned char  *)((char *)epw->exp0 + (o)))
+#define EXP0_S(o) (*(short *)((char *)epw->exp0 + (o)))
+#define EXP0_I(o) (*(int   *)((char *)epw->exp0 + (o)))
+#define EXP0_F(o) (*(float *)((char *)epw->exp0 + (o)))
+
+#define EXP1_C(o) (*(char  *)((char *)plp->exp1 + (o)))
+#define EXP1_S(o) (*(short *)((char *)plp->exp1 + (o)))
+#define EXP1_I(o) (*(int   *)((char *)plp->exp1 + (o)))
+#define EXP1_F(o) (*(float *)((char *)plp->exp1 + (o)))
+
+#define EP_EXP0_I(o) (*(int   *)((char *)ep->exp0 + (o)))
+
+#define PREFETCH(_v) asm("pref 0x0,0(%0)": : "r"(_v) : "memory")
+
+#define SCE_GIF_PRIM(prim, iip, tme, fge, abe, aa1, fst, ctxt, fix) SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(prim, iip, tme, fge, abe, aa1, fst, ctxt, fix), 0, 0)
+
 #endif

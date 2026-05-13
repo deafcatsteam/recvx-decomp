@@ -3718,7 +3718,7 @@ ATR_WORK* bhCheckDansaAtari(int flr_no, float px, float pz)
     return NULL;
 }
 
-/*// 
+// 
 // Start address: 0x267a50
 void bhCheckFloorP(BH_PWORK* pp)
 {
@@ -3731,7 +3731,7 @@ void bhCheckFloorP(BH_PWORK* pp)
 	float pz;
 	float py;
 	float px;
-	_anon0* fp;
+	//_anon0* fp;
 	// Line 4212, Address: 0x267a50, Func Offset: 0
 	// Line 4219, Address: 0x267a68, Func Offset: 0x18
 	// Line 4220, Address: 0x267a6c, Func Offset: 0x1c
@@ -3818,7 +3818,8 @@ void bhCheckFloorP(BH_PWORK* pp)
 	// Line 4324, Address: 0x268014, Func Offset: 0x5c4
 	// Line 4327, Address: 0x268024, Func Offset: 0x5d4
 	// Func End, Address: 0x268040, Func Offset: 0x5f0
-}*/
+	scePrintf("bhCheckFloorP - UNIMPLEMENTED!\n");
+}
 
 // 
 // Start address: 0x268040
@@ -3911,15 +3912,15 @@ _anon0* bhCheckFloorEnemy(int flr_no, float px, float pz)
 	// Line 4431, Address: 0x268410, Func Offset: 0x110
 	// Line 4432, Address: 0x268414, Func Offset: 0x114
 	// Func End, Address: 0x26841c, Func Offset: 0x11c
-}
+}*/
 
 // 
 // Start address: 0x268420
-_anon0* bhCheckFloorEffect(int flr_no, float px, float pz)
+ATR_WORK* bhCheckFloorEffect(int flr_no, float px, float pz)
 {
 	int flr_n;
 	int i;
-	_anon0* fp;
+	//_anon0* fp;
 	// Line 4448, Address: 0x268420, Func Offset: 0
 	// Line 4449, Address: 0x268444, Func Offset: 0x24
 	// Line 4452, Address: 0x268454, Func Offset: 0x34
@@ -3931,7 +3932,8 @@ _anon0* bhCheckFloorEffect(int flr_no, float px, float pz)
 	// Line 4460, Address: 0x268530, Func Offset: 0x110
 	// Line 4461, Address: 0x268534, Func Offset: 0x114
 	// Func End, Address: 0x26853c, Func Offset: 0x11c
-}*/
+	scePrintf("bhCheckFloorEffect - UNIMPLEMENTED!\n");
+}
 
 // 
 // Start address: 0x268540
