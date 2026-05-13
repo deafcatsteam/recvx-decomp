@@ -429,24 +429,18 @@ void bhSysCallOpening()
      * cinematic instead of a black screen. */
     {
         extern void recvx_log(const char* tag, const char* fmt, ...);
-        extern int g_recvx_open_inventory;
         static int mv000_kicked = 0;
         if (!mv000_kicked) {
             mv000_kicked = 1;
             sys->mvi_no  = 0;
             sys->mvi_tp  = 0;
-            /* --inventory: jump straight to mvi_md=6 so the Movie task
-             * fires our case-6 inventory hook without ever calling
-             * PlayStartMovieEx/PlayMovieMain. Skips logos + opening FMV
-             * entirely. Normal boot keeps mvi_md=0 to play MV_000. */
-            sys->mvi_md  = g_recvx_open_inventory ? 6 : 0;
+            sys->mvi_md  = 0;
             sys->mvi_tsb = sys->ts_flg;       /* restored at mvi_md=6 */
             sys->mvi_spb = sys->sp_flg;
             sys->ts_flg &= ~0x1000;           /* unsuspend Movie task */
             sys->ts_flg |= 0x7CF00;            /* match real Event-task setup */
             recvx_log("game",
-                "bhSysCallOpening port-shortcut: kicked %s (tk=0x%08x ts=0x%08x)",
-                g_recvx_open_inventory ? "(skip-to-case6 for --inventory)" : "MV_000",
+                "bhSysCallOpening port-shortcut: kicked MV_000 (tk=0x%08x ts=0x%08x)",
                 sys->tk_flg, sys->ts_flg);
         }
     }
@@ -954,69 +948,6 @@ void bhSysCallItemselect()
     if (!(sys->ts_flg & 0x200))
     {
         StatusMain();
-#ifdef RECVX_PC_PORT
-        /* One-shot fixup for --inventory shortcut. Set by case-6 hook,
-         * applied right after the first StatusMain runs (which calls
-         * CenterPositionInit + StatusInit and stamps statusflg). We:
-         *   - jump cen_pos[i] to its slide-in TARGET so the panel sits
-         *     where it should immediately, instead of off-screen left
-         *     for 8 frames; SpriteH then sees the start==target case
-         *     and the animation no-ops.
-         *   - clear statusflg bits 0x80 (pulse-anim opaque-black panel)
-         *     and 0x2000 (slide-in trigger). MultiWindowBack now draws
-         *     the dark-blue 0xFF000030 panel instead of black-on-black. */
-        extern int g_recvx_inventory_force_target_pos;
-        if (g_recvx_inventory_force_target_pos) {
-            extern float cen_pos[12][6];
-            extern float cen_pos99[12][6];
-            for (int i = 0; i < 12; ++i) {
-                cen_pos[i][0] = cen_pos99[i][2];
-                cen_pos[i][1] = cen_pos99[i][3];
-            }
-            extern S_WORK swork;
-            swork.statusflg &= ~(0x80 | 0x2000);
-
-            /* Background tile fade-in: parts_07b[0..5] are the 6 tiles
-             * making up the wooden-bg / metal-grid background. They
-             * initialize at col=(a=1,r=0,g=0,b=0) (transparent black)
-             * and BGFadeIn ramps RGB to ~1.0 over 17 frames, gated on
-             * statusflg & 0x1. Our hook clears statusflg so BGFadeIn
-             * never runs; force the tiles to full-white opacity so the
-             * background texture shows up immediately. */
-            extern PARTS parts_07b[8];
-            for (int i = 0; i < 6; ++i) {
-                parts_07b[i].col.r = 1.0f;
-                parts_07b[i].col.g = 1.0f;
-                parts_07b[i].col.b = 1.0f;
-                parts_07b[i].col.a = 1.0f;
-                parts_07b[i].atr |= 0x20;
-            }
-
-            /* parts_22b is only iterated through filescreen[1] in the
-             * FILE tab (subscreenmode=0x80) -- not our main grid path
-             * (0x2). Whatever sprite is supposed to fill the
-             * full-screen wireframe-grid bg in subscreenmode=0x2 is
-             * still unidentified; pulling more upstream code or
-             * additional decomp output is needed to find it. */
-
-            /* Apply ItemTaskCheck's njSetScreen + njSetAspect setup that
-             * our shortcut bypassed. Without this every sprite renders
-             * against the default 320x240 origin, putting the inventory
-             * ~75px off (down-and-right of where it should be). The
-             * 235,224 / 352x184 viewport at dist=500 is the inventory's
-             * canonical projection (sub1.c:2872 in ItemTaskCheck). */
-            swork.scr.dist = 500.0f;
-            swork.scr.w    = 352.0f;
-            swork.scr.h    = 184.0f;
-            swork.scr.cx   = 235.0f;
-            swork.scr.cy   = 224.0f;
-            njSetScreen(&swork.scr);
-            njSetAspect(1.0f, 1.0f);
-
-            recvx_log("game", "--inventory: applied target-pos + cleared statusflg 0x80|0x2000 + njSetScreen(235,224)");
-            g_recvx_inventory_force_target_pos = 0;
-        }
-#endif
     }
     else
     {
@@ -1314,292 +1245,28 @@ void bhSysCallMovie()
          * would let the typewriter/event scripts unsuspend Game and start
          * gameplay. Until that chain is compiled, clear the suspends on
          * Game/Event/Map/Typewriter/Option so bhSysCallGame can run and
-         * we at least try to render something in-game. mvi_md advances
-         * past 6 so this hook only fires once per kicked movie. */
+         * mvi_md advances past 6 so this hook only fires once. */
         {
             extern void recvx_log(const char* tag, const char* fmt, ...);
+            extern int g_recvx_battle_mode;
 
-            /* Phase 3 staged opening sequence: hold case 6 firing for
-             * a "dark cell" period before opening the inventory, so we
-             * mimic the real game's pacing. mvi_md stays at 6 (this
-             * case re-fires each frame) until init runs at stage 2;
-             * then mvi_md=7 stops re-entry. Other tasks stay suspended
-             * via ts_flg manipulation so Game/Itemselect don't try to
-             * advance during the dark-cell delay. */
-            extern int g_recvx_open_inventory;
-            extern int g_recvx_opening_stage;
-            extern int g_recvx_opening_stage_ct;
+            sys->ts_flg = 0;
+            sys->mvi_md = 7;
 
-            if (!g_recvx_open_inventory) {
-                /* No --inventory flag: keep original immediate flow.
-                 * Game task takes over and runs whatever post-MV_000
-                 * logic exists. */
-                sys->ts_flg = 0;
-                sys->mvi_md = 7;
-
-                /* --battle: jump straight to Battle Mode by forcing
-                 * sys->gm_mode = 3 here. The Game task / title flow
-                 * normally requires the player to navigate Title ->
-                 * Extra Game -> Player Select to reach this state, but
-                 * the CLI shortcut bypasses the menu. */
-                extern int g_recvx_battle_mode;
-                if (g_recvx_battle_mode) {
-                    sys->gm_mode = 3;
-                    recvx_log("game",
-                        "--battle: forced sys->gm_mode = 3 (Battle Mode)");
-                }
-
+            /* --battle: jump straight to Battle Mode by forcing
+             * sys->gm_mode = 3 here, bypassing the title menu's Extra
+             * Game gate entirely. The title menu also surfaces Extra
+             * Game (see adv.c's ExtraFlag), so this CLI shortcut is
+             * just for one-key launching. */
+            if (g_recvx_battle_mode) {
+                sys->gm_mode = 3;
                 recvx_log("game",
-                    "bhSysCallMovie case 6 done — tk=0x%08x ts=0x%08x gm_mode=%d",
-                    sys->tk_flg, sys->ts_flg, sys->gm_mode);
-                break;
+                    "--battle: forced sys->gm_mode = 3 (Battle Mode)");
             }
 
-            /* --inventory mode: run staged opening sequence. */
-            if (g_recvx_opening_stage == 0) {
-                g_recvx_opening_stage = 1;
-                g_recvx_opening_stage_ct = 0;
-                /* Suspend every task EXCEPT Movie (bit 12 = 0x1000) so
-                 * we get a clean black screen during the dark-cell delay
-                 * and case 6 keeps firing next frame. */
-                sys->ts_flg = 0xFFFFEFFF;
-                recvx_log("game",
-                    "--inventory: stage 0->1 (dark cell, %d-frame delay)", 90);
-            } else if (g_recvx_opening_stage == 1) {
-                g_recvx_opening_stage_ct++;
-                sys->ts_flg = 0xFFFFEFFF;  /* hold all but Movie suspended */
-                if (g_recvx_opening_stage_ct >= 90) {
-                    g_recvx_opening_stage = 2;
-                    recvx_log("game",
-                        "--inventory: stage 1->2 (opening inventory after %d frames)",
-                        g_recvx_opening_stage_ct);
-                }
-            }
-
-            /* When stage advances to 2, run the inventory init below. */
-            if (g_recvx_opening_stage == 2) {
-                extern S_WORK swork;
-                /* parts_07b is declared as `PARTS parts_07b[8];` (no
-                 * initializer), so all 8 elements zero-init and anim=0.
-                 * StatusInit's `for (pb = sprset[num1]; pb->anim != -1;
-                 * pb++)` loop walks past the array end and crashes when
-                 * it hits .text/.rdata. On real PS2 some uncompiled init
-                 * function (game.c?) populates parts_07b's anim with a
-                 * real terminator. Stamp the sentinel ourselves. */
-                extern PARTS parts_07b[8];
-                parts_07b[0].anim = -1;
-
-                /* Pre-load the inventory texture pack (ITEM1.AFS file
-                 * 145) into sys->subtxp and call SbsTextureInit so the
-                 * inventory's swork.subtx_list gets populated with real
-                 * TIM2 textures. This is what bhSysCallMonitor case 5
-                 * mn_md1=1..3 normally does — but our --inventory short
-                 * circuit lands directly in the inventory state without
-                 * routing through Monitor's loading sequence. */
-                {
-                    int sz = GetInsideFileSize(sys->itm_partid, 145);
-                    if (sz > 0) {
-                        void* buf = bhGetFreeMemory((unsigned)sz, 32);
-                        if (buf) {
-                            RequestReadInsideFile(sys->itm_partid, 145, buf);
-                            sys->subtxp = (unsigned char*)buf;
-                            SbsTextureInit();
-                            recvx_log("game",
-                                "--inventory: loaded ITEM1.AFS/145 (%d B) into subtxp, SbsTextureInit done",
-                                sz);
-                        }
-                    } else {
-                        recvx_log("game",
-                            "--inventory: ITEM1.AFS file 145 missing (sz=%d, partid=%d)",
-                            sz, sys->itm_partid);
-                    }
-                }
-
-                /* Load font texture pack from SYSTEM.AFS file 1.
-                 * Replicates bhSetFontTexture (effect.c:115) since
-                 * pulling effect.c into the build transitively requires
-                 * ~250 unresolved bhEff* / 3D symbols.
-                 *
-                 * File 1 layout: [size1][effect_data1][size2][effect_data2]
-                 *   ...[sizeN][effect_dataN][32-byte align][pvp pack]
-                 *
-                 * Only entries in ef_info[] with flg&1 carry inline data
-                 * blocks. Looking at effect.c:38, ef_info has 4 such
-                 * entries (indices 0, 1, 7, 13). After walking past those
-                 * 4 size-prefixed blocks and aligning to 32 bytes, the
-                 * remaining bytes are the pvp font/effect texture pack. */
-                if (sys->ef_tlist.nbTexture == 0) {
-                    int sz = GetInsideFileSize(sys->sys_partid, 1);
-                    if (sz > 0) {
-                        unsigned char* buf = (unsigned char*)bhGetFreeMemory((unsigned)sz, 64);
-                        if (buf && RequestReadInsideFile(sys->sys_partid, 1, buf) == 0) {
-                            /* Walk past 4 effect data blocks, mirroring
-                             * bhSetFontTexture's loop. */
-                            int blksz = *(int*)buf;
-                            unsigned char* dp = buf + 4;
-                            int nblocks = 4; /* ef_info entries with flg&1 */
-                            recvx_log("game", "--inventory: SYSTEM.AFS/1 walk: initial blksz=%d (0x%x) sz=%d", blksz, (unsigned)blksz, sz);
-                            for (int b = 0; b < nblocks; ++b) {
-                                dp += blksz;
-                                int off_now = (int)(dp - buf);
-                                if (off_now < 0 || off_now + 4 > sz) {
-                                    recvx_log("game", "--inventory: walk b=%d went out of bounds off=%d", b, off_now);
-                                    blksz = -1;
-                                    break;
-                                }
-                                blksz = *(int*)dp;
-                                recvx_log("game", "--inventory: walk b=%d off=%d next blksz=%d (0x%x)", b, off_now, blksz, (unsigned)blksz);
-                                dp += 4;
-                            }
-                            if (blksz == -1) goto skip_font_load;
-                            /* 32-byte align the offset within buf, not
-                             * the absolute address. The original PS2
-                             * code aligned absolute pointers, but our
-                             * bhGetFreeMemory uses calloc which returns
-                             * only 16-byte alignment -- absolute-address
-                             * alignment then lands ~16 bytes past the
-                             * intended file offset (we measured 8464
-                             * instead of 8448 due to buf being at
-                             * base+16 within its 32-byte slot). */
-                            int dp_off = (int)(dp - buf);
-                            int off = (dp_off + 31) & ~31;
-                            unsigned char* pvp = buf + off;
-                            if (off + 32 < sz) {
-                                /* Sanity: pvp must start with PLI or TIM2
-                                 * magic. Otherwise we landed in the wrong
-                                 * place and bhSetMemPvpTexture would
-                                 * walk into garbage and crash. */
-                                unsigned int magic = *(unsigned int*)pvp;
-                                if (magic == 0x00494C50u || magic == 0x324D4954u) {
-                                    sys->ef_tlist.textures = sys->ef_tex;
-                                    sys->ef_tlist.nbTexture = 0;
-                                    int n = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
-                                    sys->ef_tlist.nbTexture = (n < 4) ? n : 4;
-                                    recvx_log("game",
-                                        "--inventory: font textures from SYSTEM.AFS/1 "
-                                        "@offset %d magic=0x%08x -> %d total, "
-                                        "%d clamped for fonts",
-                                        off, magic, n, sys->ef_tlist.nbTexture);
-                                } else {
-                                    recvx_log("game",
-                                        "--inventory: pvp magic check FAILED "
-                                        "@offset %d magic=0x%08x (expected PLI=0x00494C50 "
-                                        "or TIM2=0x324D4954) -- skipping font load",
-                                        off, magic);
-                                }
-                            } else {
-                                recvx_log("game",
-                                    "--inventory: walked past file end finding pvp pack "
-                                    "(off=%d sz=%d)", off, sz);
-                            }
-                            skip_font_load: ;
-                        }
-                    }
-                }
-
-                /* message.c's FontScaleX/Y/CR default to 0.0 (BSS).
-                 * They're set by bhFontScaleSet which lives in
-                 * ps2_LoadScreen / ps2_SaveScreen / ps2_SystemLoadScreen
-                 * -- none of which are in our build. Without this,
-                 * every bhDispFont quad collapses to zero-area at one
-                 * font scale and renders garbage at others. Force 1.0
-                 * for the inventory's standard text size. */
-                {
-                    extern float FontScaleX, FontScaleY, FontScaleCR;
-                    FontScaleX = 1.0f;
-                    FontScaleY = 1.0f;
-                    FontScaleCR = 1.0f;
-                    recvx_log("game",
-                        "--inventory: forced FontScaleX/Y/CR = 1.0 "
-                        "(message.c BSS defaults are 0.0 -> zero-area glyphs)");
-                }
-
-                /* Load sysmes.ald (the message text bundle) from the
-                 * ISO so message.c's bhDispItemName + bhDispMessage have
-                 * real text data. bhSysCallMonitor case 5 mn_md1=1
-                 * normally does this; our shortcut bypasses it. */
-                if (sys->mes_ip == NULL) {
-                    extern int GetIsoFileSize(const char*);
-                    extern int RequestReadIsoFile(const char*, void*);
-                    int sz = GetIsoFileSize("sysmes.ald");
-                    if (sz > 0) {
-                        void* buf = bhGetFreeMemory((unsigned)sz, 32);
-                        if (buf) {
-                            if (RequestReadIsoFile("sysmes.ald", buf) == 0) {
-                                sys->mes_ip = (unsigned int*)buf;
-                                recvx_log("game",
-                                    "--inventory: loaded sysmes.ald (%d B) into mes_ip",
-                                    sz);
-                            } else {
-                                recvx_log("game",
-                                    "--inventory: sysmes.ald read FAILED "
-                                    "(file present, size=%d)", sz);
-                            }
-                        }
-                    } else {
-                        recvx_log("game",
-                            "--inventory: sysmes.ald not on ISO; item names blank");
-                    }
-                }
-
-                swork.subscreenmode = 1;
-                /* DON'T set cb_flg | 0x10 - that routes StatusMain
-                 * case 0x1 through the "got-item pickup" branch
-                 * (subscreenmode=8, single big-icon display). For the
-                 * full inventory grid we want the `flgtest == 0`
-                 * fall-through, which sets subscreenmode=2 and runs
-                 * StatusInit + the main case 0x2 path next frame
-                 * (MultiWindowBack + full sprite iterator). */
-                swork.flgtest = 0;
-                /* Suspend Option task (bit 16). The same task loop frame
-                 * that fires this case-6 hook continues iterating to
-                 * Option (bit 16 > Movie bit 12) — bhSysCallOption sees
-                 * tk_flg & 0x80 (Game active) and enters its "open
-                 * options" branch with opt_md0=0 → ts_flg |= 0x180 →
-                 * Adv_GameOptionScreen takes over. Suspending bit 16
-                 * lets Itemselect (bit 9) dispatch on the next frame
-                 * with our subscreenmode=1 fresh in place. */
-                sys->ts_flg = 0x10000;
-
-                /* Skip the slide-in animation + dark panel.
-                 * StatusInit (called from case 0x1's flgtest==0 branch)
-                 * sets statusflg |= 0x10A080 — bit 7 (0x80) keeps
-                 * MultiWindowBack drawing as opaque BLACK (the "menu
-                 * pulse opening" placeholder), and bit 13 (0x2000)
-                 * triggers SpriteH's 8-frame slide-in from
-                 * cen_pos99[i][0..1] to cen_pos99[i][2..3]. Pre-clear
-                 * those bits (StatusInit's |= leaves anything we set
-                 * after it intact) and pre-set every cen_pos[i] to its
-                 * target so we get the dark-blue panel sitting at the
-                 * end-of-animation position immediately.
-                 *
-                 * Done as a deferred-apply via a flag the next-frame
-                 * Itemselect dispatch reads; setting cen_pos here would
-                 * be overwritten by CenterPositionInit() that runs
-                 * inside case 0x1. We therefore force the post-init
-                 * fixup via a dedicated helper called from
-                 * bhSysCallItemselect's port hook (next chunk below).
-                 */
-                extern int g_recvx_inventory_force_target_pos;
-                g_recvx_inventory_force_target_pos = 1;
-
-                /* Inventory-open SE. ItemTaskCheck's full-init branch
-                 * normally calls this when ts_flg & 0x200 was set at
-                 * entry — our shortcut bypasses that branch, so play
-                 * it manually. (0,3) is the same combo. */
-                extern void CallSystemSe(int, int);
-                CallSystemSe(0, 3);
-
-                recvx_log("game", "--inventory: forcing swork.subscreenmode=1, flgtest=0, ts_flg=0x10000 (Option suspended) + skip-anim + open-SE");
-
-                /* Advance stage past inventory init so case 6 doesn't
-                 * loop. mvi_md=7 stops the Movie task from re-entering
-                 * case 6. */
-                g_recvx_opening_stage = 4;
-                sys->mvi_md = 7;
-                recvx_log("game",
-                    "--inventory: stage 2->4 (inventory open, mvi_md=7)");
-            }
+            recvx_log("game",
+                "bhSysCallMovie case 6 done — tk=0x%08x ts=0x%08x gm_mode=%d",
+                sys->tk_flg, sys->ts_flg, sys->gm_mode);
         }
 #endif
         break;

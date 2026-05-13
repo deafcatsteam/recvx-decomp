@@ -2166,10 +2166,20 @@ int Adv_BioCvTitle()
         sys->ss_flg &= ~0x100000; 
         sys->ss_flg &= ~0x1000; 
 
-        if ((sys->ssd_flg & 0x1)) 
-        { 
-            ap->ExtraFlag = 1; 
+        if ((sys->ssd_flg & 0x1))
+        {
+            ap->ExtraFlag = 1;
         }
+#ifdef RECVX_PC_PORT
+        /* PC port: surface Battle Mode in the title menu unconditionally.
+         * The original game gates Extra Game behind ssd_flg & 0x1 which is
+         * only set after beating main game once and writing to VMC. With
+         * no save state on the port yet, force it on so the 4-option
+         * cursor (Load / New Game / Option / Extra Game) is always
+         * available. The --battle CLI shortcut is still useful for
+         * skipping straight in. */
+        ap->ExtraFlag = 1;
+#endif
         
         if (ap->ExtraFlag != 0)
         { 

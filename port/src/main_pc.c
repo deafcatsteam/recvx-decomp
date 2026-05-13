@@ -120,11 +120,9 @@ static void audio_sink_to_backend(void* opaque, int rate,
 
 static const char* g_iso_path      = NULL;
 static const char* g_gamedata_path = NULL;
-/* Default to "real game" flow: no flag required. The exe should run
- * normal release-style boot (logos -> opening FMV -> main menu) when
- * launched without args. --inventory and --battle are testing
- * shortcuts. Set to false only if a non-game mode is selected
- * (--gallery / --list-afs / --dump-afs / --play-movie). */
+/* Default to real-game flow (no flag required). Non-game inspection
+ * modes (--gallery / --list-afs / --dump-afs / --play-movie) flip
+ * this off when they parse. */
 static bool        g_run_game      = true;
 static int         g_msa_rate      = 0;   /* 0 = use Smpl-derived rate */
 static const char* g_se_remap_str  = NULL; /* "N:M[,N:M...]"; NULL → use msa_init defaults */
@@ -136,34 +134,13 @@ static bool        g_list_afs      = false;
 static int         g_dump_afs      = -1;  /* 0..6: extract every entry of AFS partition N */
 static const char* g_dump_afs_dir  = NULL; /* output dir for --dump-afs */
 static int         g_gallery       = -2;  /* -2 unset; -1 all parts; 0..6 specific */
-static bool        g_inventory     = false;  /* --inventory: force-open status screen post-MV_000 */
 static bool        g_battle_mode   = false;  /* --battle: launch into Battle Mode (gm_mode=3) */
 
-/* Read by system.c bhSysCallMovie case-6 port hook. int (not bool) so
- * the extern in C source compiles cleanly without including stdbool.h. */
-int g_recvx_open_inventory = 0;
-/* --battle launch flag readable from system.c hooks. Set by --battle CLI
- * arg. When true, our hooks force sys->gm_mode = 3 to land in Battle Mode
- * rather than normal play. Bypasses the title menu's "Extra Game" gate. */
+/* --battle launch flag readable from system.c hooks. When true the
+ * case-6 hook forces sys->gm_mode = 3 to land in Battle Mode without
+ * having to drive the title-menu cursor manually. The title menu also
+ * offers Extra Game now (see adv.c's ap->ExtraFlag = 1 override). */
 int g_recvx_battle_mode = 0;
-/* Phase 3 opening-sequence state machine. Drives a port-side scripted
- * sequence that mimics the real game's opening: post-MV_000 dark cell
- * scene -> "It's dark" text -> auto-open inventory -> equip lighter ->
- * lit scene placeholder. Each stage holds for N frames or until input.
- *  0 = MV_000 still playing or before
- *  1 = dark scene fade-in, text fading in
- *  2 = "It's dark" text visible, waiting for input/timeout
- *  3 = transitioning to inventory (open it)
- *  4 = inventory open (current shortcut behavior)
- *  5 = inventory closed, lit scene placeholder
- *  6 = sequence complete
- */
-int g_recvx_opening_stage = 0;
-int g_recvx_opening_stage_ct = 0;  /* per-stage frame counter */
-/* One-shot flag for the --inventory hook's deferred cen_pos + statusflg
- * fixup (applied after first StatusMain). See bhSysCallItemselect /
- * bhSysCallMovie case 6. Cleared by the apply path so it only runs once. */
-int g_recvx_inventory_force_target_pos = 0;
 
 /* Parse "N:M,N:M,..." and call recvx_msa_set_remap for each pair. Applied
  * AFTER recvx_msa_init so CLI values overwrite baked defaults, and use -1
@@ -223,15 +200,11 @@ static void parse_args(int argc, char** argv) {
                 g_gallery = -1;
             }
             g_run_game = false;
-        } else if (strcmp(argv[i], "--inventory") == 0) {
-            g_inventory = true;
-            g_run_game = true;
         } else if (strcmp(argv[i], "--battle") == 0) {
-            /* --battle: launch directly into Battle Mode by setting
-             * sys->gm_mode = 3 (the "Extra Game" path normally
-             * unlocked after beating the main game). Title menu's
-             * Extra Game cursor would normally also need to be
-             * unlocked, but a CLI shortcut bypasses that gate. */
+            /* --battle: skip the title menu and land directly in
+             * Battle Mode by setting sys->gm_mode = 3. The title
+             * menu now surfaces Battle Mode as a 4th option too, so
+             * this flag is just for one-key launching. */
             g_battle_mode = true;
             g_run_game = true;
         } else if (strcmp(argv[i], "--help") == 0) {
@@ -256,7 +229,7 @@ static void parse_args(int argc, char** argv) {
                    "                partitions and shows every embedded TIM2 inside\n"
                    "                ADV resource packs. With N, scans just partition N.\n"
                    "                arrows / Z-X keys / mouse-click side arrows to navigate\n"
-                   "  --inventory   --game + force-open inventory once gameplay starts\n");
+                   "  --battle      launch straight into Battle Mode (gm_mode=3) bypassing title\n");
             exit(0);
         }
     }
@@ -697,10 +670,8 @@ int main(int argc, char** argv) {
      * resolve loose-file MOVIE/MV_NNN.PSS paths. */
     recvx_set_gamedata_dir(g_gamedata_path);
 
-    /* Tell the system.c case-6 port hook whether to flip subscreenmode=1
-     * after MV_000 ends. Read by extern in src/ps2/veronica/prog/system.c. */
-    g_recvx_open_inventory = g_inventory ? 1 : 0;
-    g_recvx_battle_mode    = g_battle_mode ? 1 : 0;
+    /* Read by system.c bhSysCallMovie case-6 hook to force gm_mode=3. */
+    g_recvx_battle_mode = g_battle_mode ? 1 : 0;
 
     int rc;
     if (g_run_game) {
