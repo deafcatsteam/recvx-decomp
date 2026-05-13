@@ -564,6 +564,11 @@ static int run_game_loop(const recvx_backend* backend) {
         extern void recvx_pump_pad(void);
         recvx_pump_pad();
 
+        /* Port-only: Triangle (S key) opens the inventory during gameplay.
+         * No-op if Itemselect is already running. */
+        extern void recvx_port_check_inventory_toggle(void);
+        recvx_port_check_inventory_toggle();
+
         /* Sample AdvWork.Mode BEFORE njUserMain so we see the mode that
          * just crashed (if it does) in the log, then sample AFTER to
          * catch transitions. */

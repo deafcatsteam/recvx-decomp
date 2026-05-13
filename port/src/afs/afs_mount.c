@@ -35,7 +35,7 @@ static const char* g_afs_name[8] = {
     "ITEM1.AFS",    /* partition 4 */
     "MRY.AFS",      /* partition 5 */
     "SYSTEM.AFS",   /* partition 6 */
-    NULL,
+    "RDX_LNK.AFS",  /* partition 7 — holds all room files (rm_*.rdx) */
 };
 
 static recvx_afs_t* g_afs[8];
@@ -79,7 +79,7 @@ int MountSoundAfs(void) {
         return -1;
     }
     int opened = 0;
-    for (int i = 0; g_afs_name[i]; ++i) {
+    for (int i = 0; i < 8; ++i) {
         char path[512];
         snprintf(path, sizeof path, "%s/%s", g_gamedata, g_afs_name[i]);
         g_afs[i] = recvx_afs_open(path);
@@ -124,8 +124,57 @@ static int g_last_status = 0; /* 0 = idle/done, 1 = pending, -1 = error */
  * via recvx_iso_find against the open ISO, then read all sectors into dst.
  * Used by message.c bhSysCallMonitor case 5 (sysmes.ald), bup_00.c (item
  * descriptions), ranking.c, etc. */
+/* Case-insensitive ASCII compare (just the chars the rdx_files[] table
+ * uses — no locale or wide-char nonsense). */
+static int port_strcasecmp_ascii(const char* a, const char* b) {
+    for (; *a && *b; ++a, ++b) {
+        int ca = (*a >= 'a' && *a <= 'z') ? (*a - 32) : *a;
+        int cb = (*b >= 'a' && *b <= 'z') ? (*b - 32) : *b;
+        if (ca != cb) return ca - cb;
+    }
+    return (int)(unsigned char)*a - (int)(unsigned char)*b;
+}
+
+/* Room files (RM_NNNN.RDX) aren't flat ISO entries — they live inside
+ * RDX_LNK.AFS. Walk the rdx_files[205] index table from ps2_dvd_image.c
+ * to find the AFS entry index, then read it from g_afs[7]. Returns 0
+ * on hit (no flat-ISO fallback), -1 on miss (fall through to ISO). */
+extern char* rdx_files[205];
+extern int rdx_image_data_max;
+
+static int port_try_rdx_lookup(const char* name, void* dst) {
+    /* Quick prefix filter so we don't scan 205 entries for every read. */
+    if (!(name[0] == 'r' || name[0] == 'R') ||
+        !(name[1] == 'm' || name[1] == 'M') ||
+        name[2] != '_') {
+        return -1;
+    }
+    if (!g_afs[7]) {
+        RX_LOG("iso", "rdx lookup miss: RDX_LNK.AFS not mounted (file=%s)", name);
+        return -1;
+    }
+    for (int i = 0; i < rdx_image_data_max; ++i) {
+        if (port_strcasecmp_ascii(rdx_files[i], name) == 0) {
+            uint32_t got = recvx_afs_read(g_afs[7], (unsigned)i, dst);
+            if (!got) {
+                RX_LOG("iso", "rdx lookup FAIL: AFS read empty for %s (idx=%d)",
+                       name, i);
+                return -1;
+            }
+            RX_LOG("iso", "rdx lookup OK: %s -> idx=%d bytes=%u", name, i, got);
+            g_last_status = 0;
+            return 0;
+        }
+    }
+    return -1;
+}
+
 int RequestReadIsoFile(const char* name, void* dst) {
     if (!name || !dst) { g_last_status = -1; return -1; }
+
+    /* Route room files (RM_NNNN.RDX) through RDX_LNK.AFS. */
+    if (port_try_rdx_lookup(name, dst) == 0) return 0;
+
     extern recvx_iso_t* recvx_iso_global(void);
     recvx_iso_t* iso = recvx_iso_global();
     if (!iso) {
@@ -176,6 +225,16 @@ int RequestReadInsideFile(unsigned int pat, unsigned int id, void* dst) {
  * file isn't on the ISO. Used to size buffers before RequestReadIsoFile. */
 int GetIsoFileSize(const char* name) {
     if (!name) return 0;
+    /* Room files live in RDX_LNK.AFS — same routing as RequestReadIsoFile. */
+    if ((name[0] == 'r' || name[0] == 'R') &&
+        (name[1] == 'm' || name[1] == 'M') &&
+        name[2] == '_' && g_afs[7]) {
+        for (int i = 0; i < rdx_image_data_max; ++i) {
+            if (port_strcasecmp_ascii(rdx_files[i], name) == 0) {
+                return (int)recvx_afs_entry_size(g_afs[7], (unsigned)i);
+            }
+        }
+    }
     extern recvx_iso_t* recvx_iso_global(void);
     recvx_iso_t* iso = recvx_iso_global();
     if (!iso) return 0;

@@ -846,6 +846,36 @@ void recvx_pump_pad(void) {
     sys->pad_ay    = -p->y1;
 }
 
+/* Port-only inventory toggle: press Triangle (S key) during gameplay to
+ * open the inventory. Real PS2 game has this wired up via bhSysCallGame
+ * button checks that we haven't traced. Mirrors the effect of the
+ * normal "open inventory" transition: clears ts_flg bit 9 (lets
+ * Itemselect dispatch) AND sets subscreenmode bit 0x40 (triggers
+ * ItemTaskCheck's full-init branch, which calls CallSystemSe, sets the
+ * screen viewport, and eventually StatusInit). Only fires when Itemselect
+ * was suspended — pressing it while inventory is already open is ignored.
+ *
+ * Called from main_pc.c per-frame, after recvx_pump_pad. */
+extern S_WORK swork;
+
+void recvx_port_check_inventory_toggle(void) {
+    extern SYS_WORK* sys;
+    /* Press, not held — edge-triggered. */
+    if (!(Pad[0].press & 0x10)) return;
+    /* Already open (or in process of opening)? Don't re-fire. */
+    if (!(sys->ts_flg & 0x200)) return;
+    /* Unsuspend Itemselect + arm ItemTaskCheck's init branch. The init
+     * branch (sub1.c:3041) is what calls CallSystemSe(0,3), njSetScreen,
+     * StatusInit indirectly via subscreenmode bits. Without subscreenmode
+     * bit 0x40 set, ItemTaskCheck takes the gameplay branch and skips
+     * init — leaving swork.bxp NULL and crashing in SpriteOnOff. */
+    sys->ts_flg &= ~0x200u;
+    swork.subscreenmode |= 0x40;
+    extern void recvx_log(const char* tag, const char* fmt, ...);
+    recvx_log("game",
+        "port inventory toggle: cleared ts_flg bit 0x200, set subscreenmode 0x40");
+}
+
 /* ------------------------------------------------------------------ */
 /* Typewriter task skip — jump straight from NEW GAME to Movie task.  */
 /* ------------------------------------------------------------------ */

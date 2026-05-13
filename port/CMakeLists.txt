@@ -265,6 +265,11 @@ if(RECVX_BUILD_GAME)
         # functions (bhCopy*, bhPushAllTexture, etc.) handle texmem
         # eviction/restoration which our GL backend doesn't need.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_texture.c
+        # ISO file-routing table: dvd_image_data[] maps each AFS partition
+        # to its filename, and rdx_files[205] names every room file inside
+        # RDX_LNK.AFS so RequestReadIsoFile("rm_NNNN.rdx") can find the
+        # right AFS entry. Pure data, no function bodies.
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_dvd_image.c
         # NOT pulling effect.c -- it transitively requires ~250 bhEff*
         # particle handlers, 3D model functions, and ninja math primitives
         # that aren't in our build.
