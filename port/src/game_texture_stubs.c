@@ -997,6 +997,31 @@ void recvx_port_diag_inventory(void) {
     static int frame_ctr = 0;
     static int last_logged_cen_frame = -1000;
 
+    /* Port-side close cleanup: when SpriteH finishes the outbound slide
+     * animation it sets statusflg & 0x80000 ("outbound complete") but
+     * the PS2 cleanup that would reset subscreenmode and re-suspend
+     * Itemselect lives at sub1.c:3113 inside a `statusflg & 0x80000 &&
+     * taskloop == 4 && mn_md0 == 0` branch we don't satisfy. So
+     * subscreenmode sticks at 0x2 forever and our toggle's idempotent
+     * gate refuses re-opens. Detect the stuck state and finish the
+     * cleanup ourselves so the next Triangle press reopens cleanly. */
+    if ((swork.statusflg & 0x80000) && swork.subscreenmode != 0) {
+        recvx_log("inv",
+            "port close cleanup: statusflg & 0x80000 set, subscreenmode=0x%x "
+            "-> resetting to 0, suspending Itemselect",
+            (unsigned)swork.subscreenmode);
+        swork.subscreenmode = 0;
+        swork.statusflg = 0;
+        swork.flgtest = 0;
+        sys->ts_flg |= 0x200u;
+        /* Reset some other state that StatusInit will re-arm on next open. */
+        swork.mode = 0;
+        swork.testmode = 0;
+        last_subscreenmode = 0;
+        frame_ctr++;
+        return;
+    }
+
     if (sys->ts_flg & 0x200) {
         if (last_subscreenmode != 0 && last_subscreenmode != -1) {
             recvx_log("inv",
