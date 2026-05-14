@@ -15,6 +15,7 @@
 #include <SDL.h>
 #include <SDL_opengl.h>
 #include <stdlib.h>    /* qsort */
+#include <math.h>      /* tanf (3D perspective frustum) */
 
 static SDL_Window*    g_window;
 static SDL_GLContext  g_glctx;
@@ -553,6 +554,136 @@ void recvx_gfx_set_filter(int mode) {
     }
 }
 
+/* -------------------------------------------------------------------------
+ * 3D path (Phase 2 Path B). Uses compat-profile immediate mode so we don't
+ * have to drag in a shader+VAO just to render textured triangles. Sits
+ * alongside the 2D path -- callers bracket each pass with its own begin/end.
+ * ------------------------------------------------------------------------- */
+
+/* Transpose row-major NJS_MATRIX[16] into column-major suitable for
+ * glLoadMatrixf. Walking i,j with out[j*4+i] = in[i*4+j] is the
+ * one-liner — kept here as a helper because we do it twice (view+model). */
+static void gfx_row_to_col(const float in[16], float out[16]) {
+    for (int i = 0; i < 4; ++i)
+        for (int j = 0; j < 4; ++j)
+            out[j * 4 + i] = in[i * 4 + j];
+}
+
+/* Cached matrices so a draw call sees both view and model together.
+ * GL_MODELVIEW gets view*model at draw time. */
+static float g_gfx_view_col[16] = {
+    1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1
+};
+static float g_gfx_model_col[16] = {
+    1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1
+};
+
+void recvx_gfx_begin_3d(float fov_h_deg, float near_z, float far_z) {
+    /* Same letterbox/pillarbox math as begin_2d so 3D content stays inside
+     * the same 4:3 logical viewport — keeps inventory item models lined up
+     * with the surrounding 2D chrome regardless of host aspect ratio. */
+    double tgt_aspect = (double)g_gfx_ps2_w / (double)g_gfx_ps2_h;
+    double win_aspect = (double)g_win_w / (double)g_win_h;
+    int vp_w, vp_h, vp_x, vp_y;
+    if (win_aspect > tgt_aspect) {
+        vp_h = g_win_h;
+        vp_w = (int)(g_win_h * tgt_aspect + 0.5);
+        vp_x = (g_win_w - vp_w) / 2;
+        vp_y = 0;
+    } else {
+        vp_w = g_win_w;
+        vp_h = (int)(g_win_w / tgt_aspect + 0.5);
+        vp_x = 0;
+        vp_y = (g_win_h - vp_h) / 2;
+    }
+    glViewport(vp_x, vp_y, vp_w, vp_h);
+
+    /* Build a perspective frustum from horizontal FOV. Vertical FOV
+     * follows from the logical 4:3 aspect, NOT the window aspect — the
+     * letterbox absorbs the mismatch. */
+    float aspect = (float)g_gfx_ps2_w / (float)g_gfx_ps2_h;
+    float fov_h_rad = fov_h_deg * 0.017453292519943295f;
+    float right = near_z * tanf(fov_h_rad * 0.5f);
+    float left  = -right;
+    float top   = right / aspect;
+    float bottom = -top;
+
+    glMatrixMode(GL_PROJECTION); glLoadIdentity();
+    glFrustum((double)left, (double)right,
+              (double)bottom, (double)top,
+              (double)near_z, (double)far_z);
+    glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);
+    /* Default to blending off; transparent triangles set trans=1 below. */
+    glDisable(GL_BLEND);
+    glEnable(GL_TEXTURE_2D);
+    gfx_ensure_white();
+}
+
+void recvx_gfx_end_3d(void) {
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_TEXTURE_2D);
+    /* Reset the cached matrices so a subsequent begin_3d without explicit
+     * set_view_matrix doesn't inherit stale state from the previous pass. */
+    for (int i = 0; i < 16; ++i) {
+        g_gfx_view_col[i]  = (i % 5 == 0) ? 1.0f : 0.0f;
+        g_gfx_model_col[i] = (i % 5 == 0) ? 1.0f : 0.0f;
+    }
+}
+
+void recvx_gfx_set_view_matrix(const float row_major[16]) {
+    if (!row_major) return;
+    gfx_row_to_col(row_major, g_gfx_view_col);
+}
+
+void recvx_gfx_set_model_matrix(const float row_major[16]) {
+    if (!row_major) return;
+    gfx_row_to_col(row_major, g_gfx_model_col);
+}
+
+void recvx_gfx_draw_tri3d(int slot, const recvx_gfx_vtx3d* verts,
+                          int count, int trans) {
+    if (!verts || count < 3) return;
+    /* Round down to a whole triangle count — silent truncation matches
+     * what GL would do internally but avoids drawing a partial primitive. */
+    count -= count % 3;
+    if (count <= 0) return;
+
+    /* Bind texture (or white fallback for untextured/missing-slot draws). */
+    GLuint tex = (slot >= 0 && slot < RX_GFX_TEX_SLOTS && g_gfx_tex[slot])
+                     ? g_gfx_tex[slot]
+                     : g_gfx_white_tex;
+    glBindTexture(GL_TEXTURE_2D, tex);
+
+    if (trans) {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+        glDisable(GL_BLEND);
+    }
+
+    /* Load view*model into GL_MODELVIEW. We multiply view * model
+     * (GL premultiplies in column-major), so glLoadMatrix(view) then
+     * glMultMatrix(model) yields effective vert = projection * view * model * pos.
+     * That matches Sega Ninja's convention where njGetMatrix is the
+     * accumulated model->view (push/pop stack) transform. */
+    glMatrixMode(GL_MODELVIEW);
+    glLoadMatrixf(g_gfx_view_col);
+    glMultMatrixf(g_gfx_model_col);
+
+    glBegin(GL_TRIANGLES);
+    for (int i = 0; i < count; ++i) {
+        const recvx_gfx_vtx3d* v = &verts[i];
+        float c[4]; gfx_unpack_argb(v->color, c);
+        glColor4f(c[0], c[1], c[2], c[3]);
+        glTexCoord2f(v->u, v->v);
+        glVertex3f(v->x, v->y, v->z);
+    }
+    glEnd();
+}
+
 static void gl_audio_queue(const void* samples, int byte_count) {
     if (!g_audio_dev || !samples || byte_count <= 0) return;
     if (g_device_rate == g_audio_rate || g_audio_rate <= 0) {
@@ -707,5 +838,14 @@ void recvx_gfx_draw_polygon(const recvx_gfx_vtx* v, int n, int t)
                                                       { (void)v; (void)n; (void)t; }
 void recvx_gfx_set_filter(int m)                      { (void)m; }
 void recvx_backend_pace(int hz)                       { (void)hz; }
+
+/* 3D-path stubs for the no-GL build. */
+void recvx_gfx_begin_3d(float f, float n, float fa)   { (void)f; (void)n; (void)fa; }
+void recvx_gfx_end_3d(void)                           {}
+void recvx_gfx_set_view_matrix(const float m[16])     { (void)m; }
+void recvx_gfx_set_model_matrix(const float m[16])    { (void)m; }
+void recvx_gfx_draw_tri3d(int s, const recvx_gfx_vtx3d* v, int n, int t) {
+    (void)s; (void)v; (void)n; (void)t;
+}
 
 #endif

@@ -180,6 +180,37 @@ void recvx_gfx_draw_polygon(const recvx_gfx_vtx* verts, int count, int trans);
 /* 0 = nearest, 1 = linear. Matches njTextureFilterMode conventions. */
 void recvx_gfx_set_filter(int mode);
 
+/* --------------------------------------------------------------------------
+ * 3D gfx API (Phase 2 of Path B). Mirrors the 2D path but with hardware depth
+ * test enabled and a perspective projection. Sega Ninja matrices are
+ * row-major float[16]; we transpose at the boundary so GL gets column-major.
+ *
+ * Typical frame: begin_2d/end_2d for backgrounds + UI, then begin_3d for
+ * njCnk* model draws, then another begin_2d/end_2d for overlays.
+ *
+ * No z-sort queue here: hardware depth test handles per-pixel ordering for
+ * opaque geometry. Transparent sorting is a future concern.
+ * -------------------------------------------------------------------------- */
+typedef struct recvx_gfx_vtx3d {
+    float    x, y, z;        /* object-space position */
+    float    u, v;            /* texture coords (ignored if slot < 0) */
+    uint32_t color;           /* ARGB; per-vertex tint */
+} recvx_gfx_vtx3d;
+
+void recvx_gfx_begin_3d(float fov_h_deg, float near_z, float far_z);
+void recvx_gfx_end_3d(void);
+
+/* Camera matrix (world->view). Pass NJS_MATRIX-style row-major float[16];
+ * backend transposes for GL. */
+void recvx_gfx_set_view_matrix(const float row_major[16]);
+
+/* Per-draw model matrix (object->world). Same layout convention. */
+void recvx_gfx_set_model_matrix(const float row_major[16]);
+
+/* Draw triangle list. slot < 0 = untextured (vertex color only). */
+void recvx_gfx_draw_tri3d(int slot, const recvx_gfx_vtx3d* verts,
+                          int count, int trans);
+
 /* Frame pacer. Sleep + spin until 1/target_hz seconds elapsed since the
  * previous call. Pass 0 to just reset the clock (no wait). Used by the
  * game loop to cap njUserMain at PS2 NTSC 60 Hz even on high-refresh
