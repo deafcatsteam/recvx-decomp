@@ -960,11 +960,92 @@ void recvx_port_check_inventory_toggle(void) {
      * Unconditionally clearing ts_flg and arming subscreenmode lets a
      * second press re-trigger ItemTaskCheck's init even when Itemselect
      * is technically still dispatching with no inventory visible. */
+    /* Idempotent: gate on subscreenmode == 0 (inventory fully closed).
+     * Each re-fire of ItemTaskCheck's init branch re-arms SpriteH's
+     * slide-in (statusflg |= 0x2000) without resetting cen_pos to the
+     * start position, so re-pressing while open animates an extra 8
+     * frames past the target — that's the 2x displacement that puts
+     * the scrollbar at game-X=240 instead of 456. Skip if already
+     * armed/open/animating. */
+    if (swork.subscreenmode != 0) {
+        recvx_log("game",
+            "port inventory toggle: ignored (subscreenmode=0x%x already active)",
+            (unsigned)swork.subscreenmode);
+        return;
+    }
     port_load_inventory_textures();
     sys->ts_flg &= ~0x200u;
     swork.subscreenmode |= 0x40;
     recvx_log("game",
-        "port inventory toggle: cleared ts_flg bit 0x200, set subscreenmode 0x40");
+        "port inventory toggle: opening (ts_flg bit 0x200 cleared, "
+        "subscreenmode 0x40 armed)");
+}
+
+/* Per-frame diagnostic dump for inventory state. Logs cen_pos[5] every
+ * 30 frames while Itemselect is dispatching, so we can see whether the
+ * slide-in animation overshoots or some other code modifies the
+ * position after settling. Also logs Pad[0].press and swork.maincsr /
+ * subscreenmode transitions so we can trace why down-nav from the top
+ * tabs into the item grid doesn't work. Throttled to readable volume. */
+extern float cen_pos[12][6];
+
+void recvx_port_diag_inventory(void) {
+    extern SYS_WORK* sys;
+    static int last_subscreenmode = -1;
+    static unsigned int last_press = 0;
+    static int last_maincsr = -1;
+    static int frame_ctr = 0;
+    static int last_logged_cen_frame = -1000;
+
+    if (sys->ts_flg & 0x200) {
+        if (last_subscreenmode != 0 && last_subscreenmode != -1) {
+            recvx_log("inv",
+                "inventory closed (ts_flg & 0x200 set, was subscreenmode=0x%x)",
+                last_subscreenmode);
+        }
+        last_subscreenmode = 0;
+        frame_ctr++;
+        return;
+    }
+
+    if (frame_ctr - last_logged_cen_frame > 30) {
+        recvx_log("inv",
+            "cen_pos[5]=(%.0f,%.0f -> %.0f,%.0f vel=%.0f,%.0f) "
+            "subscreenmode=0x%x statusflg=0x%x",
+            cen_pos[5][0], cen_pos[5][1], cen_pos[5][2], cen_pos[5][3],
+            cen_pos[5][4], cen_pos[5][5],
+            (unsigned)swork.subscreenmode, (unsigned)swork.statusflg);
+        last_logged_cen_frame = frame_ctr;
+    }
+
+    if ((int)swork.subscreenmode != last_subscreenmode) {
+        recvx_log("inv",
+            "subscreenmode transition: 0x%x -> 0x%x (flgtest=%d statusflg=0x%x)",
+            last_subscreenmode, (unsigned)swork.subscreenmode,
+            (int)swork.flgtest, (unsigned)swork.statusflg);
+        last_subscreenmode = (int)swork.subscreenmode;
+    }
+
+    if (Pad[0].press && Pad[0].press != last_press) {
+        recvx_log("inv",
+            "Pad[0].press=0x%x sys->pad_ps=0x%x maincsr=%d listcsr_0=%d "
+            "subscreenmode=0x%x",
+            Pad[0].press, sys->pad_ps,
+            (int)swork.maincsr, (int)swork.listcsr_0,
+            (unsigned)swork.subscreenmode);
+        last_press = Pad[0].press;
+    }
+    if (!Pad[0].press) last_press = 0;
+
+    if ((int)swork.maincsr != last_maincsr) {
+        recvx_log("inv",
+            "maincsr changed: %d -> %d (mode=%d testmode=%d)",
+            last_maincsr, (int)swork.maincsr,
+            (int)swork.mode, (int)swork.testmode);
+        last_maincsr = (int)swork.maincsr;
+    }
+
+    frame_ctr++;
 }
 
 /* ------------------------------------------------------------------ */

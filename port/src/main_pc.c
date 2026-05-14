@@ -569,6 +569,11 @@ static int run_game_loop(const recvx_backend* backend) {
         extern void recvx_port_check_inventory_toggle(void);
         recvx_port_check_inventory_toggle();
 
+        /* Per-frame inventory state diagnostics — cen_pos, subscreenmode
+         * transitions, button presses, cursor state. Throttled. */
+        extern void recvx_port_diag_inventory(void);
+        recvx_port_diag_inventory();
+
         /* Sample AdvWork.Mode BEFORE njUserMain so we see the mode that
          * just crashed (if it does) in the log, then sample AFTER to
          * catch transitions. */
