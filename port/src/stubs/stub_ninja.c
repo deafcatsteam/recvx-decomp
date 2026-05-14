@@ -73,9 +73,19 @@ void njCnkSetEasyMultiLightRange(int n, float r)      { (void)n;(void)r; }
 void npGetWHDSize(void* mlw, float* whd)              { (void)mlw;(void)whd; }
 
 /* Model-binary / object-work helpers — bring in real impls when
- * binfunc.c or playpch.c gets compiled. For now no-ops. */
-int  bhMlbBinRealize(void* dat, void* mlw)            { (void)dat;(void)mlw; return 0; }
-void bhKeepObjWork(void* obj, void* dst)              { (void)obj;(void)dst; }
+ * binfunc.c or playpch.c gets compiled.
+ *
+ * bhKeepObjWork's REAL signature returns `unsigned char*` (see
+ * include/ps2/veronica/prog/dread.h:10). The caller in itemview.c
+ * assigns the return into si->keep, then later dereferences it.
+ * If we return void/garbage, si->keep becomes a wild pointer and
+ * the next access access-violates — that's the silent crash when
+ * EXAMINEing items. Return the passed-in `sp` unchanged so si->keep
+ * stays at a valid pointer (the start of the memory pool slice the
+ * real impl would have populated). No model state is actually
+ * "kept" but at least the pointer is valid. */
+int            bhMlbBinRealize(void* dat, void* mlw)               { (void)dat;(void)mlw; return 0; }
+unsigned char* bhKeepObjWork(void* mlw, unsigned char* sp)         { (void)mlw; return sp; }
 
 /* ----------------------------------------------------------------------
  * Ninja 3D state stubs needed by sub1.c. Real impls bind GS register
