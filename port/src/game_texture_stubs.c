@@ -844,6 +844,45 @@ void recvx_pump_pad(void) {
     sys->pad_ar    = p->r;
     sys->pad_ax    = -p->x1;
     sys->pad_ay    = -p->y1;
+
+    /* Context remap: when the inventory is dispatching, arrow keys feel
+     * unintuitive because RECVX wires the d-pad to Cancel (sub1.c:4133
+     * checks pad_ps & 0x5000 = UP|DOWN -> StatusCancel) while real
+     * navigation goes through L1/R1 (tab nav) and L2/R2 (item-grid
+     * nav). Strip the d-pad bits and OR in shoulder-button bits so
+     * arrow keys drive nav directly. Title-menu and gameplay paths
+     * outside the inventory keep the original d-pad mapping.
+     *
+     * Bit mapping (scePad-shifted layout from input.c):
+     *   UP    (0x1000) -> L2   (0x0001) [item grid up]
+     *   DOWN  (0x4000) -> R2   (0x0002) [item grid down]
+     *   LEFT  (0x8000) -> L1   (0x0004) [tab left]
+     *   RIGHT (0x2000) -> R1   (0x0008) [tab right] */
+    extern S_WORK swork;
+    if (swork.subscreenmode != 0) {
+        unsigned int dpad = Pad[0].on    & 0xF000;
+        unsigned int dpsp = Pad[0].press & 0xF000;
+        unsigned int dpre = Pad[0].Rept  & 0xF000;
+        unsigned int shoulder_on = 0, shoulder_ps = 0, shoulder_re = 0;
+        if (dpad & 0x1000) shoulder_on |= 0x1;
+        if (dpad & 0x4000) shoulder_on |= 0x2;
+        if (dpad & 0x8000) shoulder_on |= 0x4;
+        if (dpad & 0x2000) shoulder_on |= 0x8;
+        if (dpsp & 0x1000) shoulder_ps |= 0x1;
+        if (dpsp & 0x4000) shoulder_ps |= 0x2;
+        if (dpsp & 0x8000) shoulder_ps |= 0x4;
+        if (dpsp & 0x2000) shoulder_ps |= 0x8;
+        if (dpre & 0x1000) shoulder_re |= 0x1;
+        if (dpre & 0x4000) shoulder_re |= 0x2;
+        if (dpre & 0x8000) shoulder_re |= 0x4;
+        if (dpre & 0x2000) shoulder_re |= 0x8;
+        /* Strip d-pad, OR in shoulder remap. Mirror to sys->pad_* too. */
+        Pad[0].on    = (Pad[0].on    & ~0xF000u) | shoulder_on;
+        Pad[0].press = (Pad[0].press & ~0xF000u) | shoulder_ps;
+        Pad[0].Rept  = (Pad[0].Rept  & ~0xF000u) | shoulder_re;
+        sys->pad_on    = sys->pad_oncpy = Pad[0].on;
+        sys->pad_ps    = Pad[0].press;
+    }
 }
 
 /* Port-only inventory toggle: press Triangle (S key) during gameplay to
@@ -1041,6 +1080,28 @@ void recvx_port_diag_inventory(void) {
             cen_pos[5][4], cen_pos[5][5],
             (unsigned)swork.subscreenmode, (unsigned)swork.statusflg);
         last_logged_cen_frame = frame_ctr;
+    }
+
+    /* Force Monitor task mode bytes to 0 while inventory is open. The
+     * item-action gate (sub1.c:1978) reads `*(unsigned int*)&sys->mn_md0
+     * == 0` as a 4-byte check across mn_md0/md1/md2/md3. Our log showed
+     * mn_md0=4, mn_md1=11 (=0xB04 packed) — Monitor task is stuck in a
+     * load state because the upstream code that clears it isn't compiled.
+     * Force-clear so item-select via Enter on a non-empty slot can
+     * transition mode->4 (ItemCommand = USE/EXAMINE submenu). Also clears
+     * mn_stack[0] since bhSysCallMonitor re-reads from stack each frame
+     * and would clobber our reset. */
+    {
+        extern void recvx_log_once(const char* tag, const char* fmt, ...);
+        /* SYS_WORK fields: mn_md0 @ 0x1B0F8, mn_mode0 @ 0x1B0F4, mn_stack
+         * @ 0x1B0E0 (8 ints). We don't have the macros for those, so use
+         * the typed struct access via SYS_WORK pointer. */
+        if (*(unsigned int*)&sys->mn_md0 != 0) {
+            *(unsigned int*)&sys->mn_md0 = 0;
+        }
+        if (sys->mn_stack[0] != 0) {
+            sys->mn_stack[0] = 0;
+        }
     }
 
     if ((int)swork.subscreenmode != last_subscreenmode) {
