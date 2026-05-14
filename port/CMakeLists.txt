@@ -291,6 +291,11 @@ if(RECVX_BUILD_GAME)
         # API in standard C against the NJS_MATRIX = float[16] layout.
         # Replaces the matrix stubs in stub_ninja.c with real impls.
         ${CMAKE_CURRENT_SOURCE_DIR}/src/ninja_3d.c
+        # Phase 3 of Path B: chunked-model renderer. Walks NJS_CNK_MODEL
+        # vlist/plist chunks and emits triangles via recvx_gfx_draw_tri3d.
+        # Replaces the njCnkEasyMultiDrawModel stub in stub_ninja.c so
+        # inventory EXAMINE (book / lighter) actually renders the model.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ninja_cnk.c
         # Real model-binary parser. 100% matched and self-contained;
         # parses MLB blobs into NJS_CNK_OBJECT trees so itemview.c's
         # bhMlbBinRealize call no longer hands wild pointers to

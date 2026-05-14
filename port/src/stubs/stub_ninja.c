@@ -43,8 +43,9 @@ void njDrawPolygon3D(void* p, int n, int t)           { (void)p;(void)n;(void)t;
  * tree and send polys to the PS2 GS / our GL3D backend. Stubbed for
  * now — itemview's 3D inventory item won't be visible until we
  * implement these. */
-void njCnkEasyMultiDrawModel(void* p)                 { (void)p; }
-void njCnkEasyMultiDrawObjectI(void* p, int idx)      { (void)p;(void)idx; }
+/* njCnkEasyMultiDrawModel and njCnkEasyMultiDrawObjectI moved to
+ * port/src/ninja_cnk.c (Phase 3 of Path B) — real chunk walkers that
+ * route triangles through recvx_gfx_draw_tri3d. */
 void njCnkSetEasyMultiAmbient(unsigned int c)         { (void)c; }
 void njCnkSetEasyMultiLight(int n, void* v)           { (void)n;(void)v; }
 void njCnkSetEasyMultiLightColor(int n, unsigned int c){ (void)n;(void)c; }
