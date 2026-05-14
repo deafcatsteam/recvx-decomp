@@ -424,7 +424,7 @@ void njSetScreen(void* s) {
     g_screen_dx = 0.0f;
     g_screen_dy = 0.0f;
 }
-float njSin(int brad)             { (void)brad; return 0.0f; }
+/* njSin now lives in port/src/ninja_3d.c with real BAMS->sinf impl. */
 void  njMemCopy(void* d,void* s,int n) { if (d && s && n > 0) memcpy(d, s, (size_t)n); }
 void  njChangeSystem(int mode,int frame,int count) { (void)mode;(void)frame;(void)count; }
 void  njPrintC(int code,const char* s) { (void)code;(void)s; }

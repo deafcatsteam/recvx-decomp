@@ -14,13 +14,13 @@ void njInitTextureBuffer(signed char* p, int size)    { (void)p; (void)size; }
 void njSetVertexBuffer(unsigned int* p, int size)     { (void)p; (void)size; }
 void njInitVertexBuffer(int a,int b,int c,int d,int e){ (void)a;(void)b;(void)c;(void)d;(void)e; }
 void njInit3D(void* buf, int size)                    { (void)buf; (void)size; }
-void njInitMatrix(void* buf, int size, int z)         { (void)buf; (void)size; (void)z; }
+/* njInitMatrix now lives in port/src/ninja_3d.c with real impl. */
 void njInitPrint(void* p, int a, int b)               { (void)p; (void)a; (void)b; }
 void njPolygonCullingMode(int mode)                   { (void)mode; }
 void njTextureShadingMode(int mode)                   { (void)mode; }
 void njInitView(void* v)                              { (void)v; }
 void njSetView(void* v)                               { (void)v; }
-void njGetMatrix(void* m)                             { (void)m; }
+/* njGetMatrix now lives in port/src/ninja_3d.c with real impl. */
 void njInitTexture(void* buf, int count)              { (void)buf; (void)count; }
 void njExitTexture(void)                              {}
 void njExitPrint(void)                                {}
@@ -31,27 +31,12 @@ void njClipZ(float near, float far)                   { (void)near; (void)far; }
 void njSetBackColor(unsigned int a,unsigned int b,unsigned int c){ (void)a;(void)b;(void)c; }
 int  njCalcVtxBuffer(int a,int b,int c)               { (void)a;(void)b;(void)c; return a+b+c; }
 
-/* ----------------------------------------------------------------------
- * Matrix stack + transform stubs needed by itemview.c.
- * Real impls would track a NJS_MATRIX stack and apply rotation/scaling
- * for the in-game 3D item-view model. For headless / port-without-GL3D
- * builds these are no-ops; the model rendering would be invisible
- * anyway since njCnkEasyMultiDrawModel below is also stubbed.
- * ---------------------------------------------------------------------- */
-void njPushMatrix(void* m)                            { (void)m; }
-void njPopMatrix(int n)                               { (void)n; }
-void njSetMatrix(void* m)                             { (void)m; }
-void njMultiMatrix(void* m)                           { (void)m; }
-void njClearMatrix(void* m)                           { (void)m; }
-void njUnitMatrix(void* m)                            { (void)m; }
-void njTransposeMatrix(void* dst, void* src)          { (void)dst;(void)src; }
-void njTranslate(void* m, float x, float y, float z)  { (void)m;(void)x;(void)y;(void)z; }
-void njRotateX(void* m, int a)                        { (void)m;(void)a; }
-void njRotateY(void* m, int a)                        { (void)m;(void)a; }
-void njRotateZ(void* m, int a)                        { (void)m;(void)a; }
-void njScale  (void* m, float x, float y, float z)    { (void)m;(void)x;(void)y;(void)z; }
-void njScalor (float* dst, float* src, float s)       { (void)dst;(void)src;(void)s; }
-void njCalcPoint(void* m, void* in, void* out)        { (void)m;(void)in;(void)out; }
+/* Matrix stack + transformation funcs (njPushMatrix, njPopMatrix,
+ * njSetMatrix, njMultiMatrix, njClearMatrix, njUnitMatrix,
+ * njTransposeMatrix, njTranslate, njRotateX/Y/Z, njScale, njScalor,
+ * njCalcPoint, njGetMatrix, njCalcPoints, njGetTranslation,
+ * njSinCos, njSin, njCos, njInitMatrix) moved to ninja_3d.c with
+ * real C implementations as Phase 1 of the 3D renderer. */
 void njDrawPolygon3D(void* p, int n, int t)           { (void)p;(void)n;(void)t; }
 
 /* Chunked-model draw + lighting (njCnk*). Real impls walk a chunk
@@ -72,20 +57,9 @@ void njCnkSetEasyMultiLightRange(int n, float r)      { (void)n;(void)r; }
  * MdlAction00/01/02/MdlDirChk now provided by itemview.c (compiled). */
 void npGetWHDSize(void* mlw, float* whd)              { (void)mlw;(void)whd; }
 
-/* Model-binary / object-work helpers — bring in real impls when
- * binfunc.c or playpch.c gets compiled.
- *
- * bhKeepObjWork's REAL signature returns `unsigned char*` (see
- * include/ps2/veronica/prog/dread.h:10). The caller in itemview.c
- * assigns the return into si->keep, then later dereferences it.
- * If we return void/garbage, si->keep becomes a wild pointer and
- * the next access access-violates — that's the silent crash when
- * EXAMINEing items. Return the passed-in `sp` unchanged so si->keep
- * stays at a valid pointer (the start of the memory pool slice the
- * real impl would have populated). No model state is actually
- * "kept" but at least the pointer is valid. */
-int            bhMlbBinRealize(void* dat, void* mlw)               { (void)dat;(void)mlw; return 0; }
-unsigned char* bhKeepObjWork(void* mlw, unsigned char* sp)         { (void)mlw; return sp; }
+/* bhMlbBinRealize now provided by real binfunc.c (Phase 1 of 3D).
+ * bhKeepObjWork moved to ninja_3d.c (needs ML_WORK type which this
+ * stub library doesn't include). */
 
 /* ----------------------------------------------------------------------
  * Ninja 3D state stubs needed by sub1.c. Real impls bind GS register

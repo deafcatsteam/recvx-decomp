@@ -285,6 +285,17 @@ if(RECVX_BUILD_GAME)
         # Lives in the game target (not recvx_port_stubs) so it gets prelude
         # force-include + KATANA include path, matching decomp struct offsets.
         ${CMAKE_CURRENT_SOURCE_DIR}/src/game_texture_stubs.c
+        # Phase 1 of 3D rendering: port-side Sega Ninja matrix stack +
+        # transformation math. The real ps2_NaMatrix.c uses PS2 EE/VU0
+        # inline asm we can't compile on MSVC x64, so we reimplement the
+        # API in standard C against the NJS_MATRIX = float[16] layout.
+        # Replaces the matrix stubs in stub_ninja.c with real impls.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/ninja_3d.c
+        # Real model-binary parser. 100% matched and self-contained;
+        # parses MLB blobs into NJS_CNK_OBJECT trees so itemview.c's
+        # bhMlbBinRealize call no longer hands wild pointers to
+        # downstream draw code.
+        ${RECVX_SRC}/ps2/veronica/prog/binfunc.c
         # Expand this list incrementally as each file compiles.
     )
 
