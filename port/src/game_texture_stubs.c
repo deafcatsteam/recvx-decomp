@@ -1070,6 +1070,39 @@ void recvx_port_diag_inventory(void) {
         last_maincsr = (int)swork.maincsr;
     }
 
+    /* Item-action submenu gate diagnostic. When user is in item-grid
+     * cursor mode (mode=1, maincsr=3) and presses Start, sub1.c:1976
+     * gates the transition to ItemCommand (mode=4) on three things:
+     *   - !(statusflg & 0x20)
+     *   - mn_md0 == 0
+     *   - itemid != 0  ← most likely culprit (cursor on empty slot)
+     * Log all three when Start is pressed in this state so we can see
+     * exactly which gate fails. */
+    if ((Pad[0].press & 0x800) && swork.mode == 1 && swork.maincsr == 3) {
+        unsigned int mn_md0 = *(unsigned int*)&sys->mn_md0;
+        recvx_log("inv",
+            "ITEM-action gate check: itemid=%u statusflg&0x20=%u mn_md0=%u "
+            "listcsr_0=%u  -> %s",
+            (unsigned)swork.itemid,
+            (unsigned)(swork.statusflg & 0x20),
+            mn_md0, (unsigned)swork.listcsr_0,
+            (!(swork.statusflg & 0x20) && mn_md0 == 0 && swork.itemid != 0)
+                ? "PASS (should enter ItemCommand)" : "BLOCKED");
+    }
+
+    /* Per-frame itemid trace while in item-grid cursor — so we can
+     * tell at a glance whether the slot the user lands on actually
+     * has an item. Throttled by listcsr_0 change. */
+    static int last_listcsr = -1;
+    if (swork.mode == 1 && swork.maincsr == 3 &&
+        (int)swork.listcsr_0 != last_listcsr) {
+        recvx_log("inv",
+            "item cursor moved: listcsr_0=%u itemid=%u",
+            (unsigned)swork.listcsr_0, (unsigned)swork.itemid);
+        last_listcsr = (int)swork.listcsr_0;
+    }
+    if (swork.mode != 1) last_listcsr = -1;
+
     frame_ctr++;
 }
 
