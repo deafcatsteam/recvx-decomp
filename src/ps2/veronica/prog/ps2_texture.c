@@ -154,59 +154,90 @@ int bhSetMemPvpTexture(NJS_TEXLIST* tlp, unsigned char* datp, int offset)
             {               
                 gidx = ((TIM2_PICTUREHEADER_EX*)ap)->Gindex;
                 
-                switch (((TIM2_PICTUREHEADER_EX*)ap)->ImageType) 
-                {              
-                case 4:                             
+                switch (((TIM2_PICTUREHEADER_EX*)ap)->ImageType)
+                {
+                case 4:
                     attr = 0x500;
-                    
+
                     et_ct = 16;
                     break;
-                case 5:                            
-                    attr = 0x700; 
-                    
-                    et_ct = 256; 
-                    break; 
-                default:                           
-                    exit(0); 
+                case 5:
+                    attr = 0x700;
+
+                    et_ct = 256;
+                    break;
+                default:
+#ifdef RECVX_PC_PORT
+                    /* Port: log unknown ImageType + use 8-bit fallback
+                     * instead of exit(0). Item-examine 3D models in
+                     * ITEM1.AFS use a mix of ImageType values our
+                     * compiled path doesn't fully support yet. Skipping
+                     * exit lets the rest of the model load and render
+                     * (textures may look wrong but no process kill). */
+                    {
+                        extern void recvx_log(const char* tag, const char* fmt, ...);
+                        recvx_log("tim2",
+                            "bhSetMemPvpTexture (VQ): unknown ImageType=%d "
+                            "@%p — falling back to 256-color (attr=0x700)",
+                            (int)((TIM2_PICTUREHEADER_EX*)ap)->ImageType, ap);
+                        attr = 0x700;
+                        et_ct = 256;
+                    }
+#else
+                    exit(0);
+#endif
                     break;
                 }
 
-                w = ((TIM2_PICTUREHEADER_EX*)ap)->ImageWidth; 
-                h = ((TIM2_PICTUREHEADER_EX*)ap)->ImageHeight; 
-                
-                njSetTextureInfo(&info, (unsigned short*)ap, attr, w, h); 
-                njSetTextureName(tnp, &info.texaddr, gidx, 0x40800000); 
-                
+                w = ((TIM2_PICTUREHEADER_EX*)ap)->ImageWidth;
+                h = ((TIM2_PICTUREHEADER_EX*)ap)->ImageHeight;
+
+                njSetTextureInfo(&info, (unsigned short*)ap, attr, w, h);
+                njSetTextureName(tnp, &info.texaddr, gidx, 0x40800000);
+
                 tlist.textures = tnp;
-                
-                tlist.nbTexture = 1; 
-                
+
+                tlist.nbTexture = 1;
+
                 njLoadTexture(&tlist);
-                
-                tnp++; 
-                
-                nbTex++; 
+
+                tnp++;
+
+                nbTex++;
             }
-            else 
-            { 
+            else
+            {
                 gidx = ((TIM2_PICTUREHEADER_EX*)ap)->Gindex;
-                
-                switch (((TIM2_PICTUREHEADER_EX*)ap)->ImageType) 
-                {               
-                case 4:                            
-                    attr = 0x500; 
-                    
-                    et_ct = 16; 
-                    break; 
-                case 5:                             
-                    attr = 0x700; 
-                    
-                    et_ct = 256; 
-                    break; 
-                default:                           
-                    exit(0); 
+
+                switch (((TIM2_PICTUREHEADER_EX*)ap)->ImageType)
+                {
+                case 4:
+                    attr = 0x500;
+
+                    et_ct = 16;
                     break;
-                    
+                case 5:
+                    attr = 0x700;
+
+                    et_ct = 256;
+                    break;
+                default:
+#ifdef RECVX_PC_PORT
+                    /* See VQ-branch fallback above. */
+                    {
+                        extern void recvx_log(const char* tag, const char* fmt, ...);
+                        recvx_log("tim2",
+                            "bhSetMemPvpTexture: unknown ImageType=%d @%p "
+                            "— falling back to 256-color (attr=0x700)",
+                            (int)((TIM2_PICTUREHEADER_EX*)ap)->ImageType, ap);
+                        attr = 0x700;
+                        et_ct = 256;
+                    }
+#else
+                    exit(0);
+#endif
+                    break;
+
                     (void)&palnum; // ???
                 }
                 
