@@ -323,47 +323,90 @@ void Model_Read_Set(S_WORK* st)
 
     si = &sitem;
 
-    if ((swork.statusflg & 0x400)) 
+    if ((swork.statusflg & 0x400))
     {
+#ifdef RECVX_PC_PORT
+        /* Breadcrumb logs: pinpoint exactly which step in the EXAMINE
+         * post-AFS sequence crashes. Each successful step prints a
+         * line; the last line before silent termination is the suspect.
+         * Investigating struct-layout mismatch between PS2's 32-bit
+         * pointer serialization and x64's 64-bit runtime structs --
+         * NJS_CNK_OBJECT is 48 bytes on PS2, 64 bytes on x64. */
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("examine", "[1] entry: mdl_p=%p tex_p=%p itemid=%d",
+                  si->mw.mdl_p, si->mw.tex_p, st->itemid);
+#endif
         bhMlbBinRealize(si->mw.mdl_p, &si->mdl);
-        
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[2] post-realize: objP=%p texP=%p obj_num=%d",
+                  (void*)si->mdl.objP, (void*)si->mdl.texP, si->mdl.obj_num);
+        if (si->mdl.objP) {
+            recvx_log("examine", "    objP[0] evalflags=0x%x model=%p child=%p sibling=%p",
+                      si->mdl.objP->evalflags,
+                      (void*)si->mdl.objP->model,
+                      (void*)si->mdl.objP->child,
+                      (void*)si->mdl.objP->sibling);
+        }
+#endif
+
         bhSetMemPvpTexture(si->mdl.texP, si->mw.tex_p, 0);
-        
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[3] post-bhSetMemPvpTexture");
+#endif
+
         si->keep = bhKeepObjWork(&si->mdl, si->keep);
-        
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[4] post-bhKeepObjWork: keep=%p", si->keep);
+#endif
+
         swork.statusflg |= 0x200000;
-        
+
         swork.statusflg &= ~0x400;
-        
+
         CameraInit();
-        
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[5] post-CameraInit");
+#endif
+
         st->subcsr = 0;
-        
-        if (si->mw.rdid == 139) 
+
+        if (si->mw.rdid == 139)
         {
             st->itemid = 139;
         }
-        
+
         dw = &dsptbl[st->itemid];
-        
+
         FlagErase(si->mdl.objP);
-        
-        if (dw->hide != 0) 
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[6] post-FlagErase");
+#endif
+
+        if (dw->hide != 0)
         {
             MdlEvalflagsSet(dw->hide);
         }
-        
-        if (st->itemid == 55) 
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[7] post-MdlEvalflagsSet (hide=%d)", dw->hide);
+#endif
+
+        if (st->itemid == 55)
         {
             LighterOpen(si->mdl.objP->child->child);
         }
-        
-        if (st->itemid == 139) 
+
+        if (st->itemid == 139)
         {
             FileSyu(si->mdl.objP->child);
         }
-        
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[8] post-special-cases (itemid=%d)", st->itemid);
+#endif
+
         testf = ModelScaleSet(si, itemflg[dw->hide][3]);
+#ifdef RECVX_PC_PORT
+        recvx_log("examine", "[9] post-ModelScaleSet -> Model_Read_Set complete");
+#endif
         
         idx = itemflg[dw->hide][2];
         
