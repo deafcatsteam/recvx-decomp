@@ -1567,11 +1567,26 @@ void StatusInit(S_WORK* st)
     
     st->itemid = (st->pip[st->listcsr_0] >> 16) & 0xFF;
     
-    if (!(swork.statusflg & 0x200)) 
+    if (!(swork.statusflg & 0x200))
     {
+#ifdef RECVX_PC_PORT
+        /* PS2 used 0x20000 (128 KB) for the inventory item-examine
+         * buffer. Some ITEM*.AFS entries on the retail disc are larger
+         * than that (item 138 in ITEM1.AFS = 138504 bytes), and the
+         * RequestReadInsideFile write blew past the end of the
+         * allocation. On PS2 the overrun was invisible (flat memory,
+         * no allocator guard pages); on Windows it stomped the Win32
+         * heap metadata and the next HeapFree call AV'd reading the
+         * corrupted block header at ptr-8.
+         *
+         * Widen to 0x80000 (512 KB) so a single examine plus its
+         * O_WORK accumulation fits with headroom. */
+        sitem.keep = bhGetFreeMemory(0x80000, 32);
+#else
         sitem.keep = bhGetFreeMemory(0x20000, 32);
+#endif
         sitem.keepbackup = sitem.keep;
-        
+
         swork.statusflg |= 0x200;
     }
 
@@ -3581,9 +3596,14 @@ void StatusMain()
         bhGarbageTexture(NULL, 0);
         
         sitem.keep = sitem.keepbackup;
-        
+
+#ifdef RECVX_PC_PORT
+        /* Match the widened buffer size from the alloc site above. */
+        memset(sitem.keep, NULL, 0x80000);
+#else
         memset(sitem.keep, NULL, 0x20000);
-        
+#endif
+
         swork.statusflg &= ~0x400000;
     }
     
