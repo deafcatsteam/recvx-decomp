@@ -608,11 +608,22 @@ void recvx_gfx_begin_3d(float fov_h_deg, float near_z, float far_z) {
     float top   = right / aspect;
     float bottom = -top;
 
-    glMatrixMode(GL_PROJECTION); glLoadIdentity();
+    /* CRITICAL: the 2D path defers all quads/polys to a z-sorted queue
+     * that is flushed in recvx_gfx_end_2d() using whatever GL projection
+     * is current at flush time. begin_3d is called *between* begin_2d
+     * and end_2d (itemview's DrawSubItem runs mid-inventory-render), so
+     * if we clobber the projection/modelview/enable state without
+     * restoring it, the end_2d flush draws every 2D inventory quad with
+     * our perspective matrix — they map off-screen and the whole screen
+     * goes black. Save the full GL state here, restore it in end_3d. */
+    glPushAttrib(GL_ENABLE_BIT | GL_DEPTH_BUFFER_BIT |
+                 GL_VIEWPORT_BIT | GL_TRANSFORM_BIT);
+
+    glMatrixMode(GL_PROJECTION); glPushMatrix(); glLoadIdentity();
     glFrustum((double)left, (double)right,
               (double)bottom, (double)top,
               (double)near_z, (double)far_z);
-    glMatrixMode(GL_MODELVIEW);  glLoadIdentity();
+    glMatrixMode(GL_MODELVIEW);  glPushMatrix(); glLoadIdentity();
 
     glEnable(GL_DEPTH_TEST);
     glDepthFunc(GL_LEQUAL);
@@ -623,8 +634,12 @@ void recvx_gfx_begin_3d(float fov_h_deg, float near_z, float far_z) {
 }
 
 void recvx_gfx_end_3d(void) {
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_TEXTURE_2D);
+    /* Restore exactly what begin_3d saved so the deferred 2D flush in
+     * end_2d still sees the ortho projection + 2D enable state. */
+    glMatrixMode(GL_PROJECTION); glPopMatrix();
+    glMatrixMode(GL_MODELVIEW);  glPopMatrix();
+    glPopAttrib();
+
     /* Reset the cached matrices so a subsequent begin_3d without explicit
      * set_view_matrix doesn't inherit stale state from the previous pass. */
     for (int i = 0; i < 16; ++i) {

@@ -198,7 +198,10 @@ static void cnk_emit_strip_tri(int i0, int i1, int i2,
     tri[2].color = c->color & base_color;
 
     recvx_gfx_draw_tri3d(-1, tri, 3, trans);
+    extern long g_cnk_tris_dbg;
+    g_cnk_tris_dbg++;
 }
+long g_cnk_tris_dbg = 0;
 
 /* Generic strip walker. `stride_words` is per-vertex stride in u16s.
  * For NJD_CS that's 1 (just index). For UV variants it's 3 (idx, u, v).
@@ -316,28 +319,36 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
 /* Public entry point                                                   */
 /* -------------------------------------------------------------------- */
 
-/* njCnkEasyMultiDrawModel — the entry the inventory item-view calls.
- *
- * Self-brackets begin_3d / end_3d for Phase 3a testability. The right
- * long-term design (Phase 4) is to wire begin_3d / end_3d at the
- * itemview call-site so multiple draws share one pass.
- *
- * The matrix at the top of pNaMat stack is the model-view (PS2's
- * conventions: callers pre-multiply by the camera). We push it as
- * the model matrix; view stays identity. */
-void njCnkEasyMultiDrawModel(NJS_CNK_MODEL* model) {
+/* Core: walk one model's vertex + polygon chunks using the CURRENT
+ * Ninja matrix stack as the model transform. Does NOT bracket
+ * begin_3d/end_3d — the caller owns the 3D pass so multiple models in
+ * an object tree share one projection/depth setup. */
+static void cnk_draw_model_local(NJS_CNK_MODEL* model) {
     if (!model) return;
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        static int dbg_m = 0;
+        if (dbg_m < 24) {
+            const CHUNK_HEAD* vh = (const CHUNK_HEAD*)model->vlist;
+            const CHUNK_HEAD* ph = (const CHUNK_HEAD*)model->plist;
+            recvx_log("cnk", "  draw_model_local model=%p vlist=%p(type=%d) plist=%p(type=%d) r=%.2f",
+                      (void*)model,
+                      (void*)model->vlist, vh ? vh->ucType : -1,
+                      (void*)model->plist, ph ? ph->ucType : -1,
+                      model->r);
+            dbg_m++;
+        }
+    }
 
-    /* Itemview FOV / clip range observed in itemview.c lighting calls:
-     * near=4, far=140, FOV ~60° horiz fits a 4:3 inventory inset. */
-    recvx_gfx_begin_3d(60.0f, 4.0f, 140.0f);
-
-    /* Snapshot current matrix into model slot; view stays identity. */
+    /* Snapshot the current top-of-stack matrix as the gfx model
+     * matrix. itemview pre-multiplies camera/rotation into this stack
+     * before calling us, and the object-tree walk pushes per-node
+     * pos/ang/scl, so this single snapshot captures the full
+     * model-view transform for this node. */
     if (pNaMatMatrixStuckPtr) {
         recvx_gfx_set_model_matrix((const float*)pNaMatMatrixStuckPtr);
     }
 
-    /* Vertex chunk (single, at vlist). */
     if (model->vlist) {
         const CHUNK_HEAD* vh = (const CHUNK_HEAD*)model->vlist;
         if (vh->ucType >= 32 && vh->ucType <= 50) {
@@ -345,7 +356,6 @@ void njCnkEasyMultiDrawModel(NJS_CNK_MODEL* model) {
         }
     }
 
-    /* Polygon-list stream (terminated by NJD_CE = 255). */
     if (model->plist) {
         const CHUNK_HEAD* ph = (const CHUNK_HEAD*)model->plist;
         int guard = 0;
@@ -354,19 +364,82 @@ void njCnkEasyMultiDrawModel(NJS_CNK_MODEL* model) {
             if (!ph) break;
         }
     }
+}
 
+/* njCnkEasyMultiDrawModel — direct single-model draw. itemview's
+ * rdid==139 (FILE document) path calls this directly per page after
+ * setting up the matrix stack itself. Self-brackets the 3D pass. */
+void njCnkEasyMultiDrawModel(NJS_CNK_MODEL* model) {
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("cnk", "njCnkEasyMultiDrawModel: model=%p vlist=%p plist=%p",
+                  (void*)model,
+                  model ? (void*)model->vlist : (void*)0,
+                  model ? (void*)model->plist : (void*)0);
+    }
+    if (!model) return;
+
+    recvx_gfx_begin_3d(60.0f, 4.0f, 140.0f);
+    cnk_draw_model_local(model);
     recvx_gfx_end_3d();
 }
 
-/* Object-tree drawer: walk an NJS_CNK_OBJECT hierarchy depth-first,
- * pushing each node's pos/ang/scl onto the matrix stack before drawing
- * its model. itemview already iterates ->child/->sibling explicitly so
- * we don't strictly need this yet, but expose it for completeness — the
- * decomp's other call sites use it. */
-void njCnkEasyMultiDrawObjectI(NJS_CNK_OBJECT* obj, int idx) {
-    (void)idx;  /* idx selects which child; itemview passes 0/1/2 but
-                   we currently just walk the tree as if idx==0 */
+/* Recursive object-tree walk. Mirrors ps2_NinjaCnk.c:2736
+ * njCnkEasyMultiDrawObjectI — for each node in the sibling chain:
+ * push matrix, apply pos/ang/scl (gated by evalflags), draw the
+ * node's model, recurse into child, pop matrix.
+ *
+ * evalflags bits (from ps2_NinjaCnk.c):
+ *   0x01 skip translate   0x02 skip rotate   0x04 skip scale
+ *   0x08 skip model draw   0x10 skip child recurse
+ * The 0x20 (rotate order) and 0x100 (conditional-recurse) bits are
+ * ignored for now — XYZ order covers the inventory item models. */
+static void cnk_draw_object_tree(NJS_CNK_OBJECT* o) {
+    for (; o != NULL; o = o->sibling) {
+        unsigned int f = o->evalflags;
+
+        njPushMatrix(NULL);
+
+        if (!(f & 0x1)) njTranslate(NULL, o->pos[0], o->pos[1], o->pos[2]);
+        if (!(f & 0x2)) {
+            njRotateX(NULL, o->ang[0]);
+            njRotateY(NULL, o->ang[1]);
+            njRotateZ(NULL, o->ang[2]);
+        }
+        if (!(f & 0x4)) njScale(NULL, o->scl[0], o->scl[1], o->scl[2]);
+
+        if (!(f & 0x8)) cnk_draw_model_local(o->model);
+
+        if (!(f & 0x10)) cnk_draw_object_tree(o->child);
+
+        njPopMatrix(1);
+    }
+}
+
+void njCnkEasyMultiDrawObjectI(NJS_CNK_OBJECT* obj) {
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("cnk", "njCnkEasyMultiDrawObjectI: obj=%p model=%p child=%p",
+                  (void*)obj,
+                  obj ? (void*)obj->model : (void*)0,
+                  obj ? (void*)obj->child : (void*)0);
+    }
     if (!obj) return;
-    if (obj->model) njCnkEasyMultiDrawModel(obj->model);
-    /* Skip children/siblings for now — itemview iterates explicitly. */
+
+    extern long g_cnk_tris_dbg;
+    long before = g_cnk_tris_dbg;
+
+    recvx_gfx_begin_3d(60.0f, 4.0f, 140.0f);
+    cnk_draw_object_tree(obj);
+    recvx_gfx_end_3d();
+
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        static int dbg_n = 0;
+        if (dbg_n < 8) {
+            recvx_log("cnk", "object tree emitted %ld triangles total",
+                      g_cnk_tris_dbg - before);
+            dbg_n++;
+        }
+    }
 }

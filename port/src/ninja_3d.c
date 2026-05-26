@@ -84,9 +84,27 @@ void njInitMatrix(NJS_MATRIX* m, Sint32 n, Int flag) {
     if (m) mat_identity((float*)m);
 }
 
-void njClearMatrix(NJS_MATRIX* m) {
-    if (!m) m = pNaMatMatrixStuckPtr;
-    if (m) mat_identity((float*)m);
+/* KATANA signature is `void njClearMatrix()` — NO parameters. The real
+ * impl (ps2_NaMatrix.c:224) resets the matrix stack to its base and
+ * loads the view matrix into the current slot:
+ *
+ *   lNaMatMatrixStuckCnt = 0;
+ *   pNaMatMatrixStuckPtr = pNaMatMatrixStuckTop;
+ *   njSetMatrix(NULL, &NaViwViewMatrix);
+ *
+ * We don't maintain a real NaViwViewMatrix (njSetView/njInitView are
+ * still stubs), so substitute identity — itemview's camera setup
+ * applies njRotate/njTranslate immediately after njClearMatrix to
+ * build the view transform from scratch anyway.
+ *
+ * The previous signature took an NJS_MATRIX* param that doesn't exist
+ * in the ABI; callers invoke njClearMatrix() with no args, so the impl
+ * read a garbage register as the pointer and wrote identity through it
+ * (AV writing to ~0x1). */
+void njClearMatrix(void) {
+    lNaMatMatrixStuckCnt = 0;
+    if (pNaMatMatrixStuckTop) pNaMatMatrixStuckPtr = pNaMatMatrixStuckTop;
+    if (pNaMatMatrixStuckPtr) mat_identity((float*)pNaMatMatrixStuckPtr);
 }
 
 void njUnitMatrix(NJS_MATRIX* m) {

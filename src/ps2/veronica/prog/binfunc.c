@@ -1,6 +1,16 @@
 #include "../../../ps2/veronica/prog/binfunc.h"
 #ifdef RECVX_PC_PORT
 #include <stdint.h>  /* uintptr_t — see RX_PTRADD note below */
+#include <stdlib.h>  /* calloc, free — used by port bhMlbBinRealize */
+#include <string.h>  /* memcpy — used by port ps2_u32/etc. */
+/* Explicit prototypes in case the PS2-SDK include chain shadows
+ * <stdlib.h>/<string.h>. Without these MSVC defaults the return type
+ * to `int`, which makes `(NJS_CNK_OBJECT*)calloc(...)` truncate the
+ * upper 32 bits of the returned 64-bit pointer — the exact bug
+ * pattern we're fixing in this file. */
+extern void* calloc(size_t num, size_t size);
+extern void  free(void* p);
+extern void* memcpy(void* dst, const void* src, size_t n);
 /* RX_PTRADD: 64-bit-safe pointer + offset for the x64 PC port.
  *
  * The upstream decomp uses `(int)ptr + offset` to apply blob-internal
@@ -23,6 +33,236 @@
 #define RX_PTRINT          unsigned int
 #endif
 
+#ifdef RECVX_PC_PORT
+/* Port-side bhMlbBinRealize.
+ *
+ * The PS2 path does in-place pointer fix-up: it reads/writes the loaded
+ * blob using NJS_CNK_OBJECT struct accesses, treating each 48-byte
+ * serialized entry as a 48-byte runtime entry. That works on PS2
+ * because pointers are 4 bytes; on x64 they're 8, so the runtime
+ * NJS_CNK_OBJECT is 64 bytes with completely shifted field offsets
+ * (model at runtime offset 8 vs. serialized offset 4, etc.). In-place
+ * fix-up is impossible — the realize would read pos[0] as a model
+ * pointer and produce non-canonical addresses.
+ *
+ * Port strategy: parse PS2 layout manually from raw bytes, allocate
+ * fresh x64-native NJS_CNK_OBJECT / NJS_CNK_MODEL / NJS_TEXLIST
+ * structs, and populate them with proper 64-bit pointers. The blob
+ * itself stays untouched (we still hand vlist/plist raw blob offsets
+ * to downstream code, which reads them as byte streams). Allocation
+ * uses calloc — small leak per examine session, acceptable.
+ *
+ * PS2 layouts (must match exactly).
+ *
+ * Critical typedef: KATANA `Angle` = `Sint32` (32-bit), NOT short.
+ * That makes ang[3] 12 bytes not 6, and shifts every later field.
+ *
+ *   NJS_CNK_OBJECT (52 bytes):
+ *     0   evalflags  uint32
+ *     4   model      uint32 (blob offset, -1 = none)
+ *     8   pos[0..2]  3 floats     (12 bytes)
+ *    20   ang[0..2]  3 Sint32     (12 bytes)
+ *    32   scl[0..2]  3 floats     (12 bytes)
+ *    44   child      uint32 (offset, -1 = none)
+ *    48   sibling    uint32 (offset, -1 = none)
+ *
+ *   NJS_CNK_MODEL  (24 bytes):
+ *     0   vlist      uint32 (offset, -1 = none)
+ *     4   plist      uint32 (offset, -1 = none)
+ *     8   center     3 floats
+ *    20   r          float
+ *
+ *   NJS_TEXLIST     (8 bytes):
+ *     0   textures   uint32 (offset)
+ *     4   nbTexture  uint32
+ *
+ *   NJS_TEXNAME    (12 bytes):
+ *     0   filename   uint32 (offset)
+ *     4   attr       uint32
+ *     8   texaddr    uint32
+ */
+#define PS2_CNK_OBJ_SIZE   52  /* Angle = Sint32, NOT short — ang[3]=12 bytes */
+#define PS2_CNK_MDL_SIZE   24
+#define PS2_TEXLIST_SIZE    8
+#define PS2_TEXNAME_SIZE   12
+
+/* Read a uint32 from a PS2-layout struct at given byte offset. */
+static unsigned int ps2_u32(const unsigned char* p, unsigned o)
+{
+    unsigned int v;
+    memcpy(&v, p + o, 4);
+    return v;
+}
+static float ps2_f32(const unsigned char* p, unsigned o)
+{
+    float v;
+    memcpy(&v, p + o, 4);
+    return v;
+}
+static int ps2_s32(const unsigned char* p, unsigned o)
+{
+    int v;
+    memcpy(&v, p + o, 4);
+    return v;
+}
+
+/* Parse one PS2 NJS_CNK_MODEL block at `pm` (bytes), produce an x64
+ * NJS_CNK_MODEL using `dat_top` as base for vlist/plist relocation. */
+static NJS_CNK_MODEL* port_parse_cnk_model(const unsigned char* pm,
+                                           unsigned char* dat_top)
+{
+    NJS_CNK_MODEL* m = (NJS_CNK_MODEL*)calloc(1, sizeof(NJS_CNK_MODEL));
+    if (!m) return NULL;
+
+    unsigned int vlist_off = ps2_u32(pm,  0);
+    unsigned int plist_off = ps2_u32(pm,  4);
+    m->center.x            = ps2_f32(pm,  8);
+    m->center.y            = ps2_f32(pm, 12);
+    m->center.z            = ps2_f32(pm, 16);
+    m->r                   = ps2_f32(pm, 20);
+
+    m->vlist = (vlist_off == 0xFFFFFFFFu) ? NULL
+                                          : (Sint32*)(dat_top + vlist_off);
+    m->plist = (plist_off == 0xFFFFFFFFu) ? NULL
+                                          : (Sint16*)(dat_top + plist_off);
+    return m;
+}
+
+int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
+{
+    unsigned char* base = (unsigned char*)bin_datP;
+
+    /* Header fields (read from very start of blob). */
+    unsigned int status        = ((unsigned char*)base)[3];
+    unsigned int obj_num       = ((unsigned short*)base)[3];
+    unsigned int tex_off       = (unsigned int)((int*)base)[2];
+    unsigned int obj_off       = (unsigned int)((int*)base)[3];
+    unsigned int dat_start_off = ((unsigned short*)base)[2];
+
+    mlwP->flg     = 0;
+    mlwP->obj_num = 0;
+    mlwP->datP    = base;
+    mlwP->objP    = NULL;
+    mlwP->texP    = NULL;
+    mlwP->owP     = NULL;
+
+    /* dat_top = base of the data block referenced by all internal
+     * offsets (objects, models, textures, vlist/plist payloads). */
+    unsigned char* dat_top = base + dat_start_off;
+
+    if (obj_off != 0xFFFFFFFFu)
+    {
+        mlwP->flg     = status;
+        mlwP->obj_num = obj_num;
+
+        /* Allocate a fresh x64-native object array. */
+        NJS_CNK_OBJECT* objs = (NJS_CNK_OBJECT*)calloc(obj_num,
+                                                       sizeof(NJS_CNK_OBJECT));
+        if (!objs) return 0;
+        mlwP->objP = objs;
+
+        const unsigned char* ps2_objs = dat_top + obj_off;
+
+        /* First pass: populate non-pointer fields and resolve models.
+         * Stash raw child/sibling offsets in a side array for pass two. */
+        unsigned int* child_offs   = (unsigned int*)calloc(obj_num, 4);
+        unsigned int* sibling_offs = (unsigned int*)calloc(obj_num, 4);
+        if (!child_offs || !sibling_offs) return 0;
+
+        for (unsigned int i = 0; i < obj_num; ++i)
+        {
+            const unsigned char* po = ps2_objs + i * PS2_CNK_OBJ_SIZE;
+            NJS_CNK_OBJECT*       o = &objs[i];
+
+            o->evalflags = ps2_u32(po,  0);
+            unsigned int model_off = ps2_u32(po,  4);
+            o->pos[0]    = ps2_f32(po,  8);
+            o->pos[1]    = ps2_f32(po, 12);
+            o->pos[2]    = ps2_f32(po, 16);
+            /* Angle = Sint32, 4 bytes each — three full ints. */
+            o->ang[0]    = ps2_s32(po, 20);
+            o->ang[1]    = ps2_s32(po, 24);
+            o->ang[2]    = ps2_s32(po, 28);
+            o->scl[0]    = ps2_f32(po, 32);
+            o->scl[1]    = ps2_f32(po, 36);
+            o->scl[2]    = ps2_f32(po, 40);
+            child_offs[i]   = ps2_u32(po, 44);
+            sibling_offs[i] = ps2_u32(po, 48);
+
+            if (model_off == 0xFFFFFFFFu)
+            {
+                o->model = NULL;
+            }
+            else
+            {
+                o->model = port_parse_cnk_model(dat_top + model_off, dat_top);
+                /* status & 0x80 distinguishes chunked vs basic model
+                 * in the PS2 path. We only support chunked for now;
+                 * basic-model items (NJS_MODEL) would crash here.
+                 * Phase 3b will add the basic path. */
+            }
+        }
+
+        /* Second pass: resolve child/sibling offsets into x64 pointers.
+         * An offset Z names the byte position (relative to dat_top) of
+         * the target object's serialized record. Target index =
+         * (Z - obj_off) / 48. */
+        for (unsigned int i = 0; i < obj_num; ++i)
+        {
+            NJS_CNK_OBJECT* o = &objs[i];
+
+            if (child_offs[i] == 0xFFFFFFFFu) {
+                o->child = NULL;
+            } else {
+                unsigned int idx = (child_offs[i] - obj_off) / PS2_CNK_OBJ_SIZE;
+                o->child = (idx < obj_num) ? &objs[idx] : NULL;
+            }
+
+            if (sibling_offs[i] == 0xFFFFFFFFu) {
+                o->sibling = NULL;
+            } else {
+                unsigned int idx = (sibling_offs[i] - obj_off) / PS2_CNK_OBJ_SIZE;
+                o->sibling = (idx < obj_num) ? &objs[idx] : NULL;
+            }
+        }
+
+        free(child_offs);
+        free(sibling_offs);
+    }
+
+    if (tex_off != 0xFFFFFFFFu)
+    {
+        /* Parse NJS_TEXLIST + its NJS_TEXNAME array. */
+        const unsigned char* ptl = dat_top + tex_off;
+        unsigned int textures_off = ps2_u32(ptl, 0);
+        unsigned int nbTexture    = ps2_u32(ptl, 4);
+
+        NJS_TEXLIST* tl = (NJS_TEXLIST*)calloc(1, sizeof(NJS_TEXLIST));
+        if (!tl) return 0;
+        tl->nbTexture = nbTexture;
+
+        if (nbTexture > 0)
+        {
+            tl->textures = (NJS_TEXNAME*)calloc(nbTexture, sizeof(NJS_TEXNAME));
+            if (!tl->textures) return 0;
+
+            const unsigned char* ptn = dat_top + textures_off;
+            for (unsigned int i = 0; i < nbTexture; ++i)
+            {
+                const unsigned char* pn = ptn + i * PS2_TEXNAME_SIZE;
+                unsigned int filename_off = ps2_u32(pn,  0);
+                tl->textures[i].attr      = ps2_u32(pn,  4);
+                tl->textures[i].texaddr   = ps2_u32(pn,  8);
+                tl->textures[i].filename  = (void*)(dat_top + filename_off);
+            }
+        }
+
+        mlwP->texP = tl;
+    }
+
+    return 1;
+}
+#else
 // 100% matching!
 int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
 {
@@ -56,7 +296,7 @@ int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
     {
         mlwP->flg = status;
 
-        objP = (NJS_CNK_OBJECT*)RX_PTRADD(bin_datP, obj_off);
+        objP = (NJS_CNK_OBJECT*)((int)bin_datP + obj_off);
 
         mlwP->obj_num = obj_num;
         mlwP->objP = objP;
@@ -65,7 +305,7 @@ int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
         {
             if (objP->child != (void*)-1)
             {
-                objP->child = (struct cnkobj*)RX_PTRADD(objP->child, bin_datP);
+                objP->child = (void*)((int)objP->child + (int)bin_datP);
             }
             else
             {
@@ -74,7 +314,7 @@ int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
 
             if (objP->sibling != (void*)-1)
             {
-                objP->sibling = (struct cnkobj*)RX_PTRADD(objP->sibling, bin_datP);
+                objP->sibling = (void*)((int)objP->sibling + (int)bin_datP);
             }
             else
             {
@@ -83,15 +323,15 @@ int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
 
             if (objP->model != (void*)-1)
             {
-                objP->model = (NJS_CNK_MODEL*)RX_PTRADD(objP->model, bin_datP);
+                objP->model = (void*)((int)objP->model + (int)bin_datP);
 
                 if (!(status & 0x80))
                 {
-                    bhBscBinRealize((NJS_MODEL*)objP->model, (RX_PTRINT)bin_datP);
+                    bhBscBinRealize((NJS_MODEL*)objP->model, (unsigned int)bin_datP);
                 }
                 else
                 {
-                    bhCnkBinRealize(objP->model, (RX_PTRINT)bin_datP);
+                    bhCnkBinRealize(objP->model, (unsigned int)bin_datP);
                 }
             }
             else
@@ -103,20 +343,21 @@ int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP)
 
     if (tex_off != -1)
     {
-        mlwP->texP = (NJS_TEXLIST*)RX_PTRADD(bin_datP, tex_off);
+        mlwP->texP = (void*)((int)bin_datP + tex_off);
 
-        mlwP->texP->textures = (NJS_TEXNAME*)RX_PTRADD(mlwP->texP->textures, bin_datP);
+        mlwP->texP->textures = (NJS_TEXNAME*)((char*)mlwP->texP->textures + (int)bin_datP);
 
         namP = mlwP->texP->textures;
 
         for (tex_num = mlwP->texP->nbTexture; tex_num != 0; tex_num--, namP++)
         {
-            namP->filename = (char*)RX_PTRADD(namP->filename, bin_datP);
+            namP->filename = (void*)((char*)namP->filename + (int)bin_datP);
         }
     }
 
     return 1;
 }
+#endif
 
 // 100% matching!
 int bhBscBinRealize(NJS_MODEL* mdlP, BH_DATOFF_T dat_off)

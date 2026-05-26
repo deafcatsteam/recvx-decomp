@@ -286,7 +286,15 @@ void Model_Read_Start()
 	SITEM* si;
 
     si = &sitem;
-    
+
+#ifdef RECVX_PC_PORT
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("examine", "Model_Read_Start called: flg=%d sb_ppp=%p sb_mlb=%p",
+                  si->mw.flg, sys->sb_ppp, sys->sb_mlb);
+    }
+#endif
+
     if ((si->mw.flg & 0x1))
     {
         sys->sb_rdp = si->keep;
@@ -323,15 +331,19 @@ void Model_Read_Set(S_WORK* st)
 
     si = &sitem;
 
+#ifdef RECVX_PC_PORT
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        recvx_log("examine", "Model_Read_Set called: statusflg=0x%x mdl_p=%p flg=%d",
+                  swork.statusflg, si->mw.mdl_p, si->mw.flg);
+    }
+#endif
+
     if ((swork.statusflg & 0x400))
     {
 #ifdef RECVX_PC_PORT
         /* Breadcrumb logs: pinpoint exactly which step in the EXAMINE
-         * post-AFS sequence crashes. Each successful step prints a
-         * line; the last line before silent termination is the suspect.
-         * Investigating struct-layout mismatch between PS2's 32-bit
-         * pointer serialization and x64's 64-bit runtime structs --
-         * NJS_CNK_OBJECT is 48 bytes on PS2, 64 bytes on x64. */
+         * post-AFS sequence runs. Each successful step prints a line. */
         extern void recvx_log(const char* tag, const char* fmt, ...);
         recvx_log("examine", "[1] entry: mdl_p=%p tex_p=%p itemid=%d",
                   si->mw.mdl_p, si->mw.tex_p, st->itemid);

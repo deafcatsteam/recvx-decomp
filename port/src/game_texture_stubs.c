@@ -1082,24 +1082,27 @@ void recvx_port_diag_inventory(void) {
         last_logged_cen_frame = frame_ctr;
     }
 
-    /* Force Monitor task mode bytes to 0 while inventory is open. The
-     * item-action gate (sub1.c:1978) reads `*(unsigned int*)&sys->mn_md0
-     * == 0` as a 4-byte check across mn_md0/md1/md2/md3. Our log showed
-     * mn_md0=4, mn_md1=11 (=0xB04 packed) — Monitor task is stuck in a
-     * load state because the upstream code that clears it isn't compiled.
-     * Force-clear so item-select via Enter on a non-empty slot can
-     * transition mode->4 (ItemCommand = USE/EXAMINE submenu). Also clears
-     * mn_stack[0] since bhSysCallMonitor re-reads from stack each frame
-     * and would clobber our reset. */
+    /* Force Monitor task mode bytes to 0 ONLY when stuck in the specific
+     * 0x0B04 (mn_md0=4 mn_md1=0xB) pattern. Original hook cleared
+     * mn_md0/mn_stack[0] unconditionally every frame — that fixed the
+     * item-action submenu gate at sub1.c:1978 but ALSO nuked legitimate
+     * transient states like mn_md0=6 mn_md1=1 (sub-binary load header
+     * parse, the EXAMINE flow). After case 0 triggered the AFS read and
+     * advanced mn_md1=1, the next frame the hook would zero it before
+     * case 1 could parse the header — leaving sys->sb_ppp NULL forever.
+     *
+     * Narrowed: only clear when md == 0x0B04 (the stuck pattern). Other
+     * legitimate states (6 sub-bin load, 1 init, etc.) are left alone so
+     * their state machines can advance normally. */
     {
-        extern void recvx_log_once(const char* tag, const char* fmt, ...);
-        /* SYS_WORK fields: mn_md0 @ 0x1B0F8, mn_mode0 @ 0x1B0F4, mn_stack
-         * @ 0x1B0E0 (8 ints). We don't have the macros for those, so use
-         * the typed struct access via SYS_WORK pointer. */
-        if (*(unsigned int*)&sys->mn_md0 != 0) {
+        unsigned int md_packed = *(unsigned int*)&sys->mn_md0;
+        unsigned int stk0      = (unsigned int)sys->mn_stack[0];
+        const unsigned int STUCK_PATTERN = 0x00000B04u;
+
+        if (md_packed == STUCK_PATTERN) {
             *(unsigned int*)&sys->mn_md0 = 0;
         }
-        if (sys->mn_stack[0] != 0) {
+        if (stk0 == STUCK_PATTERN) {
             sys->mn_stack[0] = 0;
         }
     }
