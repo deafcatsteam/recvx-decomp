@@ -59,3 +59,7 @@ Run with:
 - [recvx-decomp](https://github.com/fmil95/recvx-decomp) — PS2 decompilation & KATANA/CRI docs
 - [PCSX2](https://pcsx2.net/) — PS2 emulation reference
 - FFmpeg libavformat/libavcodec — video/audio decode
+
+## Disclaimer
+
+This repository is made available for preservational and educational purposes. No affiliation with Capcom Co., Ltd. or the Resident Evil franchise is claimed.

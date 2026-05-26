@@ -14,11 +14,6 @@
 #define BH_DATOFF_T  unsigned int
 #endif
 
-typedef struct NJS_MDATA2_MOD
-{
-    // total size: 0x8
-    void* p[2]; // offset 0x0, size 0x8
-} NJS_MDATA2_MOD;
 
 int bhMlbBinRealize(void* bin_datP, ML_WORK* mlwP);
 int bhBscBinRealize(NJS_MODEL* mdlP, BH_DATOFF_T dat_off);

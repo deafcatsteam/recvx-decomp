@@ -1,14 +1,16 @@
 #include "../../../ps2/veronica/prog/map.h"
 #include "../../../ps2/veronica/prog/main.h"
+#include "../../../ps2/veronica/prog/ps2_NaMatrix.h"
+#include "../../../ps2/veronica/prog/pwksub.h"
 
 /*_anon11 MapPal[32];
 _anon39 MapCol[3];
 _anon13 ItmDat[22];
 unsigned short CncDatA[81];
 unsigned short CncDatB[49];
-_map_wrk MapWrk;
-_map_wrk* mwP;
-_anon31* sys;
+_map_wrk MapWrk;*/
+static map_wrk* mwP;
+/*_anon31* sys;
 _anon17* rom;
 float BHD_ASPECT_Y;
 float BHD_ASPECT_X;
@@ -1686,33 +1688,35 @@ int FsubGaugeDraw(_anon3* fgP)
 	// Line 2910, Address: 0x2b5e2c, Func Offset: 0x18c
 	// Line 2911, Address: 0x2b5e30, Func Offset: 0x190
 	// Func End, Address: 0x2b5e38, Func Offset: 0x198
-}
+}*/
 
-// 
-// Start address: 0x2b5e40
-void MapTagInit(int tag_num)
+// 100% matching!
+static void MapTagInit(int tag_num)
 {
-	// Line 2921, Address: 0x2b5e40, Func Offset: 0
-	// Line 2924, Address: 0x2b5e48, Func Offset: 0x8
-	// Line 2925, Address: 0x2b5e50, Func Offset: 0x10
-	// Line 2932, Address: 0x2b5e6c, Func Offset: 0x2c
-	// Func End, Address: 0x2b5e78, Func Offset: 0x38
+    mwP->tag_num = 0;
+    mwP->tag_wrkP = (tag_wrk_typ*)bhGetFreeMemory(tag_num * 32, 4);
 }
 
-// 
-// Start address: 0x2b5e80
-void MapTagEntry(float basP[16], int rom_no, _anon14* posP)
+// 100% matching!
+static void MapTagEntry(NJS_MATRIX* basP, int rom_no, NJS_POINT3* posP)
 {
-	_tag_wrk_typ* twP;
-	// Line 2942, Address: 0x2b5e80, Func Offset: 0
-	// Line 2943, Address: 0x2b5e88, Func Offset: 0x8
-	// Line 2946, Address: 0x2b5ea8, Func Offset: 0x28
-	// Line 2947, Address: 0x2b5ec4, Func Offset: 0x44
-	// Line 2948, Address: 0x2b5edc, Func Offset: 0x5c
-	// Func End, Address: 0x2b5ee8, Func Offset: 0x68
+    tag_wrk_typ* twP;
+
+    twP = &mwP->tag_wrkP[mwP->tag_num++];
+    
+    twP->rom_no = rom_no;   
+    
+    if (basP != NULL) 
+    {
+        njCalcPoint(basP, posP, &twP->pos);
+    }
+    else 
+    {
+        twP->pos = *posP;
+    } 
 }
 
-// 
+/*// 
 // Start address: 0x2b5ef0
 _tag_wrk_typ* MapTagConnect(int rom_no)
 {
@@ -1873,17 +1877,15 @@ void MapDrawPolyFill(_anon5* pnt, float pri, int pal)
 	// Line 3129, Address: 0x2b62d8, Func Offset: 0x8
 	// Line 3130, Address: 0x2b62f8, Func Offset: 0x28
 	// Func End, Address: 0x2b6310, Func Offset: 0x40
-}
+}*/
 
-// 
-// Start address: 0x2b6310
-void MapDrawMessage()
+// 100% matching!
+static void MapDrawMessage()
 {
-	// Line 3155, Address: 0x2b6310, Func Offset: 0
-	// Func End, Address: 0x2b6318, Func Offset: 0x8
+
 }
 
-// 
+/*// 
 // Start address: 0x2b6320
 int FsubZoomCursor(_anon8* fzP)
 {
@@ -2021,26 +2023,22 @@ int FsubZoomInfomation(_anon21* fiP)
 	// Line 3312, Address: 0x2b68bc, Func Offset: 0x24c
 	// Line 3313, Address: 0x2b68c0, Func Offset: 0x250
 	// Func End, Address: 0x2b68c8, Func Offset: 0x258
-}
+}*/
 
-// 
-// Start address: 0x2b68d0
-_anon39 MapCnvArgb2Color(_anon11* argbP)
+// 100% matching!
+static NJS_COLOR MapCnvArgb2Color(NJS_ARGB* argbP)
 {
-	_anon39 col;
-	// Line 3323, Address: 0x2b68d0, Func Offset: 0
-	// Line 3327, Address: 0x2b68e0, Func Offset: 0x10
-	// Line 3328, Address: 0x2b6900, Func Offset: 0x30
-	// Line 3329, Address: 0x2b6918, Func Offset: 0x48
-	// Line 3330, Address: 0x2b6930, Func Offset: 0x60
-	// Line 3332, Address: 0x2b6944, Func Offset: 0x74
-	// Line 3330, Address: 0x2b6948, Func Offset: 0x78
-	// Line 3332, Address: 0x2b694c, Func Offset: 0x7c
-	// Line 3333, Address: 0x2b6954, Func Offset: 0x84
-	// Func End, Address: 0x2b6968, Func Offset: 0x98
+    NJS_COLOR col;
+    
+    col.argb.a = 255.0f * argbP->a;
+    col.argb.r = 255.0f * argbP->r;
+    col.argb.g = 255.0f * argbP->g;
+    col.argb.b = 255.0f * argbP->b;
+
+    return col;
 }
 
-// 
+/*// 
 // Start address: 0x2b6970
 int FsubZoomScreen(_anon30* fsP)
 {
