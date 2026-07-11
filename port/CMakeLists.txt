@@ -225,6 +225,7 @@ option(RECVX_BUILD_GAME "Compile decomp game source (phase 2+)" ON)
 if(RECVX_BUILD_GAME)
     target_compile_definitions(recvx_pc PRIVATE RECVX_BUILD_GAME=1)
     target_compile_definitions(recvx_afs PRIVATE RECVX_BUILD_GAME=1)
+    target_compile_definitions(recvx_port_stubs PRIVATE RECVX_BUILD_GAME=1)
     set(RECVX_GAME_SOURCES
         ${RECVX_SRC}/ps2/veronica/prog/main.c
         ${RECVX_SRC}/ps2/veronica/prog/system.c
@@ -324,20 +325,17 @@ if(RECVX_BUILD_GAME)
         # Ninja headers key off these; set them so we don't cascade into
         # MWCC-specific paths inside ninja.h.
         _NJ_PS2_ _SCE_EE_
-        # Pre-set KATANA's CRT shadow-header guards so any <stddef.h> /
-        # <stdio.h> / etc. that resolves to KATANA/Include/ becomes a no-op
-        # and we fall through to the real MSVC CRT types.
-        _STDDEF_SHC _STDIO_SHC _STDLIB_SHC _STRING_SHC
-        _MATH_SHC _FLOAT_SHC _LIMITS_SHC
     )
-    # Put the MSVC CRT include dir AHEAD of our own so <stddef.h> / <stdio.h>
-    # resolve to MSVC's real headers before the KATANA dir gets a chance to
-    # shadow them. CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES is auto-populated
-    # from the compiler at configure time.
-    if(CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES)
-        target_include_directories(recvx_game BEFORE PRIVATE
-            ${CMAKE_C_IMPLICIT_INCLUDE_DIRECTORIES})
-    endif()
+    # NOTE: the CRT shadow-header guards (_STDDEF_SHC, _STRING_SHC, etc.)
+    # are deliberately NOT pre-defined here. recvx_game_prelude.h (force-
+    # included below) already includes the real CRT headers first and only
+    # then defines those guards itself. -D flags and -include are applied
+    # in command-line order by GCC, so defining the guards here (i.e.
+    # before -include on the command line) would mask KATANA's shadow
+    # headers before the prelude's own real #include<> runs, leaving
+    # size_t/memcpy/etc undeclared. This bit MSVC too, silently: MSVC's
+    # own ucrt header search never touches KATANA/Include at all, so the
+    # premature defines were merely redundant there, not broken.
     if(MSVC)
         # MSVC doesn't understand GCC's `__attribute__((aligned(N)))` syntax
         # on globals, and the decomp has a few. Give it a benign alias.
@@ -351,6 +349,18 @@ if(RECVX_BUILD_GAME)
     else()
         target_compile_options(recvx_game PRIVATE
             -include ${CMAKE_CURRENT_SOURCE_DIR}/include/recvx_game_prelude.h)
+        # This decomp source was written against MWCC (a lenient C89-era
+        # compiler) and previously only built with MSVC in permissive mode
+        # — both tolerate implicit function declarations and int/pointer
+        # mismatches as warnings, not errors. GCC 14 hardened these three
+        # diagnostics to hard errors by default regardless of -std=gnuXX.
+        # Downgrade back to non-fatal warnings (not fully silenced) so the
+        # build doesn't halt on 1990s-style code we're not here to rewrite;
+        # each one is still visible in the build log for later cleanup.
+        target_compile_options(recvx_game PRIVATE
+            -Wno-error=implicit-function-declaration
+            -Wno-error=int-conversion
+            -Wno-error=incompatible-pointer-types)
     endif()
     target_link_libraries(recvx_game PUBLIC recvx_port_stubs recvx_afs)
     # MSVC 2015+ inlined the printf/sprintf/scanf family into stdio.h.
