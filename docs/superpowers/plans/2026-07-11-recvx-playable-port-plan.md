@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ⬜ Blocked on P1 | 0% |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 15% |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -347,6 +347,62 @@ demo) or Phase 1 (compiles) ever exercised, and only reachable with real
 extracted AFS gamedata — so P2 should start with (a) making gamedata
 extraction part of the normal dev workflow (not a one-off manual `isoinfo`
 scratch step) and (b) a debugger-attached repro of the frame-646 segfault.
+
+---
+
+## Phase 2 progress log (informal — P2 not detailed into tasks yet)
+
+**2026-07-12 — ASan-based repro of the frame-646 crash, two bugs found + fixed:**
+
+Rebuilt `recvx_pc` with `-fsanitize=address` (separate `port/build-asan` dir,
+gitignored) and re-ran the Task 3 real-gamedata smoke test under it. ASan
+caught the actual corrupting write, well before the deferred SIGSEGV:
+
+1. **`palbuf` undersized (root cause of the frame-646 crash).**
+   `stub_game.c`'s placeholder `palbuf[256]` was 16x smaller than the
+   `palbuf[4096]` the already-compiled real `ps2_texture.c`
+   (`bhSetMemPvpTexture` → `ClutCopy`) indexes into. `ps2_dummy.c` — the file
+   that would provide the correctly-sized real definition — isn't compiled
+   (it's PS2 GS/VU0 rendering code with raw MIPS/VU inline asm, not portable
+   to x86-64). Every CLUT copy silently wrote past the small stub buffer into
+   whatever static happened to sit next in BSS, eventually corrupting the FMV
+   glue's `g_movie_fmv` static ~600 frames later — that's what actually
+   crashed at frame 646, in a completely unrelated subsystem (`recvx_fmv_close`
+   via `PlayStartMovieEx`, first Capcom-logo movie call). Fixed by sizing the
+   stub to match (`palbuf[4096] __attribute__((aligned(64)))`).
+
+2. **`Pad_act` wrong type/size + stale `pdVibMx*` stub signatures.**
+   Same bug class, found immediately after fixing #1 (game then got much
+   further, into the title/attract loop). `stub_game.c` stood in a scalar
+   `unsigned int Pad_act` for the real `PAD_ACT Pad_act[20]` struct array, and
+   its `pdVibMx*` no-op stubs had signatures that didn't match what the
+   already-compiled `vibman.c` actually calls. Fixed by wiring in the real
+   `ps2_sg_pdvib.c` (100% matched, self-contained, no PS2 asm — just `scePad*`
+   SDK calls) instead of guessing at another stub size, matching this
+   codebase's existing convention of replacing stubs with real files as they
+   become compilable. Needed one new PS2 SDK stub (`scePadSetActDirect`) and
+   three missing `compat/libpad.h` constants to compile.
+
+Both fixes verified via ASan (no more overflows) and the plain debug binary
+(commit `9f575ea2`). The binary now survives frame 646 and a full first
+attract-loop cycle (title → Capcom logo → title-screen movie attempt → back
+to title), reaching frame ~2582 — a second cycle through the same loop —
+before hitting a **new, different** SIGSEGV.
+
+**Next bug found (not yet fixed):** `bhDispMessage` (`message.c:589`, called
+from `bhSysCallMonitor`) crashes on the *second* pass through the
+`sysmes.ald` message-table load sequence. That load is a multi-frame state
+machine (`system.c:1409`, `sys->mn_md1` 1→2→3): state 1 issues
+`RequestReadIsoFile("sysmes.ald", ...)` and immediately sets `sys->mes_ip`;
+state 2 waits for `GetReadFileStatus() == 0` before finishing the real parse
+(`sys->mes_sp` etc.). `bhDispMessage` got called with `sys->mes_sp` read
+before that parse completed. Suspect this is a port-layer (not decomp-logic)
+timing bug: our `RequestReadIsoFile`/`GetReadFileStatus` in
+`afs_mount.c` may be resolving synchronously in a way the original PS2's
+genuinely-async DMA read didn't, breaking an invariant the state machine
+relies on across repeated load cycles (e.g. a flag not reset between the
+first and second attract-loop pass). Not yet root-caused — this is where P2
+diagnosis should pick up next.
 
 ---
 
