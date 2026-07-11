@@ -370,7 +370,8 @@ void mwPlySetDispMode(int m)             { (void)m; }
  * after NEW GAME is selected, since bup_00.c (TypewriterMode[] dispatcher)
  * isn't compiled yet. */
 int  ControlRanking(void)   { return 0; }
-void Expand(void)           {}
+/* Expand is implemented for real in port/src/expand_pc.c (the decomp
+ * expand.c is pure MIPS asm). */
 void TypewriterKeepMemory(void) {}
 void Ps2ClearOT(void)       {}
 

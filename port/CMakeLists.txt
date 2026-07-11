@@ -86,6 +86,9 @@ set(PORT_STUB_SOURCES
     src/stubs/stub_cri.c
     src/stubs/stub_sb.c
     src/stubs/stub_game.c
+    # Real C port of the room-load LZSS decompressor (decomp expand.c is
+    # pure MIPS asm). Needed by system.c's room state machine (rdtsz).
+    src/expand_pc.c
     src/input/input.c
     # Low-4GiB allocator for the NJS_TEXMEMLIST pool. Split out from
     # game_texture_stubs.c because <windows.h>'s POINT struct collides
