@@ -71,8 +71,38 @@ void* recvx_alloc_low4g(size_t bytes) {
 }
 
 #else
+#include <sys/mman.h>
+
 void* recvx_alloc_low4g(size_t bytes) {
-    (void)bytes;
-    return NULL;  /* non-Windows not supported in this port yet */
+#ifdef MAP_32BIT
+    /* Linux-only flag: restricts the mapping to the first 2 GiB of the
+     * address space, comfortably under the 4 GiB Uint32 texaddr limit. */
+    void* p = mmap(NULL, bytes, PROT_READ | PROT_WRITE,
+                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_32BIT, -1, 0);
+    if (p != MAP_FAILED) {
+        RX_LOG("tex", "mmap MAP_32BIT base=%p", p);
+        return p;
+    }
+    RX_LOG("tex", "mmap MAP_32BIT failed, trying fixed low addresses");
+#endif
+    /* Fallback: hint a fixed low address. MAP_FIXED_NOREPLACE (Linux 4.17+)
+     * fails cleanly instead of silently mapping elsewhere if the address
+     * is already used, mirroring the Windows VirtualAlloc-at-candidate loop. */
+    static const uintptr_t candidates[] = {
+        0x10000000, 0x20000000, 0x30000000, 0x40000000,
+        0x50000000, 0x60000000, 0x70000000,
+    };
+    for (size_t i = 0; i < sizeof(candidates) / sizeof(candidates[0]); ++i) {
+        void* hint = (void*)candidates[i];
+        void* p = mmap(hint, bytes, PROT_READ | PROT_WRITE,
+                        MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+                        -1, 0);
+        if (p != MAP_FAILED) {
+            RX_LOG("tex", "mmap fixed base=%p", p);
+            return p;
+        }
+    }
+    RX_LOG("tex", "all low-4g mmap attempts failed");
+    return NULL;
 }
 #endif
