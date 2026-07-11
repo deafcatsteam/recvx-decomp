@@ -11,12 +11,28 @@
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "VCPKG_TARGET_TRIPLET": "x64-windows"
       }
+    },
+    {
+      "name": "x64-linux-vcpkg",
+      "displayName": "Ninja x64 Linux + vcpkg",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_TARGET_TRIPLET": "x64-linux",
+        "RECVX_BUILD_GAME": "OFF"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "x64-debug",
       "configurePreset": "x64-vcpkg",
+      "configuration": "Debug"
+    },
+    {
+      "name": "x64-linux-debug",
+      "configurePreset": "x64-linux-vcpkg",
       "configuration": "Debug"
     }
   ]

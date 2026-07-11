@@ -93,20 +93,13 @@ struct _njs_textureh_vtx {
     unsigned int ocol;
 };
 
-struct _recvx_gfx_vtx_local {
-    float    x, y, z;
-    unsigned int color;
-};
-extern void recvx_gfx_draw_polygon(const struct _recvx_gfx_vtx_local* v,
-                                   int n, int trans);
-
 void njDrawTextureH(void* polygon, int count, int tex, int flag) {
     (void)tex; (void)flag;
     if (!polygon || count < 3) return;
     if (count > 32) count = 32;
     const struct _njs_textureh_vtx* p =
         (const struct _njs_textureh_vtx*)polygon;
-    struct _recvx_gfx_vtx_local v[32];
+    recvx_gfx_vtx v[32];
     for (int i = 0; i < count; ++i) {
         v[i].x = p[i].x;
         v[i].y = p[i].y;

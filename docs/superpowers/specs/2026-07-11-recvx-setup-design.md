@@ -103,3 +103,53 @@ working setup first (build succeeds, ISO usable), with deeper contribution
 - Porting the low-4GiB allocator and `game_texture_stubs.c` to Linux so
   `RECVX_BUILD_GAME=ON` works outside MSVC.
 - Any new gameplay/rendering feature work in the PC port.
+
+## Execution outcome (2026-07-11)
+
+Tasks 1-3 completed as planned (fork/clone, `pc-port` synced with
+`recvx-decomp` master, `recvx-decomp` builds and produces `elf/main.elf`
+against the user's ISO).
+
+Task 4 (PC port Phase 0 Linux build) got the toolchain and dependencies
+fully working (Ninja + vcpkg `x64-linux` preset configures cleanly; SDL2,
+SDL2_image, SDL2_ttf, and FFmpeg all build from source in the devcontainer)
+and fixed two real, previously-undiscovered Linux-portability bugs in the
+port's always-built stub code (not gated by `RECVX_BUILD_GAME`):
+
+- `port/src/tex_dump.c` included `<direct.h>` unconditionally for `_mkdir`
+  (MSVC-only header) — now guarded behind `#ifdef _WIN32` with a POSIX
+  `mkdir`-based fallback.
+- `port/src/stubs/stub_ninja.c` redeclared `recvx_gfx_draw_polygon` with a
+  locally-defined, field-compatible but differently-named vertex struct
+  (`_recvx_gfx_vtx_local` vs. the header's `recvx_gfx_vtx`), which GCC
+  rejects as a conflicting declaration (MSVC apparently tolerated it) — now
+  uses the header's `recvx_gfx_vtx` type directly, removing the redundant
+  duplicate declaration.
+
+However, the build still fails at the **link** step even with
+`RECVX_BUILD_GAME=OFF`: `port/src/main_pc.c`'s `--game` code path
+(`run_game_loop`, calling `njUserInit`/`njUserMain`/`njUserExit`,
+`InitAdvSystem`, `AdvWork`) and `port/src/afs/afs_mount.c`'s RDX lookup
+(referencing `rdx_files` / `rdx_image_data_max`, defined in
+`ps2_dvd_image.c`) are **not** compile-time gated on `RECVX_BUILD_GAME` —
+they're only skipped at runtime via the `--game` CLI flag, so the symbols
+are unconditionally referenced at link time regardless of the CMake option.
+In other words, `RECVX_BUILD_GAME=OFF` is not currently a working build
+configuration on any platform (it was presumably only ever exercised with
+`RECVX_BUILD_GAME=ON` on Windows/MSVC) despite the option's own description
+("Compile decomp game source (phase 2+)") implying an OFF state should work
+standalone.
+
+**Follow-up task (not done in this setup):** add `#ifdef RECVX_BUILD_GAME`
+(or an equivalent `target_compile_definitions` guard) around the `--game`
+path in `main_pc.c` and the RDX lookup in `afs_mount.c`, so the Phase 0
+FMV-only demo actually links and runs on Linux without requiring the
+Windows-only low-4GiB allocator / `game_texture_stubs.c` work. This is
+smaller than enabling `RECVX_BUILD_GAME=ON` on Linux, and was identified but
+deliberately not implemented in this session — the user chose to stop here
+and document the gap rather than expand this setup task further.
+
+Committed to this branch: the Linux devcontainer tooling (Ninja, vcpkg,
+autotools, nasm, X11/OpenGL/audio dev headers), the `x64-linux-vcpkg` /
+`x64-linux-debug` CMake presets, and the two source portability fixes above.
+Not committed / not working: a linked `recvx_pc` executable on Linux.

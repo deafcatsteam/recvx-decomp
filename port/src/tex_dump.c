@@ -16,7 +16,12 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>     /* getenv */
+#ifdef _WIN32
 #include <direct.h>     /* _mkdir on MSVC */
+#else
+#include <sys/stat.h>   /* mkdir on POSIX */
+#define _mkdir(path) mkdir(path, 0755)
+#endif
 
 extern void recvx_log(const char* tag, const char* fmt, ...);
 #define RX_LOG(tag, ...) recvx_log(tag, __VA_ARGS__)
