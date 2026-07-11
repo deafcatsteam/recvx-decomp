@@ -32,7 +32,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | Phase | Description | Status | % |
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
-| **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | 🟡 Not started | 0% |
+| **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ⬜ Blocked on P1 | 0% |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
@@ -253,10 +253,35 @@ git commit -m "build: fix GCC compile error in <file> (<one-line what/why>)"
 git push fork pc-port
 ```
 
-- [ ] **Step 6: Update this plan's progress table**
+- [x] **Step 6: Update this plan's progress table**
 
 Set P1 to ✅ 100% once `recvx_pc` links with `RECVX_BUILD_GAME=ON`. Record actual
 time spent and error count found (for calibrating how risky P2/P3 will be).
+
+**Actual result (2026-07-12):** linked successfully after 4 fix commits, 5 rebuild
+iterations. Bug classes found, in order: (1) 9 case-sensitivity include mismatches
+(KATANA headers `#include`-ing a sibling with different case than the file on
+disk — MSVC's case-insensitive filesystem never noticed) — fixed via one-line
+forwarding shims in `port/include/compat/`; (2) a `-D`/`-include` command-line
+ordering bug in `port/CMakeLists.txt` that pre-armed KATANA's CRT shadow-header
+guards before the prelude's real `#include <stddef.h>`/etc ran, leaving
+`size_t`/`memcpy`/etc undeclared across every game-source file; (3) GCC 14
+hardening `-Wimplicit-function-declaration`/`-Wint-conversion`/
+`-Wincompatible-pointer-types` from warnings to hard errors for this 1990s
+MWCC-era code — downgraded to non-fatal warnings for `recvx_game` only; (4) one
+GNU C lvalue-cast-increment idiom in `ps2_texture.c` that GCC has since removed
+as an extension — split into two statements, identical behavior; (5)
+`recvx_port_stubs` never received the `RECVX_BUILD_GAME` define, so its
+always-built stub globals collided with `system.c`'s real ones under GCC 10+'s
+`-fno-common` default — added the missing define and guarded the stubs; (6) one
+genuinely missing symbol (`GetFileSize`, real impl in uncompiled `gdlib.c`) —
+resolved by delegating to the already-working `GetIsoFileSize` in
+`afs_mount.c` rather than adding a dummy stub, since the call site's exact
+`rm_*.rdx` room-file pattern matches what that function already handles.
+
+No case where the risk assessment ("no gameplay logic changes, only
+platform/toolchain-compat fixes") was violated — every fix is behavior-
+preserving on the semantics the original MWCC/MSVC toolchains already assumed.
 
 ---
 
