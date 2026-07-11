@@ -296,7 +296,7 @@ preserving on the semantics the original MWCC/MSVC toolchains already assumed.
   --game path will crash / misrender until more of the decomp is brought in*" —
   this task's job is to find out exactly where, not to fix it yet).
 
-- [ ] **Step 1: Run against the real ISO under xvfb, capture the boot log**
+- [x] **Step 1: Run against the real ISO under xvfb, capture the boot log**
 
 ```bash
 cd ~/projects/recvx-decomp-port
@@ -316,13 +316,37 @@ this step also tells us whether `--game` mode can run purely from the ISO or
 genuinely requires extracted AFS files first; adjust based on what
 `MountSoundAfs`/`InitAdvSystem` actually need once Task 2 links.)
 
-- [ ] **Step 2: Read the log, note the exact crash point (or confirm it boots further than expected)**
+- [x] **Step 2: Read the log, note the exact crash point (or confirm it boots further than expected)**
 
-No fixed expected output — this step's deliverable is a written note (in this
-plan's progress table or a new dated entry in
-`docs/superpowers/specs/2026-07-11-recvx-setup-design.md`) of where it stops:
-clean menu, crash with signal, hang, or garbage render. This becomes the seed
-for Phase 2's task list once P1 finishes.
+**Actual result (2026-07-12):** `--gamedata` needed real extracted AFS data —
+confirmed by first running with the (nonexistent) default `--gamedata` path:
+no crash, but `MountSoundAfs` fails 0/7 partitions and the engine spins forever
+in the `Warning`/`Firstmovie` boot-monitor state, since every `RequestReadInsideFile`
+call returns `bad part=N` and nothing progresses. This is a stable, permanent
+stall, not a hang bug — a symptom of missing data, not broken code.
+
+All 8 AFS files the port needs (`BGM1.AFS`, `VOICE1.AFS`, `MULTSPQ1.AFS`,
+`ADV.AFS`, `ITEM1.AFS`, `MRY.AFS`, `SYSTEM.AFS`, `RDX_LNK.AFS`) turned out to
+ship as plain top-level files directly on the ISO9660 filesystem — extracted
+them read-only (`isoinfo -x`, no ISO modification) into a scratch `--gamedata`
+dir to get a real test. Result: **`MountSoundAfs` now mounts 8/7 partitions
+("boot OK")**, and the boot chain progresses much further — Warning screen
+loads and decodes real TIM2 textures (512×512) into the Task-1 `mmap`
+allocator, transitions cleanly into the `Ipl` task (frame 432, `tk_flg`
+`active=[Ipl,Monitor,SndMonitor]`), reads `ADV.AFS` for a 1024×512 texture,
+and advances `AdvWork.Mode` 1→7 over ~200 more frames — **then segfaults at
+frame 646**, right after the `Mode=6→7` transition, with no further log output
+(`Segmentation fault (core dumped)`; no core file survived the `--rm`
+container). Not yet diagnosed — this is Phase 2's starting point, not fixed
+here per this task's scope (verification only).
+
+This becomes the seed for Phase 2's task list: the crash is deep inside the
+`Ipl` task's `AdvWork.Mode` state machine (`adv.c`, likely `Adv_Ipl` or
+similar per `main_pc.c`'s task-name table), well past the point Phase 0 (FMV
+demo) or Phase 1 (compiles) ever exercised, and only reachable with real
+extracted AFS gamedata — so P2 should start with (a) making gamedata
+extraction part of the normal dev workflow (not a one-off manual `isoinfo`
+scratch step) and (b) a debugger-attached repro of the frame-646 segfault.
 
 ---
 
