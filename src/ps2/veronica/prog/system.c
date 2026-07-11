@@ -1431,10 +1431,19 @@ void bhSysCallMonitor()
             
             if (sz != 0) 
             {
-                RequestReadIsoFile("sysmes.ald", sys->memp); 
-                
+                RequestReadIsoFile("sysmes.ald", sys->memp);
+
                 sys->mes_ip = (unsigned int*)sys->memp;
-                
+
+#ifdef RECVX_PC_PORT
+                /* Until case 2 re-derives mes_sp from the fresh read, the old
+                 * value points into a reused memp region. The NOW LOADING draw
+                 * (bhDispMessage via the mes_sp != NULL guard below) can run in
+                 * that window; on PS2 the resulting wild read stayed inside the
+                 * mirrored 32 MB address space (one frame of garbage glyphs),
+                 * on x64 it hits unmapped memory and faults. */
+                sys->mes_sp = NULL;
+#endif
                 sys->memp += sz;
                 
                 sys->doordp = bhGetFreeMemory(172032, 32);
