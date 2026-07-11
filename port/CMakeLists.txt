@@ -304,6 +304,12 @@ if(RECVX_BUILD_GAME)
         # bhMlbBinRealize call no longer hands wild pointers to
         # downstream draw code.
         ${RECVX_SRC}/ps2/veronica/prog/binfunc.c
+        # Controller rumble/vibration actuator simulation. 100% matched,
+        # self-contained, no PS2 asm — just scePad* SDK calls (stubbed in
+        # stub_sce_pad.c). Replaces stub_game.c's Pad_act/pdVibMx* stubs,
+        # which had wrong type/size and signatures vs. what system.c and
+        # vibman.c (both already compiled) actually expect.
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_sg_pdvib.c
         # Expand this list incrementally as each file compiles.
     )
 

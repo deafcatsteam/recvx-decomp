@@ -22,3 +22,4 @@ int scePadGetState(int port, int slot)               { (void)port; (void)slot; r
 int scePadGetReqState(int port, int slot)            { (void)port; (void)slot; return 0; }
 int scePadInfoMode(int port, int slot, int term, int off) { (void)port;(void)slot;(void)term;(void)off; return 0; }
 int scePadSetMainMode(int port, int slot, int off, int lock) { (void)port;(void)slot;(void)off;(void)lock; return 1; }
+int scePadSetActDirect(int port, int slot, const unsigned char* data) { (void)port;(void)slot;(void)data; return 1; }

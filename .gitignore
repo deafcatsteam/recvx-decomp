@@ -4,6 +4,7 @@ __pycache__
 .venv
 .wineprefix
 build
+build-asan
 context
 elf
 iso

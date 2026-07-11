@@ -390,7 +390,6 @@ int          Ps2_albinoid_flag;
 int          Ps2_ice_flag;
 int          Ps2_rendertex_initflag;
 unsigned int Ps2_pad;
-unsigned int Pad_act;
 int          WpnTab[256];
 
 /* ----------------------------------------------------------------------
@@ -555,9 +554,14 @@ void  StopVibrationEx(int port, int motor)         { (void)port;(void)motor; }
 
 /* Globals adv.c references. PatId is now owned by afs_mount.c (matches
  * sdfunc.c:91 `int PatId[4]` exactly). palbuf holds the current palette.
+ * Size/alignment must match ps2_dummy.h's extern declaration and the
+ * real ps2_dummy.c definition (not compiled in — hardware VU0/GS asm) —
+ * ps2_texture.c's real (compiled) bhSetMemPvpTexture indexes it assuming
+ * the full 4096 elements, and undersizing this silently corrupts
+ * whatever global happens to sit right after it in BSS.
  * Ps2_current_texmemlist is defined in game_texture_stubs.c (typed
  * NJS_TEXMEMLIST* so adv.c:695 dereferences cleanly). */
-unsigned int palbuf[256];
+unsigned int palbuf[4096] __attribute__((aligned(64)));
 
 /* ----------------------------------------------------------------------
  * adv.c pulls in: sound bank (PlayBgm/Voice), vibration (vibman),
@@ -602,11 +606,7 @@ void ExitApplication(void)            { /* boot chain shouldn't hit this */ }
  * SetEventVibrationMode is in sdfunc.c (not compiled yet) so still stub. */
 void SetEventVibrationMode(int m)     { (void)m; }
 
-/* KATANA pad-vib rumble primitives — no-op on PC. Keeps vibman.c linking. */
-int  pdVibMxIsReady(uint32_t port)                    { (void)port; return 1; }
-void pdVibMxSetStopTime(uint32_t port, uint32_t time) { (void)port;(void)time; }
-void pdVibMxStart(uint32_t port, int motor, int power){ (void)port;(void)motor;(void)power; }
-void pdVibMxStop(uint32_t port, int motor)            { (void)port;(void)motor; }
+/* pdVibMx* + Pad_act now come from the real ps2_sg_pdvib.c (see CMakeLists). */
 
 /* Called from SetPvrInfo (adv.c:587) with the raw TIM2 payload ptr just
  * before njSetTextureInfo. Logs first 16 bytes so we can see whether the
