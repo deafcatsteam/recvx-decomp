@@ -140,16 +140,52 @@ configuration on any platform (it was presumably only ever exercised with
 ("Compile decomp game source (phase 2+)") implying an OFF state should work
 standalone.
 
-**Follow-up task (not done in this setup):** add `#ifdef RECVX_BUILD_GAME`
-(or an equivalent `target_compile_definitions` guard) around the `--game`
-path in `main_pc.c` and the RDX lookup in `afs_mount.c`, so the Phase 0
-FMV-only demo actually links and runs on Linux without requiring the
-Windows-only low-4GiB allocator / `game_texture_stubs.c` work. This is
-smaller than enabling `RECVX_BUILD_GAME=ON` on Linux, and was identified but
-deliberately not implemented in this session — the user chose to stop here
-and document the gap rather than expand this setup task further.
+**Follow-up task — completed 2026-07-11 (later session):** added the
+`RECVX_BUILD_GAME` compile-time guard so Phase 0 (`RECVX_BUILD_GAME=OFF`)
+now links and runs on Linux:
 
-Committed to this branch: the Linux devcontainer tooling (Ninja, vcpkg,
-autotools, nasm, X11/OpenGL/audio dev headers), the `x64-linux-vcpkg` /
-`x64-linux-debug` CMake presets, and the two source portability fixes above.
-Not committed / not working: a linked `recvx_pc` executable on Linux.
+- `port/CMakeLists.txt`: `target_compile_definitions(recvx_pc PRIVATE
+  RECVX_BUILD_GAME=1)` and same for `recvx_afs`, inside the existing
+  `if(RECVX_BUILD_GAME)` block.
+- `port/src/main_pc.c`: wrapped the `njUserInit`/`njUserMain`/`njUserExit`/
+  `InitAdvSystem` externs, the entire `run_game_loop` function (and its
+  `sys`/`AdvWork` helpers), and the `run_game_loop(backend)` call site in
+  `#ifdef RECVX_BUILD_GAME`. Without the macro, requesting game mode
+  (default, or `--game`) now logs a clear error and exits 1 instead of
+  failing to link. Also found and guarded a second, independent problem:
+  `run_fmv_demo` (the FMV-only path) unconditionally called
+  `recvx_pump_pad()`, which only exists in `game_texture_stubs.c`
+  (`RECVX_BUILD_GAME`-only) — this call mirrors input into the decomp's
+  `Pad[]`/`sys` structs and is unused by the FMV demo (which reads its own
+  `recvx_input_buttons()`), so it was dead weight for Phase 0 and safe to
+  guard out entirely.
+- `port/src/afs/afs_mount.c`: `MountSoundAfs` (writes decomp `sys` struct
+  fields) and the RDX-lookup helper (`rdx_files`/`rdx_image_data_max`,
+  used by `port_try_rdx_lookup` and inline in `GetIsoFileSize`) are only
+  reachable from the now-guarded game path, but as a static library
+  `recvx_afs` is still pulled fully into the link (via always-used
+  `recvx_set_gamedata_dir`), so ordinary linkers (no
+  `-ffunction-sections`/`--gc-sections`) still demand every extern in the
+  object file resolve regardless of reachability. Gave both a
+  `#ifndef RECVX_BUILD_GAME` stub body (`return -1`) instead.
+
+Verified: configured + built cleanly with `RECVX_BUILD_GAME=OFF`
+(`cmake --preset x64-linux-vcpkg -DRECVX_BUILD_GAME=OFF`,
+`cmake --build --preset x64-linux-debug`) — `recvx_pc` now links.
+Ran `./build/recvx_pc --iso ".../Resident Evil - Code - Veronica X
+(USA).iso" --play-movie 0` under `xvfb-run` with `SDL_AUDIODRIVER=dummy`
+(container has no display or audio device): ISO opened, GL backend
+initialized, `MOVIE/MV_000.PSS` opened from the ISO and decoded via
+ffmpeg (mpeg2video 320x352), audio queued to SDL — ran cleanly until the
+15s test timeout, no crash. (Note: `g_run_game` defaults to `true` in
+`main_pc.c`, so an explicit `--play-movie N` — or `--gallery`/`--list-afs`/
+`--dump-afs` — is required to reach the FMV path in a Phase 0 build;
+running with no flags now hits the clean "built without RECVX_BUILD_GAME"
+error instead of failing to link, which is the intended behavior.)
+
+Committed to this branch (previous session): the Linux devcontainer
+tooling (Ninja, vcpkg, autotools, nasm, X11/OpenGL/audio dev headers), the
+`x64-linux-vcpkg` / `x64-linux-debug` CMake presets, and the two earlier
+source portability fixes (`tex_dump.c`, `stub_ninja.c`). Committed in this
+session: the `RECVX_BUILD_GAME` guards above. `recvx_pc` now builds, links,
+and runs the FMV demo on Linux.

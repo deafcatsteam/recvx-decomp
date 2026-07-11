@@ -87,6 +87,7 @@ static LONG WINAPI crash_filter(EXCEPTION_POINTERS* ep) {
 }
 #endif
 
+#ifdef RECVX_BUILD_GAME
 /* From the decomp — declared here to avoid pulling KATANA headers into
  * the port target. Signatures match ninjapad.h. */
 extern void         njUserInit(void);
@@ -97,7 +98,6 @@ extern void         njUserExit(void);
  * MountSoundAfs wants sys->sys_partid / itm_partid / dor_partid writable
  * and njUserInit allocates / zeroes the SYS_WORK block. */
 extern int  MountSoundAfs(void);
-extern void recvx_set_gamedata_dir(const char* dir);
 
 /* Defined in adv.c. Normally called from sdfunc.c SoundSetup (which we
  * don't compile). Must run AFTER MountSoundAfs so PatId[3] is valid
@@ -106,6 +106,9 @@ extern void recvx_set_gamedata_dir(const char* dir);
  * (BGM1.AFS) instead of partition 3 (ADV.AFS). Idempotent: the
  * AdvFirstInitFlag guard makes re-entry a no-op. */
 extern void InitAdvSystem(void);
+#endif
+
+extern void recvx_set_gamedata_dir(const char* dir);
 
 static uint32_t now_ms(void) {
     return (uint32_t)(clock() * 1000 / CLOCKS_PER_SEC);
@@ -371,8 +374,13 @@ static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso,
     while (backend->pump_events()) {
         backend->begin_frame();
         recvx_input_new_frame();
+#ifdef RECVX_BUILD_GAME
+        /* Mirrors input into the decomp's Pad[]/sys state — irrelevant here
+         * since this demo only reads recvx_input_buttons(), but harmless to
+         * keep in sync when the game target is linked in. */
         extern void recvx_pump_pad(void);
         recvx_pump_pad();
+#endif
         if (fmv) {
             /* Start press skips the movie. */
             if (recvx_input_buttons() & 0x800u) {
@@ -403,6 +411,7 @@ static int run_fmv_demo(const recvx_backend* backend, recvx_iso_t* iso,
     return 0;
 }
 
+#ifdef RECVX_BUILD_GAME
 /* SYS_WORK* sys from decomp main.c. Offsets listed in types.h are for
  * the PS2 32-bit ABI; on MSVC x64 the single `void* typ_exp` at 0x50
  * grows from 4 to 8 bytes, shifting every subsequent field by +4.
@@ -629,6 +638,7 @@ static int run_game_loop(const recvx_backend* backend) {
     njUserExit();
     return 0;
 }
+#endif /* RECVX_BUILD_GAME */
 
 int main(int argc, char** argv) {
 #ifdef _WIN32
@@ -685,7 +695,15 @@ int main(int argc, char** argv) {
 
     int rc;
     if (g_run_game) {
+#ifdef RECVX_BUILD_GAME
         rc = run_game_loop(backend);
+#else
+        RX_LOG("boot", "ERR: built without RECVX_BUILD_GAME — --game is unavailable. "
+                        "Use --play-movie / --gallery / --list-afs / --dump-afs instead.");
+        backend->shutdown();
+        if (iso) recvx_iso_close(iso);
+        return 1;
+#endif
     } else if (g_gallery != -2) {
         extern int run_gallery(const recvx_backend* backend, int part,
                                const char* gamedata_dir);

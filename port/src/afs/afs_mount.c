@@ -52,12 +52,14 @@ const char* recvx_gamedata_dir(void) {
     return g_gamedata[0] ? g_gamedata : NULL;
 }
 
+#ifdef RECVX_BUILD_GAME
 /* types.h field offsets (these fields live BEFORE `void* typ_exp` @ 0x50 in
  * SYS_WORK, so the PS2 32-bit offsets survive the x64 ABI pointer growth).
  *   sys_partid @ 0x30, itm_partid @ 0x34, dor_partid @ 0x3C
  * Same pattern as main_pc.c's SYS_TK_FLG macro. */
 extern void* sys;
 #define SYS_U32_AT(off)  (*(uint32_t*)((char*)sys + (off)))
+#endif
 
 /* Called by adv.c ResetAdvSystem path (line 3737) and from main_pc.c
  * right after njUserInit so the AFS archives are open before the first
@@ -73,6 +75,10 @@ extern void* sys;
  * returned early and sys_partid stayed at its zero-init value,
  * steering Warning's SYSTEM.AFS reads into BGM1.AFS). */
 int MountSoundAfs(void) {
+#ifndef RECVX_BUILD_GAME
+    RX_LOG("afs", "MountSoundAfs: unavailable (built without RECVX_BUILD_GAME)");
+    return -1;
+#else
     if (g_mounted) return 0;
     if (!g_gamedata[0]) {
         RX_LOG("afs", "MountSoundAfs: no --gamedata dir set");
@@ -104,6 +110,7 @@ int MountSoundAfs(void) {
     RX_LOG("afs", "mounted %d/7 partitions; sys_partid=6 itm_partid=4 dor_partid=5 (%s)",
            opened, ok ? "boot OK" : "boot BLOCKED — SYSTEM/ADV missing");
     return ok ? 0 : -1;
+#endif
 }
 
 void UnmountSoundAfs(void) {
@@ -135,14 +142,20 @@ static int port_strcasecmp_ascii(const char* a, const char* b) {
     return (int)(unsigned char)*a - (int)(unsigned char)*b;
 }
 
+#ifdef RECVX_BUILD_GAME
 /* Room files (RM_NNNN.RDX) aren't flat ISO entries — they live inside
  * RDX_LNK.AFS. Walk the rdx_files[205] index table from ps2_dvd_image.c
  * to find the AFS entry index, then read it from g_afs[7]. Returns 0
  * on hit (no flat-ISO fallback), -1 on miss (fall through to ISO). */
 extern char* rdx_files[205];
 extern int rdx_image_data_max;
+#endif
 
 static int port_try_rdx_lookup(const char* name, void* dst) {
+#ifndef RECVX_BUILD_GAME
+    (void)name; (void)dst;
+    return -1;
+#else
     /* Quick prefix filter so we don't scan 205 entries for every read. */
     if (!(name[0] == 'r' || name[0] == 'R') ||
         !(name[1] == 'm' || name[1] == 'M') ||
@@ -167,6 +180,7 @@ static int port_try_rdx_lookup(const char* name, void* dst) {
         }
     }
     return -1;
+#endif
 }
 
 int RequestReadIsoFile(const char* name, void* dst) {
@@ -225,6 +239,7 @@ int RequestReadInsideFile(unsigned int pat, unsigned int id, void* dst) {
  * file isn't on the ISO. Used to size buffers before RequestReadIsoFile. */
 int GetIsoFileSize(const char* name) {
     if (!name) return 0;
+#ifdef RECVX_BUILD_GAME
     /* Room files live in RDX_LNK.AFS — same routing as RequestReadIsoFile. */
     if ((name[0] == 'r' || name[0] == 'R') &&
         (name[1] == 'm' || name[1] == 'M') &&
@@ -235,6 +250,7 @@ int GetIsoFileSize(const char* name) {
             }
         }
     }
+#endif
     extern recvx_iso_t* recvx_iso_global(void);
     recvx_iso_t* iso = recvx_iso_global();
     if (!iso) return 0;
