@@ -22,11 +22,20 @@
  * Globals referenced from main.c / system.c whose owners aren't compiled.
  * We give them BSS defaults; real values will land once we bring in the
  * defining .c files.
+ *
+ * The first four are also defined in system.c itself, which now compiles
+ * under RECVX_BUILD_GAME=ON — GCC 10+ defaults to -fno-common, so having
+ * both as tentative definitions is a hard multiple-definition link error
+ * (older GCC silently merged them as common symbols). Guard these out
+ * once the real owner is linked in; keep them for the RECVX_BUILD_GAME=OFF
+ * Phase 0 configuration where system.c isn't compiled at all.
  * ---------------------------------------------------------------------- */
+#ifndef RECVX_BUILD_GAME
 int Pause_Flag;
 int NowLoadDisp;
 int PauseBtn;
 int pl_sleep_cnt;
+#endif
 int Ps2_sys_cnt;
 void* Ps2_PXLCONV;
 float GameNear = -2.0f;
@@ -494,6 +503,17 @@ int   ExecuteSysLoadScreen(void* ps)               { (void)ps; return 1; /* ok *
 void* CreateSysSaveScreen(void* s, void* arg)      { (void)s;(void)arg; return s; }
 int   ExecuteSysSaveScreen(void* ps)               { (void)ps; return 1; }
 void  SetAdjustDisplay(void)                       { }
+
+/* Real GetFileSize (gdlib.c:100) hits the PS2 GD-ROM layer directly, not
+ * compiled here. system.c's only call site (line ~1710) passes room
+ * files formatted as "rm_%1d%02d%1d.rdx" right before RequestReadIsoFile
+ * — the exact RDX_LNK.AFS / ISO-fallback lookup GetIsoFileSize already
+ * implements in port/src/afs/afs_mount.c. Delegate instead of stubbing
+ * a dummy value, since that lookup is already real and working. */
+int GetFileSize(char* FileName) {
+    extern int GetIsoFileSize(const char* name);
+    return GetIsoFileSize(FileName);
+}
 
 /* Sound config shims. */
 void  syCfgSetSoundMode(int mode)                  { (void)mode; }
