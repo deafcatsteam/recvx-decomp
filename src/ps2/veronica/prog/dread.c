@@ -9,6 +9,15 @@
 
 /*char* mshp_tab[16]; - unused*/
 
+#ifdef RECVX_PC_PORT
+/* First weapon load runs before bhSetWeapon ever assigns op->mlwP. On PS2
+ * `op->mlwP->texP` with mlwP == NULL reads mapped low RAM and yields 0, so
+ * the checks below silently pass; on x64 the same deref faults. */
+#define RX_MLWP_OK(op) ((op)->mlwP != NULL)
+#else
+#define RX_MLWP_OK(op) (1)
+#endif
+
 // 100% matching!
 void bhReadPlayerData()
 {
@@ -133,7 +142,7 @@ void bhReadPlayerData()
             {
                 datp += 4;
                 
-                datp = (unsigned char*)(((int)datp + 31) & ~0x1F);
+                datp = (unsigned char*)(((uintptr_t)datp + 31) & ~(uintptr_t)0x1F);
                 
                 temp &= ~0x80000000;
             } 
@@ -154,7 +163,7 @@ void bhReadPlayerData()
         }
     }
     
-    sys->memp = (unsigned char*)(((int)&sys->plmdlp[dt0] + 256) & ~0xFF);
+    sys->memp = (unsigned char*)(((uintptr_t)&sys->plmdlp[dt0] + 256) & ~(uintptr_t)0xFF);
     
     for (i = 0; i < plp->mdl_n; i++) 
     {
@@ -190,14 +199,14 @@ void bhReadWeaponData()
     
     op = sys->obwp;
     
-    if ((!(sys->ss_flg & 0x100)) && (op->mlwP->texP != NULL)) 
+    if ((!(sys->ss_flg & 0x100)) && RX_MLWP_OK(op) && (op->mlwP->texP != NULL))
     {
         njReleaseTexture(op->mlwP->texP);
-        
+
         bhGarbageTexture(NULL, 0);
     }
-    
-    if (msz != 0) 
+
+    if (msz != 0)
     {
         mp = sys->wrmdlp;
         
@@ -218,7 +227,7 @@ void bhReadWeaponData()
     {
         dp += 4;
         
-        dp = (unsigned char*)(((int)dp + 63) & ~0x3F);
+        dp = (unsigned char*)(((uintptr_t)dp + 63) & ~(uintptr_t)0x3F);
         
         temp &= ~0x80000000;
     }
@@ -227,19 +236,19 @@ void bhReadWeaponData()
         dp += 4;
     }
     
-    if (temp != 0) 
+    if (temp != 0 && RX_MLWP_OK(op))
     {
         if (op->mlwP->texP != NULL)
         {
             op->mlwP->flg |= 0x200;
-            
+
             bhSetMemPvpTexture(op->mlwP->texP, dp, 0);
         }
-        
-        op->mlwP->owP = (O_WORK*)(((int)&mp[msz] + 255) & ~0xFF);
-        
+
+        op->mlwP->owP = (O_WORK*)(((uintptr_t)&mp[msz] + 255) & ~(uintptr_t)0xFF);
+
         memset(op->mlwP->owP, 0, op->mlwP->obj_num * 80);
-        
+
         op->mdl_no = 0;
     }
     
@@ -251,14 +260,14 @@ void bhReadWeaponData()
     
     op = &sys->obwp[1]; 
     
-    if ((!(sys->ss_flg & 0x100)) && (op->mlwP->texP != NULL))
+    if ((!(sys->ss_flg & 0x100)) && RX_MLWP_OK(op) && (op->mlwP->texP != NULL))
     {
         njReleaseTexture(op->mlwP->texP);
-        
+
         bhGarbageTexture(NULL, 0);
     }
-    
-    if (msz != 0) 
+
+    if (msz != 0)
     {
         mp = sys->wlmdlp;
         
@@ -279,7 +288,7 @@ void bhReadWeaponData()
     {
         dp += 4;
         
-        dp = (unsigned char*)(((int)dp + 63) & ~0x3F);
+        dp = (unsigned char*)(((uintptr_t)dp + 63) & ~(uintptr_t)0x3F);
         
         sz &= ~0x80000000;
     }
@@ -288,19 +297,19 @@ void bhReadWeaponData()
         dp += 4;
     }
     
-    if (sz != 0)
+    if (sz != 0 && RX_MLWP_OK(op))
     {
         if (op->mlwP->texP != NULL)
         {
             op->mlwP->flg |= 0x200;
-            
+
             bhSetMemPvpTexture(op->mlwP->texP, dp, 0);
         }
-        
-        op->mlwP->owP = (O_WORK*)(((int)&mp[msz] + 255) & ~0xFF);
-        
+
+        op->mlwP->owP = (O_WORK*)(((uintptr_t)&mp[msz] + 255) & ~(uintptr_t)0xFF);
+
         memset(op->mlwP->owP, 0, op->mlwP->obj_num * 80);
-        
+
         op->mdl_no = 0;
     }
     
@@ -339,7 +348,7 @@ void bhReadWeaponData()
 // 100% matching!
 unsigned char* bhKeepObjWork(ML_WORK* mp, unsigned char* sp)
 {
-    sp = (unsigned char*)(((int)sp + 15) & ~0xF);
+    sp = (unsigned char*)(((uintptr_t)sp + 15) & ~(uintptr_t)0xF);
     
     mp->owP = (O_WORK*)sp;
     

@@ -427,6 +427,64 @@ int bhCnkBinRealize(NJS_CNK_MODEL* mdlP, BH_DATOFF_T dat_off)
     return 1;
 }
 
+#ifdef RECVX_PC_PORT
+/* Port bhMnbBinRealize — same strategy as the port bhMlbBinRealize above.
+ *
+ * The PS2 path relocates the blob in place: the serialized NJS_MOTION is
+ * 12 bytes (mdata u32 @0, nbFrame @4, type/inp_fn @8) and each serialized
+ * NJS_MDATA2_MOD is two u32 offsets (8 bytes). On x64 those structs carry
+ * 8-byte pointers, so the in-place walk reads sheared fields (nbFrame from
+ * the type/inp_fn slot) and writes 8-byte pointers over the next entry.
+ * That was the SIGSEGV in bhSetEneMtn on the very first room load.
+ *
+ * Parse the PS2 layout from raw bytes and calloc a native NJS_MDATA2_MOD
+ * array instead. The key data the entries point at (NJS_MKEY_* — ints and
+ * floats only) is layout-compatible and stays in the blob. calloc leaks
+ * per room load, same accepted trade-off as bhMlbBinRealize. */
+int bhMnbBinRealize(void* bin_datP, MN_WORK* mnwP)
+{
+    const unsigned char* hdr = (const unsigned char*)bin_datP;
+    unsigned char* dat_topP;
+    const unsigned char* mtn;
+    const unsigned char* src;
+    NJS_MDATA2_MOD* md2;
+    unsigned short obj_num;
+    int atr_off;
+    int i;
+
+    dat_topP = (unsigned char*)bin_datP + *(const unsigned short*)(hdr + 4); /* u16 @ index 2 */
+    mtn      = dat_topP + ps2_s32(hdr, 8);      /* ((int*)bin)[2] */
+    obj_num  = *(const unsigned short*)(hdr + 6);
+    atr_off  = ps2_s32(hdr, 12);                /* ((int*)bin)[3] */
+
+    mnwP->flg     = ((const char*)hdr)[3];
+    mnwP->obj_num = obj_num;
+    mnwP->frm_num = ps2_u32(mtn, 4);            /* serialized NJS_MOTION.nbFrame */
+    mnwP->datP    = bin_datP;
+    mnwP->atrP    = NULL;
+
+    if (atr_off != -1)
+    {
+        mnwP->atrP = (unsigned short*)(dat_topP + atr_off);
+    }
+
+    md2 = (NJS_MDATA2_MOD*)calloc(obj_num, sizeof(NJS_MDATA2_MOD));
+    src = dat_topP + ps2_u32(mtn, 0);           /* serialized NJS_MOTION.mdata */
+
+    for (i = 0; i < obj_num; i++)
+    {
+        unsigned int o0 = ps2_u32(src, (unsigned)i * 8u);
+        unsigned int o1 = ps2_u32(src, (unsigned)i * 8u + 4u);
+
+        md2[i].p[0] = (o0 == 0xFFFFFFFFu) ? NULL : dat_topP + o0;
+        md2[i].p[1] = (o1 == 0xFFFFFFFFu) ? NULL : dat_topP + o1;
+    }
+
+    mnwP->md2P = md2;
+
+    return 1;
+}
+#else
 // 100% matching!
 int bhMnbBinRealize(void* bin_datP, MN_WORK* mnwP)
 {
@@ -470,3 +528,4 @@ int bhMnbBinRealize(void* bin_datP, MN_WORK* mnwP)
 
     return 1;
 }
+#endif

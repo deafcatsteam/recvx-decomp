@@ -92,7 +92,10 @@ int  SearchNullNumber(void) { return 0; }
 /* Low-4GiB TEXMEMLIST pool                                           */
 /* ------------------------------------------------------------------ */
 
-#define TEX_POOL_SLOTS 64
+/* Must stay in sync with RX_GFX_TEX_SLOTS in backend_gl.c. 64 was enough
+ * for menus/FMV, but a real room load (bhSetRoom + player/enemy models)
+ * pushes well past it — the pool is never recycled per room yet. */
+#define TEX_POOL_SLOTS 512
 
 static NJS_TEXMEMLIST* g_tex_pool;
 static int             g_tex_pool_used;

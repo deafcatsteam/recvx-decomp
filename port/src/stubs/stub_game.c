@@ -86,23 +86,17 @@ void bhSetDoor(void)         {}
 int  bhControlDoor(void)     { return 0; }
 void bhExitDoor(void)        {}
 int  bhReadDoorData(void)    { return 0; }
-void bhInitObjItm(void)      {}
+/* bhInitObjItm now real (objitm.c); bhInitEnemy now real (eneset.c). */
 void bhInitEffect(void)      {}
 void bhInitCamera(void)      {}
-void bhInitPlayer(void)      {}
-void bhInitEnemy(void)       {}
+/* bhInitPlayer / bhResetPlayer / bhStandPlayerMotion now real (player.c). */
 void bhInitEvent(void)       {}
-void bhReadPlayerData(void)  {}
-void bhReadWeaponData(void)  {}
-void bhResetPlayer(void)     {}
-void bhStandPlayerMotion(void){}
-void bhSetRDT(void)          {}
-void bhInitReadRDT(void)     {}
-void bhFinishRoom(void)      {}
+/* bhReadPlayerData / bhReadWeaponData now real (dread.c). */
+/* bhSetRDT / bhInitReadRDT / bhFinishRoom / bhPushGameData now come from
+ * the real room.c (in RECVX_GAME_SOURCES). */
 /* bhSetMemPvpTexture / bhCopyMainmem2Texmem / bhCopyTexmem2MainmemSub /
  * bhGarbageTexture all moved to the real ps2_texture.c (now in
  * RECVX_GAME_SOURCES). Stubs deleted. */
-void bhPushGameData(void)    {}
 /* bhPushAllTexture / bhPopAllTexture / bhReleaseMainTexture /
  * bhCopyMainmem2Texmem / bhCopyTexmem2MainmemSub / bhGarbageTexture
  * all moved to the real ps2_texture.c (now in RECVX_GAME_SOURCES). */
@@ -139,7 +133,7 @@ void loadImage(void* tags)                         { (void)tags; }
 /* sub1.c 3D path camera + sub-pack helpers — defined for real in
  * camera.c / player.c which we haven't compiled yet. */
 void bhChangeViewClip(int near, int far)           { (void)near;(void)far; }
-int  bhCheckSubPack(int idx)                       { (void)idx; return 0; }
+/* bhCheckSubPack now real (player.c). */
 
 /* Adv_FirstWarningMessage / Adv_CapcomLogo / Adv_BioCvTitle /
  * Adv_ChangeDiscScreen / Adv_SoundMuseum / Adv_GameOptionScreen all live
@@ -391,7 +385,7 @@ int          Ps2_albinoid_flag;
 int          Ps2_ice_flag;
 int          Ps2_rendertex_initflag;
 unsigned int Ps2_pad;
-int          WpnTab[256];
+/* WpnTab now defined by player.c. */
 
 /* ----------------------------------------------------------------------
  * Additional nj* functions beyond what stub_ninja.c already covers.

@@ -653,7 +653,9 @@ void bhInitPlayer()
     sys->wrmdlp = bhGetFreeMemory(32768, 32);
     sys->wlmdlp = bhGetFreeMemory(32768, 32);
     
-    sys->plmthp = bhGetFreeMemory(12288, 32);
+    /* 12288 = 512 * 24 (PS2 MN_WORK); x64 MN_WORK is 40 bytes and
+     * bhReadPlayerData walks plmthp as MN_WORK[] — size accordingly. */
+    sys->plmthp = bhGetFreeMemory(sizeof(MN_WORK) * 512, 32);
     
     sys->plbmtp = bhGetFreeMemory(393216, 32);
     sys->plwmtp = bhGetFreeMemory(65536, 32);

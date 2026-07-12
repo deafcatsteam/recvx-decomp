@@ -273,7 +273,8 @@ static void gl_audio_init(int sample_rate) {
  * fallback tex gets bound when a slot isn't populated yet, so draws from
  * not-yet-decoded TIM2 show as solid-color quads rather than disappearing.
  * -------------------------------------------------------------------------- */
-#define RX_GFX_TEX_SLOTS 64
+/* Must stay in sync with TEX_POOL_SLOTS in game_texture_stubs.c. */
+#define RX_GFX_TEX_SLOTS 512
 static GLuint g_gfx_tex[RX_GFX_TEX_SLOTS];
 static int    g_gfx_tex_w[RX_GFX_TEX_SLOTS];
 static int    g_gfx_tex_h[RX_GFX_TEX_SLOTS];

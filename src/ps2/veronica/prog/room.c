@@ -65,27 +65,84 @@ void bhSetRoom()
     unsigned char* texdat; // not from the debugging symbols
     
     reladr = sys->rdtp;
-    
-    if (*(float*)&*reladr < 1.72f) 
+
+    if (*(float*)&*reladr < 1.72f)
     {
         sys->error |= 0x1;
         return;
     }
-    
+
+#ifdef RECVX_PC_PORT
+    /* The 1004-byte file header is a PS2 ROM_WORK image: sixteen 32-bit
+     * rdtp-relative offsets, sixteen raw dmp u32s, then scalars. On x64
+     * ROM_WORK's pointer fields are 8 bytes, so the PS2 path's raw copy
+     * + in-place u32 relocation sweep would shear every field. Convert
+     * explicitly instead. */
+    {
+        const unsigned char* fh = &reladr[*(unsigned int*)(reladr + 16)];
+        const unsigned int* fw = (const unsigned int*)fh;
+        unsigned char* base = sys->rdtp;
+
+        rom->cutp  = (CUT_WORK*)(base + fw[0]);
+        rom->lgtp  = (LGT_WORK*)(base + fw[1]);
+        rom->enep  = (ETTY_WORK*)(base + fw[2]);
+        rom->objp  = (ETTY_WORK*)(base + fw[3]);
+        rom->itmp  = (ETTY_WORK*)(base + fw[4]);
+        rom->effp  = (EF_WRK*)(base + fw[5]);
+        rom->walp  = (ATR_WORK*)(base + fw[6]);
+        rom->etcp  = (ATR_WORK*)(base + fw[7]);
+        rom->flrp  = (ATR_WORK*)(base + fw[8]);
+        rom->posp  = (POS*)(base + fw[9]);
+        rom->rutp  = (ATR_WORK*)(base + fw[10]);
+        rom->ruttp = base + fw[11];
+        rom->evtp  = (EVT_WORK*)(base + fw[12]);
+        rom->evcp  = (EVC_WORK*)(base + fw[13]);
+        rom->mesp  = (unsigned int*)(base + fw[14]);
+        rom->evlp  = (LGT_WORK*)(base + fw[15]);
+
+        /* dmp00..dmp15 are copied raw on PS2 (the relocation sweep stops
+         * at dmp00); park the raw u32s in the pointer fields. */
+        rom->dmp00 = (unsigned char*)(uintptr_t)fw[16];
+        rom->dmp01 = (unsigned char*)(uintptr_t)fw[17];
+        rom->dmp02 = (unsigned char*)(uintptr_t)fw[18];
+        rom->dmp03 = (unsigned char*)(uintptr_t)fw[19];
+        rom->dmp04 = (unsigned char*)(uintptr_t)fw[20];
+        rom->dmp05 = (unsigned char*)(uintptr_t)fw[21];
+        rom->dmp06 = (unsigned char*)(uintptr_t)fw[22];
+        rom->dmp07 = (unsigned char*)(uintptr_t)fw[23];
+        rom->dmp08 = (unsigned char*)(uintptr_t)fw[24];
+        rom->dmp09 = (unsigned char*)(uintptr_t)fw[25];
+        rom->dmp10 = (unsigned char*)(uintptr_t)fw[26];
+        rom->dmp11 = (unsigned char*)(uintptr_t)fw[27];
+        rom->dmp12 = (unsigned char*)(uintptr_t)fw[28];
+        rom->dmp13 = (unsigned char*)(uintptr_t)fw[29];
+        rom->dmp14 = (unsigned char*)(uintptr_t)fw[30];
+        rom->dmp15 = (unsigned char*)(uintptr_t)fw[31];
+
+        /* 0x80..0x1A0 (counters, dmy, flg/colors/fog scalars, grand[32])
+         * and 0x1B8..0x3EC (fog[128], amb*) contain no pointers — bulk
+         * copy. rom->mdl (file 0x1A0..0x1B8) is zeroed below before use,
+         * so it's skipped here. */
+        njMemCopy(&rom->cut_n, (void*)(fh + 0x80), 0x1A0 - 0x80);
+        njMemCopy(rom->fog, (void*)(fh + 0x1B8), 0x3EC - 0x1B8);
+    }
+
+#else
     njMemCopy(rom, &reladr[*(unsigned int*)(reladr + 16)], 1004);
-    
-    for (romp = (unsigned int*)rom; (unsigned int)romp < (unsigned int)&rom->dmp00; romp++) 
+
+    for (romp = (unsigned int*)rom; (unsigned int)romp < (unsigned int)&rom->dmp00; romp++)
     {
         *romp = (unsigned int)sys->rdtp + *romp;
     }
-    
+
     cp = rom->cutp;
-    
+
     for (i = 0; i < rom->cut_n; i++, cp++)
     {
         cp->cuttp = (CUT_WRK*)&sys->rdtp[*(unsigned int*)&cp->cuttp];
     }
-    
+#endif
+
     rom->grand[31] = 0;
     
     datp = &sys->rdtp[*(unsigned int*)(reladr + 20)];
@@ -331,6 +388,30 @@ void bhSetRoom()
     }
     
     sys->memp = reladr;
+
+#ifdef RECVX_PC_PORT
+    /* The CUT_WORK array lives in the file image with a 32-bit cuttp
+     * field (entry stride 0x2A8); the x64 struct is bigger, so build a
+     * converted copy. Done LAST, after sys->memp has been parked at
+     * reladr: bhGetFreeMemory bumps memp, and anything allocated before
+     * that final `memp = reladr` rewind would get overwritten by the
+     * next room-load state's reads (player/weapon data land at memp). */
+    {
+        const unsigned char* cwsrc = (const unsigned char*)rom->cutp;
+        CUT_WORK* cwdst = (CUT_WORK*)bhGetFreeMemory(rom->cut_n * (int)sizeof(CUT_WORK), 64);
+
+        for (i = 0; i < rom->cut_n; i++)
+        {
+            const unsigned char* e = cwsrc + i * 0x2A8;
+
+            njMemCopy(&cwdst[i], (void*)e, 4);                   /* flg..ctab_n */
+            cwdst[i].cuttp = (CUT_WRK*)&sys->rdtp[*(const unsigned int*)(e + 4)];
+            njMemCopy(&cwdst[i].cx, (void*)(e + 8), 0x2A8 - 8);  /* cx..exd */
+        }
+
+        rom->cutp = cwdst;
+    }
+#endif
 }
 
 // 100% matching!
@@ -377,13 +458,15 @@ void bhFinishRoom()
             }
             else 
             {
-                sys->memp = (unsigned char*)(((int)sys->memp + 7) & ~0x7);
-                
+                sys->memp = (unsigned char*)(((uintptr_t)sys->memp + 7) & ~(uintptr_t)0x7);
+
                 pwp->mnwP = (MN_WORK*)sys->memp;
-                
-                sys->memp += 12288;
-                
-                npSetMemory((unsigned char*)pwp->mnwP, 12288, 0);
+
+                /* 12288 = 512 * 24 (PS2 MN_WORK); x64 MN_WORK is bigger,
+                 * so size in sizeof like bhSetEneMtn does. */
+                sys->memp += sizeof(MN_WORK) * 512;
+
+                npSetMemory((unsigned char*)pwp->mnwP, sizeof(MN_WORK) * 512, 0);
                 
                 pwp->mnwPb = pwp->mnwP;
                 
@@ -400,15 +483,16 @@ void bhFinishRoom()
     }
     else 
     {
-        sys->memp = (unsigned char*)(((int)sys->memp + 0x7) & ~0x7);
-        
+        sys->memp = (unsigned char*)(((uintptr_t)sys->memp + 0x7) & ~(uintptr_t)0x7);
+
         sys->rmthp = (MN_WORK*)sys->memp;
-        
+
         mtnhed++;
-        
-        npSetMemory((unsigned char*)sys->rmthp, 12288, 0);
-        
-        sys->memp += 12288;
+
+        /* Same 512-entry MN_WORK sizing note as above. */
+        npSetMemory((unsigned char*)sys->rmthp, sizeof(MN_WORK) * 512, 0);
+
+        sys->memp += sizeof(MN_WORK) * 512;
     }
     
     if (*mtnhed != 0) 
@@ -652,10 +736,8 @@ void bhSetEneMtn(unsigned char* datp, BH_PWORK* ep, int id)
     unsigned char* emtnp; 
     unsigned int* memp; // not from the debugging symbols
 
-    memp = (unsigned int*)&sys->memp;
-    
-    *memp = (*memp + 7) & ~0x7;
-    
+    sys->memp = (unsigned char*)(((uintptr_t)sys->memp + 7) & ~(uintptr_t)0x7);
+
     ep->mnwP = (MN_WORK*)sys->memp;
     ep->mnwPb = ep->mnwP;
     
@@ -693,10 +775,8 @@ void bhSetRoomMtn(unsigned char* datp)
     unsigned char* emtnp; 
     unsigned int* memp; // not from the debugging symbols
 
-    memp = (unsigned int*)&sys->memp;
-    
-    *memp = (*memp + 7) & ~0x7;
-    
+    sys->memp = (unsigned char*)(((uintptr_t)sys->memp + 7) & ~(uintptr_t)0x7);
+
     sys->rmthp = (MN_WORK*)sys->memp;
     
     mtnp = sys->rmthp;

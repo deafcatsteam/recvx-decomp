@@ -168,6 +168,10 @@ Bool njPopMatrix(Uint32 n) {
     return popped > 0;
 }
 
+/* Ex variants: push a copy of the current top / pop one level. */
+Bool njPushMatrixEx(void) { return njPushMatrix(NULL); }
+Bool njPopMatrixEx(void)  { return njPopMatrix(1); }
+
 void njTranslate(NJS_MATRIX* m, Float x, Float y, Float z) {
     if (!m) m = pNaMatMatrixStuckPtr;
     if (!m) return;
@@ -268,17 +272,63 @@ void njSinCos(Angle ang, Float* sin_out, Float* cos_out) {
 Float njSin(Angle ang) { return sinf(bams_to_rad(ang)); }
 Float njCos(Angle ang) { return cosf(bams_to_rad(ang)); }
 
-/* ------------------------------------------------------------------ */
-/* bhKeepObjWork — real impl from src/ps2/veronica/prog/dread.c:340   */
-/* with x64 pointer-truncation fix (the original `(int)sp` truncates  */
-/* the upper 32 bits of 64-bit pointers). Moved here from stub_ninja  */
-/* because it needs ML_WORK type access which the port_stubs library  */
-/* doesn't pull in.                                                   */
-/* ------------------------------------------------------------------ */
-unsigned char* bhKeepObjWork(ML_WORK* mp, unsigned char* sp) {
-    unsigned char* owp = (unsigned char*)(((uintptr_t)sp + 15) & ~(uintptr_t)0xF);
-    mp->owP = (O_WORK*)owp;
-    memset(owp, 0, mp->obj_num * 80);
-    owp += mp->obj_num * 80;
-    return owp;
+/* ps2_NaMath.c:230 njSqrt is a VU0 vsqrt — plain sqrtf here. */
+Float njSqrt(Float n) { return sqrtf(n); }
+
+/* ps2_NaMath.c:258 — VU0 vrsqrt. */
+Float njInvertSqrt(Float n) { return (n > 0.0f) ? 1.0f / sqrtf(n) : 0.0f; }
+
+/* ps2_NaMatrix.c:649 — composition is Z, then Y, then X (matches the
+ * real C body exactly). */
+void njRotateXYZ(NJS_MATRIX* m, Angle angx, Angle angy, Angle angz) {
+    if (!m) m = pNaMatMatrixStuckPtr;
+    if (!m) return;
+    njRotateZ(m, angz);
+    njRotateY(m, angy);
+    njRotateX(m, angx);
 }
+
+/* Rotate a vector by m's 3x3 part — njCalcPoint without the
+ * translation row (VU0 vmulax/vmadday/vmaddz in ps2_NaMatrix.c:1420). */
+void njCalcVector(NJS_MATRIX* m, NJS_VECTOR* vs, NJS_VECTOR* vd) {
+    if (!m) m = pNaMatMatrixStuckPtr;
+    if (!m || !vs || !vd) return;
+    float* a = (float*)m;
+    float x = vs->x, y = vs->y, z = vs->z;
+    vd->x = x*a[0] + y*a[4] + z*a[8];
+    vd->y = x*a[1] + y*a[5] + z*a[9];
+    vd->z = x*a[2] + y*a[6] + z*a[10];
+}
+
+/* Normalize in place, return the original length
+ * (ps2_NaMatrix.c:1462 vrsqrt path). */
+Float njUnitVector(NJS_VECTOR* v) {
+    if (!v) return 0.0f;
+    float len = sqrtf(v->x*v->x + v->y*v->y + v->z*v->z);
+    if (len > 0.0f) {
+        float inv = 1.0f / len;
+        v->x *= inv; v->y *= inv; v->z *= inv;
+    }
+    return len;
+}
+
+Float njInnerProduct(NJS_VECTOR* v1, NJS_VECTOR* v2) {
+    if (!v1 || !v2) return 0.0f;
+    return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z;
+}
+
+/* Re-normalize the 3x3 rotation rows (drift cleanup after repeated
+ * incremental rotates — VU0 vrsqrt path on PS2). */
+void njUnitRotPortion(NJS_MATRIX* m) {
+    if (!m) m = pNaMatMatrixStuckPtr;
+    if (!m) return;
+    float* a = (float*)m;
+    for (int r = 0; r < 3; ++r) {
+        float x = a[r*4], y = a[r*4+1], z = a[r*4+2];
+        float len = sqrtf(x*x + y*y + z*z);
+        if (len > 0.0f) { a[r*4] = x/len; a[r*4+1] = y/len; a[r*4+2] = z/len; }
+    }
+}
+
+/* bhKeepObjWork now comes from the real dread.c (its `(int)sp` align
+ * was converted to uintptr_t there). */

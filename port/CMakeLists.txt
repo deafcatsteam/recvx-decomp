@@ -313,6 +313,35 @@ if(RECVX_BUILD_GAME)
         # which had wrong type/size and signatures vs. what system.c and
         # vibman.c (both already compiled) actually expect.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_sg_pdvib.c
+        # Room/RDT loader: bhSetRoom parses the decompressed rm_*.rdx
+        # (header + camera cuts + models + motions + textures). The PS2
+        # in-place 32-bit pointer relocation is replaced by an explicit
+        # x64 conversion under RECVX_PC_PORT (ROM_WORK header fields +
+        # a converted CUT_WORK array copy). Replaces the bhSetRDT /
+        # bhInitReadRDT / bhFinishRoom / bhPushGameData stubs.
+        ${RECVX_SRC}/ps2/veronica/prog/room.c
+        # Object/item slot setup + control (bhSetObject/bhSetItem write
+        # into sys->obwp/itwp O_WRK slots; room.c calls them per entity).
+        ${RECVX_SRC}/ps2/veronica/prog/objitm.c
+        # Enemy slot setup (bhSetEnemy returns the BH_PWORK slot room.c's
+        # bhSetEneMdl fills in). One x64 pointer-truncation fixed in
+        # bhEne_CallocWork (same ALIGN pattern as system.c).
+        ${RECVX_SRC}/ps2/veronica/prog/eneset.c
+        # Sega Ninja line/plane/sphere collision math. Zero PS2 asm —
+        # pure C, needed by hitchk-adjacent code and room placement.
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_NaColi.c
+        # Player state machine + init (bhInitPlayer allocates plp->exp0/1/3
+        # — bhFinishRoom dereferences exp0 unconditionally). Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/player.c
+        # Player/weapon model+motion parsing after the SYSTEM.AFS reads
+        # (bhReadPlayerData fills plp->mlwP that bhInitRoomChangePlayer
+        # dereferences). 7 x64 pointer-truncation aligns fixed.
+        ${RECVX_SRC}/ps2/veronica/prog/dread.c
+        # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
+        # reference (enemy AI handlers, collision, lights, effects, player
+        # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
+        # it sees real struct layouts.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/game_room_stubs.c
         # Expand this list incrementally as each file compiles.
     )
 
