@@ -1120,10 +1120,21 @@ void bhCheckSubPack()
     }
 }
 
-// TODO: find the struct that plp->exp0 gets parsed to 
+// TODO: find the struct that plp->exp0 gets parsed to
 // 100% matching!
 void bhStandPlayerMotion()
 {
+#ifdef RECVX_PC_PORT
+    /* Known-incomplete port invariant: bhSysCallMap's mpmd state machine
+     * can reach case 2 (which calls this) before bhSysCallGame's own
+     * progression has run bhInitPlayer/bhSetPlayer, because the real PS2
+     * ordering between Map and Game task unsuspension is normally
+     * enforced by the typewriter/event script chain (not yet compiled) —
+     * our port-shortcut in bhSysCallMovie case 6 unsuspends both tasks
+     * at once instead of staggering them. Until that chain is ported,
+     * skip rather than dereference plp->exp0 == NULL. */
+    if (plp->exp0 == NULL) return;
+#endif
     if (plp->hp >= 120)
     {
         if ((plp->stflg & 0x280000)) 
@@ -1356,7 +1367,18 @@ void bhControlPlayer()
     NJS_POINT3 eff0, eff1;   
     NJS_POINT3 bps; 
     ATR_WORK* hp;
-    GA_WORK gap;   
+    GA_WORK gap;
+
+#ifdef RECVX_PC_PORT
+    /* Same known-incomplete port invariant as bhStandPlayerMotion above:
+     * bhMainSequence's per-frame bhControlPlayer() call can run before
+     * bhSysCallGame's mn_md1 file-load state machine reaches case 4
+     * (bhInitPlayer), because the real PS2 stagger between Game/Map task
+     * unsuspension and player-data loading is normally driven by the
+     * typewriter/event chain we haven't ported. Skip until plp->exp0 is
+     * allocated. */
+    if (plp->exp0 == NULL) return;
+#endif
 
     expw = (EXP_WORK*)plp->exp0;
         

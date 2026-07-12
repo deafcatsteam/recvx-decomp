@@ -23,16 +23,22 @@ void bhPutModel(BH_PWORK* ewP)
     unsigned int c3df; 
     
     mlwP = ewP->mlwP;
+
+#ifdef RECVX_PC_PORT
+    /* Known-incomplete port invariant: task unsuspension in our
+     * bhSysCallMovie case-6 port-shortcut isn't staggered the way the
+     * real (uncompiled) typewriter/event chain would stagger it, so
+     * bhMainSequence's draw pass can run for an ewP whose ML_WORK
+     * (mlwP) or its owP array hasn't been assigned/allocated yet —
+     * e.g. the player's ply.mlwP before bhSetPlayer/bhReadPlayerData
+     * has run, or an ene[] slot bhFinishRoom hasn't reached. Skip the
+     * draw rather than dereference NULL. */
+    if (mlwP == NULL) return;
+#endif
+
     owP = mlwP->owP;
 
 #ifdef RECVX_PC_PORT
-    /* Known-incomplete port invariant: sys->ewk_n (bhCheckEneWorkNum's
-     * enemy-slot watermark) has been observed higher than rom->ene_n,
-     * meaning some ene[] slots reach bhDrawEnemy with mdl_n/obj_num set
-     * (from bhSetEneMdl) but never allocated an owP (bhFinishRoom's
-     * bhKeepObjWork loop, which is bounded by rom->ene_n). Root cause
-     * not yet isolated (multi-room enemy-slot bookkeeping) — skip the
-     * draw rather than dereference a NULL owP. */
     if (owP == NULL) return;
 #endif
 
@@ -282,12 +288,16 @@ void bhCalcTree(NJS_MATRIX* basP, ML_WORK* mlwP)
     NJS_CNK_OBJECT* objP;
     int obj_num;
 
+#ifdef RECVX_PC_PORT
+    /* See the matching guard in bhPutModel above — same not-yet-
+     * initialized ML_WORK/owP port issue. */
+    if (mlwP == NULL) return;
+#endif
+
     owP = mlwP->owP;
     objP = mlwP->objP;
 
 #ifdef RECVX_PC_PORT
-    /* See the matching guard in bhPutModel above — same unallocated-owP
-     * port issue. */
     if (owP == NULL) return;
 #endif
 

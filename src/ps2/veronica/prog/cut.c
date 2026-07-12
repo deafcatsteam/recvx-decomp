@@ -1190,7 +1190,18 @@ void bhControlActiveCamera()
     short tmp, tmp2;     // not from DWARF
     short axn, ayn, azn; // not from DWARF
     short pers, ppers;   // not from DWARF
- 
+
+#ifdef RECVX_PC_PORT
+    /* Known-incomplete port invariant: our bhSysCallMovie case-6
+     * port-shortcut unsuspends the Game task (and thus bhMainSequence's
+     * per-frame bhControlCamera -> bhControlActiveCamera call) without
+     * actually triggering a room load — on real PS2 the typewriter/event
+     * chain we haven't ported would call bhSetRDT/bhInitReadRDT/bhSetRoom
+     * for the starting room before Game's main loop ever runs. Until a
+     * room is loaded, rom->cutp is NULL. Skip rather than dereference. */
+    if (rom->cutp == NULL) return;
+#endif
+
     cp = &rom->cutp[cam.ncut];
     ci = &cp->cam[cam.camver];
     

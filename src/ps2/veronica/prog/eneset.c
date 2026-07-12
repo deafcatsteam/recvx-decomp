@@ -160,10 +160,21 @@ CPCL En00CapColTab[5] =
     { 0, 0,   0  },
 };
 
-// 100% matching! 
+// 100% matching!
 void bhInitEnemy()
 {
+#ifdef RECVX_PC_PORT
+    /* 180224 = 128 * 1408 is sizeof(BH_PWORK) on the PS2 32-bit ABI. On
+     * x64 sizeof(BH_PWORK) is 1936 (pointer fields doubled in width), so
+     * the literal byte count only zeroes ene[0..92] and leaves ene[93..127]
+     * uninitialized. bhCheckEneWorkNum() scans all 128 slots for flg&0x1,
+     * so garbage in the unzeroed tail can spuriously read as "occupied"
+     * and inflate sys->ewk_n past rom->ene_n — this was the suspected
+     * root cause of the ewk_n > rom->ene_n owP-crash class of bug. */
+    npSetMemory((unsigned char*)ene, sizeof(ene), 0);
+#else
     npSetMemory((unsigned char*)ene, 180224, 0);
+#endif
 }
 
 // 100% matching!
