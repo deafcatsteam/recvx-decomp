@@ -134,6 +134,29 @@ static int pool_slot_of(const NJS_TEXMEMLIST* ml) {
     return (int)diff;
 }
 
+/* Real impl (moved from the stub_ninja.c no-op): must actually set
+ * Ps2_tex_info, or bhCopyMainmem2Texmem (ps2_texture.c:493, called on
+ * every movie-to-room texture handoff) dereferences a NULL pool head
+ * and segfaults the first time a movie plays over a room with textures.
+ *
+ * Deliberately does NOT point Ps2_tex_info at the caller's `addr` (main.c
+ * passes the plain static `tbuf`, a normal high-address global): ps2_texture.c
+ * truncates NJS_TEXMEMLIST* to a Uint32 texaddr and back (same x64 gotcha
+ * documented above the g_tex_pool block), so the backing buffer must live in
+ * the low 4 GiB like g_tex_pool does. We give Ps2_tex_info its own
+ * low4g allocation rather than sharing g_tex_pool, since SearchNullNumber()
+ * is stubbed to always return slot 0 — sharing would let bhCopyMainmem2Texmem
+ * stomp a slot njLoadTexture has already bound for real rendering. */
+void njInitTexture(NJS_TEXMEMLIST* addr, Uint32 n) {
+    static NJS_TEXMEMLIST* low4g_buf;
+    (void)addr;
+    if (!low4g_buf) {
+        low4g_buf = (NJS_TEXMEMLIST*)recvx_alloc_low4g((size_t)n * sizeof(NJS_TEXMEMLIST));
+        if (low4g_buf) memset(low4g_buf, 0, (size_t)n * sizeof(NJS_TEXMEMLIST));
+    }
+    Ps2_tex_info = low4g_buf;
+}
+
 /* ------------------------------------------------------------------ */
 /* TIM2 decoder — decode a raw Sofdec/CRI TIM2 blob into RGBA8.       */
 /*                                                                    */

@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 99% — real room load fixed, real live-input New Game confirmed reproducible on demand (input-timing bug + log-throughput bug both found and fixed); remaining: one concrete SIGSEGV in `bhCopyMainmem2Texmem` (`Ps2_tex_info` NULL) during the movie-to-room texture handoff, real-New-Game-path only, fully backtraced, not yet fixed |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 99.5% — both movie-to-room texture-handoff SIGSEGVs root-caused and fixed (`Ps2_tex_info` NULL from a shadowed no-op stub; then the x64 texaddr-truncation crash that fix exposed); verified stable 5000+ frames past New Game with forced movement input, no crash. Remaining: player position still doesn't respond to forced stick input post-New-Game — one more gating layer (task-suspend state / `bhSysCallGame`'s internal mode machine) not yet root-caused |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -822,6 +822,103 @@ it) by checking `nm`/`objdump` symbol addresses on the built binary.
 log-throughput bug that were blocking *investigation itself* are fixed;
 the remaining 1% is this one concrete crash, now fully reproducible and
 backtraced rather than hidden behind test-environment noise).
+
+---
+
+### 2026-07-12 (same day, continued yet again) — both texture-handoff SIGSEGVs root-caused and fixed (`d2f...` / see commit below)
+
+**Root cause #1 (the one from the previous entry): `Ps2_tex_info` is
+NULL because the real `njInitTexture` is never linked at all.**
+
+Bisected by (a) tracing `Ps2_tex_info` at every `recvx_pump_pad` call
+from frame 0 — it reads `(nil)` on the *very first* frame, before any
+gameplay logic runs; (b) confirming via register inspection at the
+`njInitTexture` breakpoint (`$rdi`/`$rsi`) that `main.c:166`'s call
+(`njInitTexture(tbuf, 256)`) passes the correct, valid `tbuf` address
+every time; (c) `nm`-scanning the actual build output
+(`port/build/CMakeFiles/recvx_game.dir`) for every object file defining
+or referencing `njInitTexture`:
+
+```
+=== .../recvx_port_stubs.dir/src/stubs/stub_ninja.c.o ===
+0000000000000086 T njInitTexture
+=== .../recvx_game.dir/.../main.c.o ===
+                 U njInitTexture
+```
+
+`ps2_NaTextureFunction.c` — the file with the real, "100% matching"
+`njInitTexture` we'd been reading from and assumed was running (finish/
+step landed back in `njUserInit` correctly, which is consistent with
+*any* implementation returning normally, not proof of which one ran) —
+**is not in `RECVX_GAME_SOURCES` at all.** `stub_ninja.c`'s no-op
+(`void njInitTexture(void* buf, int count) { (void)buf; (void)count; }`)
+is the only definition that exists in the link, so it's the one that
+runs, and it never touches `Ps2_tex_info`. `game_texture_stubs.c` even
+has a comment from an earlier session flagging exactly this ("defined
+for real only in ... `ps2_NaTextureFunction.c` which aren't in
+`RECVX_GAME_SOURCES` yet") — it just never got acted on for this
+specific function.
+
+**Fix:** followed the existing precedent in this same file (the
+`njCnkEasyMultiDrawModel`/`njCnkEasyMultiDrawObjectI` stubs were already
+removed from `stub_ninja.c` in favor of real impls in
+`port/src/ninja_cnk.c`). Removed the no-op from `stub_ninja.c` and added
+a real minimal impl in `port/src/game_texture_stubs.c` (which already
+has the KATANA include path + `Ps2_tex_info`'s actual definition).
+
+**Root cause #2 (found by the fix above): pointing `Ps2_tex_info` at
+`tbuf` immediately produced a second, different SIGSEGV.** `tbuf` is a
+plain high-address static array (`NJS_TEXMEMLIST tbuf[256];` in
+`main.c`), and `ps2_texture.c`'s PS2-era code truncates
+`NJS_TEXMEMLIST*` through a `Uint32 texaddr` field and back (the same
+x64 pointer-width gotcha already documented at the top of
+`game_texture_stubs.c`, which is why the port's *other* texture pool
+(`g_tex_pool`) is deliberately allocated via `recvx_alloc_low4g`).
+Round-tripping a real (>4 GiB) `tbuf` address through that 32-bit field
+truncates it, and the next read reconstructs a wild pointer — confirmed
+by backtrace: the crashing `tmp` value was exactly the low 32 bits of
+the `Ps2_tex_info`-derived address seen in the previous run's log.
+
+**Fix:** gave `Ps2_tex_info` its own dedicated `recvx_alloc_low4g`
+buffer (sized to the `n` the caller passes) instead of using `tbuf` or
+sharing `g_tex_pool` — sharing `g_tex_pool` was considered and rejected,
+since `SearchNullNumber()` is stubbed to always return slot 0, and
+`bhCopyMainmem2Texmem` would then stomp a `g_tex_pool` slot that
+`njLoadTexture` may already have bound for real on-screen rendering.
+
+**Verification:** rebuilt, reran the same real-input New-Game repro
+(force-Start only until `sys->tk_flg == 0x0073dfc0`, i.e. exactly the
+`bhFirstGameStart` signature, then stop forcing and drive
+`recvx_input_set_stick(0, -100)` every frame instead). Both previous
+crash sites are confirmed clear: ran 5000+ frames past New Game
+(previously crashed within ~40 frames of the movie ending) with no
+segfault.
+
+**Not yet done — new, distinct blocker:** `plp->px/py/pz` never move
+despite `sys->pad_ax`/`pad_ay` correctly reading the forced stick input
+(`pad_ay=100` confirmed every frame) and `sys->gm_flg & 0x80001 == 0`
+(the movement-threshold block in `bhSetPad`, `pad.c:158`, is not
+gated off). `sys->ts_flg` does change once (`0x0007ce00` ->
+`0x00000600` around frame 4380, meaning *something* unsuspends), but
+position stays frozen at the spawn value (`41.74, 0, 36.97`) for
+1000+ further frames. Leading hypothesis, **not yet confirmed**:
+`bhSysCallGame`'s own internal state machine (referenced in existing
+comments, e.g. `player.c:1375` — "`bhSysCallGame`'s `mn_md1` file-load
+state machine reaches case 4") may still be working through room/player
+init sub-states rather than dispatching real per-frame control yet, or
+there's a missing piece of the same typewriter->event task-unsuspend
+chain already flagged as incomplete in `bhSysCallOpening`'s
+`RECVX_PC_PORT` comment (`system.c:424-429`). Not yet bisected.
+
+**Files changed:** `port/src/stubs/stub_ninja.c` (removed the
+`njInitTexture` no-op), `port/src/game_texture_stubs.c` (real impl +
+dedicated low4g buffer).
+
+**P2 progress: 99% -> 99.5%** (the two concrete crashes blocking all
+forward progress past the movie-to-room handoff are fixed and verified
+stable for 5000+ frames; the final piece for 100% — actual player
+movement responding to input — is now isolated to a state-machine
+gating question inside `bhSysCallGame`/task-suspend flags, not a crash).
 
 ---
 

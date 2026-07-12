@@ -21,7 +21,9 @@ void njTextureShadingMode(int mode)                   { (void)mode; }
 void njInitView(void* v)                              { (void)v; }
 void njSetView(void* v)                               { (void)v; }
 /* njGetMatrix now lives in port/src/ninja_3d.c with real impl. */
-void njInitTexture(void* buf, int count)              { (void)buf; (void)count; }
+/* njInitTexture moved to port/src/game_texture_stubs.c — real impl sets
+ * Ps2_tex_info so bhCopyMainmem2Texmem (ps2_texture.c, called every
+ * movie-to-room texture handoff) doesn't dereference a NULL pool head. */
 void njExitTexture(void)                              {}
 void njExitPrint(void)                                {}
 void njSetPaletteMode(int m)                          { (void)m; }
