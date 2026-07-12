@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 99.5% — both movie-to-room texture-handoff SIGSEGVs root-caused and fixed (`Ps2_tex_info` NULL from a shadowed no-op stub; then the x64 texaddr-truncation crash that fix exposed); verified stable 5000+ frames past New Game with forced movement input, no crash. Remaining: player position still doesn't respond to forced stick input post-New-Game — one more gating layer (task-suspend state / `bhSysCallGame`'s internal mode machine) not yet root-caused |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -919,6 +919,67 @@ forward progress past the movie-to-room handoff are fixed and verified
 stable for 5000+ frames; the final piece for 100% — actual player
 movement responding to input — is now isolated to a state-machine
 gating question inside `bhSysCallGame`/task-suspend flags, not a crash).
+
+---
+
+### 2026-07-12 (same day, continued once more) — player movement root-caused and fixed: a second shadowed no-op stub (`bhAddSpeed`)
+
+**Root cause:** ruled out the task-suspend/`bhSysCallGame` mode-machine
+hypothesis from the previous entry first — traced `sys->sp_flg`,
+`plp->stflg`, `plp->exp0`, `plp->mode0/1/2/3` and `plp->spd` frame-by-frame
+via gdb (`recvx_pump_pad` + a `bhAddSpeed` breakpoint) with the same
+force-Start-then-force-stick repro as before. All the gating conditions
+in `bhControlPlayer` (`sys->sp_flg & 0x1`, `plp->stflg & 0x1000000`) and
+`pad.c`'s analog-to-digital synthesis (`sys->gm_flg & 0x80001`) turned
+out fine: `plp->mode2` correctly settled to `9` (`bhCPM2_act_bak`,
+backward-walk — the forced stick direction happened to map there) with
+`mode3==1` and a real nonzero `plp->spd` (`0.27`) computed from the
+motion table every single frame. Yet `plp->px/pz` stayed bit-identical
+across 600+ consecutive `bhAddSpeed` calls, even though a manual `call
+njSin(...)`/`njCos(...)` at the breakpoint with the exact same angle
+returned proper nonzero values (`-0.865898`/`-0.500221`) — meaning the
+inputs to the position-integration math were all correct, but the write
+wasn't taking effect.
+
+Checked whether `bhAddSpeed` (`src/ps2/veronica/prog/pwksub.c:133`,
+"100% matching") was actually the code executing, using the same `nm`
+technique from the `njInitTexture` bug: `pwksub.c` has **no compiled
+object file at all** in `port/build/CMakeFiles/recvx_game.dir` — it was
+never added to `RECVX_GAME_SOURCES`. `grep`-ing for a second definition
+found it: `port/src/game_room_stubs.c:184` had
+`void bhAddSpeed(BH_PWORK* pp, int r) { (void)pp;(void)r; }` — a
+blanket no-op covering the whole not-yet-ported collision/AI subsystem
+(`game_room_stubs.c`'s header comment explicitly says so), silently
+shadowing the one function in that file that's pure math with no
+collision/model dependency and was already fully decompiled. Exact same
+bug class as the `njInitTexture` fix earlier this session: a real,
+completed decomp function never linked because its source file isn't in
+the build, sitting behind a subsystem-wide stub.
+
+**Fix:** did **not** add all of `pwksub.c` to `RECVX_GAME_SOURCES` —
+most of its other functions (`bhSearchNearEnemy*`, `bhCheckL2Wall`,
+`bhCheckC2Wall*`, etc.) are genuinely unported collision/AI code that
+`game_room_stubs.c` intentionally still stubs (P4 scope), and adding the
+whole file would collide with those stub definitions at link time.
+Instead, followed the same "move just this one function" precedent as
+`njInitTexture`: deleted the no-op body in `game_room_stubs.c` and
+replaced it with `bhAddSpeed`'s real 3-line body (copied verbatim from
+`pwksub.c`, which needs nothing beyond `njSin`/`njCos` — already
+available via `game_room_stubs.c`'s existing `ninja.h` include).
+
+**Verification:** rebuilt, reran the identical force-Start/force-stick
+repro. `plp->px/pz` now advance every logged frame in a straight line
+(e.g. `px` climbing from `41.74` to `173.14` over ~600 frames of held
+input, `pz` from `36.97` to `112.87`) — real, continuous player movement
+confirmed for the first time in this port.
+
+**Files changed:** `port/src/game_room_stubs.c` (real `bhAddSpeed` impl
+replacing the no-op).
+
+**P2 progress: 99.5% -> 100%.** Boot, real input, New Game, room load,
+and confirmed player movement all work end-to-end with no crashes.
+Lighting and collision remain stubbed by design — that's P4 ("full room
+traversal, combat"), not P2 ("game boots to gameplay").
 
 ---
 

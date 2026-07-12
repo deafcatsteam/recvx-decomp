@@ -181,7 +181,22 @@ void CallPlayerVoice(int no) { (void)no; }
 void CallPlayerWeaponSeEx(NJS_POINT3* pPos, int SeNo, int SlotNo) { (void)pPos;(void)SeNo;(void)SlotNo; }
 void PlyPchInit(BH_PWORK* ewP) { (void)ewP; }
 void PlyPchMain(BH_PWORK* ewP) { (void)ewP; }
-void bhAddSpeed(BH_PWORK* pp, int r) { (void)pp;(void)r; }
+/* bhAddSpeed is real (moved from src/ps2/veronica/prog/pwksub.c, "100%
+ * matching" in decomp comments): pwksub.c as a whole isn't in
+ * RECVX_GAME_SOURCES yet (it also holds the not-yet-ported collision/AI
+ * search helpers stubbed below), so this no-op was silently shadowing the
+ * function every bhCPM2_act_* motion handler calls to integrate plp->px/pz
+ * from plp->spd + plp->ay each frame -- same shadowed-stub bug class as
+ * njInitTexture (see game_texture_stubs.c): the player's speed/heading were
+ * computed correctly every frame but never applied, so forced analog input
+ * never moved the player. */
+void bhAddSpeed(BH_PWORK* pp, int r)
+{
+    int angle = (pp->ay + r) & 0xFFFF;
+
+    pp->px -= pp->spd * njSin(angle);
+    pp->pz -= pp->spd * njCos(angle);
+}
 void bhArmIkMdk(BH_PWORK* ewP, int bas_no, NJS_POINT3* effP, int rot) { (void)ewP;(void)bas_no;(void)effP;(void)rot; }
 void bhCPM0_event(void) {}
 void bhCPM2_SearchPch(void) {}
