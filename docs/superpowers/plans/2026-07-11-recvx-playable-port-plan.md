@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 98% — real room load ROOT-CAUSE FIXED (loose-file ISO fallback), confirmed real `rm_*.rdx` room geometry loads and renders with zero crashes; remaining: live-input confirmation of player movement in an interactive New Game session (blocked so far only by slow headless render/log I/O in the test environment, not a known code defect) |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 99% — real room load fixed, real live-input New Game confirmed reproducible on demand (input-timing bug + log-throughput bug both found and fixed); remaining: one concrete SIGSEGV in `bhCopyMainmem2Texmem` (`Ps2_tex_info` NULL) during the movie-to-room texture handoff, real-New-Game-path only, fully backtraced, not yet fixed |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -708,6 +708,120 @@ a *fresh* process rather than one already `gdb -batch`-attached (can't
 double-attach ptrace to the same PID).
 
 **P2 progress: 95% -> 98%.**
+
+### 2026-07-12 (same day, continued further) — real live-input New Game confirmed; new blocking crash found in room-texture upload
+
+Picked back up on the one remaining P2 item: live-input-confirmed player
+movement. Two real findings this round, one fix and one new bug.
+
+**Fix — `[cnk]` log spam was the actual throughput problem.**
+`njCnkEasyMultiDrawModel`/`njCnkEasyMultiDrawObjectI` log unconditionally,
+once per model per frame (hundreds/frame during real room rendering), and
+`recvx_log()` (`port/src/stubs/stub_log.c`) does an unconditional
+`fflush(stdout)` on every call. That combination, not Xvfb/software-GL
+rendering itself, was why frames crawled at ~1 every few seconds. Gated
+the `"cnk"` tag behind an opt-in env var (`RECVX_LOG_CNK=1`, off by
+default) in `stub_log.c`. Frame throughput went from single digits/minute
+to ~30-40 fps immediately after rebuilding — this is what made the rest
+of this session's testing tractable at all.
+
+**Root cause of last session's "SENT START never worked" — found and fixed.**
+`xdotool key Return` sends a keydown+keyup pair fast enough that both
+land in the *same* `SDL_PollEvent` drain inside one frame's `gl_pump()`.
+Our edge-detection model (`recvx_input_new_frame()`: `press = on & ~prev`)
+computes the press bit from `on` *after* `gl_pump()` returns for that
+frame, so a same-frame down+up cancels out — `on` is back to 0 by the
+time the latch runs, and `press` never goes 1. This is why every previous
+attempt (this session and the last) saw the Start press silently ignored
+and the title screen fall through to its natural 900-frame timeout into
+attract/"DEMO PLAY" every time, indistinguishable in the logs from "no
+input arrived at all". Confirmed via a `CheckStartButton` probe
+breakpoint (0 hits during the fake early Mode-cycles that turned out to
+belong to the warning-message/logo screens, not `Adv_BioCvTitle` at all —
+`Adv_BioCvTitle` itself is only entered once, well after two earlier
+non-interactive passes reuse the same `AdvWork.Mode` field). **Fix:**
+`xdotool keydown --window <id> Return`, `sleep 0.5`, `xdotool keyup
+--window <id> Return` — spacing the two events across a frame boundary
+makes the press register correctly. Also needed `xdotool windowfocus`
+first (no window manager running under Xvfb, so nothing has input focus
+by default even though `SDL_PollEvent` does receive *some* events
+unconditionally — e.g. the F1-F10 sample-audition debug keys worked
+even before this fix, which is what exposed that the transport wasn't
+the problem, only the down/up timing was).
+
+**Result: genuine, button-confirmed New Game now reproduces on demand.**
+With the input fix plus a `gdb` breakpoint on `CheckButton` that ORs in
+the Start bit (`Pad[AdvWork.PortId].press |= 0x800`) to auto-confirm
+menu navigation (Cursor already defaults to "New Game" when
+`FindFirstVmDrive() < 0`, i.e. no memory card — real decompiled logic,
+not a port shortcut), the sequence now reliably reaches:
+`bhSysCallFirstmovie: Adv_BioCvTitle returned 2` (2 = real confirmed
+New Game, as opposed to 1 = natural timeout into demo) →
+`tk_flg=0x0073dfc0` (the real `bhFirstGameStart` signature) →
+`[iso] rdx lookup OK: rm_0000.rdx` (the actual New Game starting room,
+distinct from the demo path's `rm_0130`/`rm_0100`) → the MV_000 intro
+movie starts playing, real-time. A real in-game Start press during the
+movie (`rmi.MVCancelButton`/`MovieInfo.MovieCancelFlag` — `sdfunc.c`,
+100%-matching, not a port shortcut) skips it too: `[fmv] PlayMovieMain:
+Start-press skip`. All of this is now reproducible on demand with real
+synthesized input, no `gdb` variable-forcing needed for the Start press
+itself (only used for the menu-confirm step, to avoid needing a second
+precisely-timed real keypress).
+
+**New blocker found: SIGSEGV in `bhCopyMainmem2Texmem` during the
+movie-to-room texture handoff.** Immediately after the Start-press movie
+skip, reproduces every time:
+```
+Thread 1 "recvx_pc" received signal SIGSEGV, Segmentation fault.
+0x... in bhCopyMainmem2Texmem (tlp=...) at ps2_texture.c:520
+520	            addr[no] = *tmp;
+#0  bhCopyMainmem2Texmem: i=0 num=32 addr=0x0 no=0
+#1  bhSysCallMovie () at system.c:1233
+#2  njUserMain () at main.c:199
+```
+Called from `system.c:1233` (`mvi_md` case 5 — `if (sys->mvi_flg != 0 &&
+rom->mdl.texP != NULL) bhCopyMainmem2Texmem((NJS_TEXLIST*)rom->mdl.texP);`,
+100%-matching real code, the step that uploads the just-loaded room's
+textures right after the intro movie ends). `addr = Ps2_tex_info` is
+NULL. `Ps2_tex_info` is a plain global pointer (`ps2_NaTextureFunction.c`)
+set exactly once, at boot, by `njInitTexture(tbuf, 256)` from
+`njUserInit()` (`main.c:166`, confirmed hit via breakpoint, `tbuf` is a
+real static `NJS_TEXMEMLIST tbuf[256]` array in `main.c` — not port
+code). It stays valid through the entire demo/menu/logo flow (hundreds
+of successful `njLoadTexture` calls in every log, this session and
+prior) and is provably still valid checks after boot. It goes NULL
+somewhere between boot and this specific call, and — critically — only
+on the **real New Game** path (`rm_0000`); the demo/attract path
+(`rm_0130`/`rm_0100`) loads and renders fine, repeatedly, no crash. Tried
+a hardware watchpoint (`watch Ps2_tex_info`) to catch the exact
+clobbering write; it never fired before the crash, meaning the
+corruption (if that's what it is) happens *before* our earliest
+practical watch point (right at `njUserMain` entry) rather than during
+steady-state play — possibly inside `bhFirstGameStart()` itself
+(`system.c:461`, called from the same `bhSysCallOpening` chain, resets
+`sys->memp = keepmem` and bump-allocates `sys->obwp`/`sys->itwp` via
+`bhGetFreeMemory` — plausible but unconfirmed adjacency/overflow
+candidate). A software watchpoint (single-stepping) was tried as a
+fallback and was too slow to reach the crash in practical time — this
+sandboxed container appears not to expose hardware debug registers to
+`gdb` despite `--cap-add=SYS_PTRACE`.
+
+**Not yet done:** finding the exact write that nulls `Ps2_tex_info` (or
+confirming it's actually zero-since-boot on this path for some other
+reason — not yet ruled out) and fixing it. This is now the concrete,
+correctly-scoped next blocker for P2 completion — replacing the
+previous entry's "test-environment throughput" framing, which is now
+resolved. Fast-follow options for next session: bisect with targeted
+breakpoints between `bhFirstGameStart()` and the crash site rather than
+a blanket watchpoint; or check whether `Ps2_tex_info` and
+`Ps2_tex_save`/other `ps2_texture.c` globals end up link-adjacent in
+BSS (a bounds bug in a neighboring global's write could scribble over
+it) by checking `nm`/`objdump` symbol addresses on the built binary.
+
+**P2 progress: 98% -> 99%** (both the input-transport bug and the
+log-throughput bug that were blocking *investigation itself* are fixed;
+the remaining 1% is this one concrete crash, now fully reproducible and
+backtraced rather than hidden behind test-environment noise).
 
 ---
 
