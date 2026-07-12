@@ -70,6 +70,15 @@ typedef struct {
 
 static cnk_vert_t g_cnk_vbuf[CNK_VBUF_MAX];
 
+/* Material state, latched by NJD_CT_TID / NJD_CM_D chunks in the plist
+ * and consumed by the next strip chunks (matches PS2 semantics: these
+ * are global-to-the-walk "current material" registers, not per-vertex
+ * or per-strip data — see njCnkCtTid/njCnkCmD in ps2_NinjaCnk.c). Reset
+ * per model since each model in the object tree can use different
+ * textures/colors and there's no "end of material" marker to rely on. */
+static unsigned int g_cnk_cur_texid;
+static uint32_t     g_cnk_cur_diffuse = 0xFFFFFFFFu;
+
 /* -------------------------------------------------------------------- */
 /* Vertex chunk handlers                                                */
 /* -------------------------------------------------------------------- */
@@ -233,7 +242,8 @@ static void cnk_emit_strip_tri(int i0, int i1, int i2,
     tri[2].u = u2;   tri[2].v = v2;
     tri[2].color = c->color & base_color;
 
-    recvx_gfx_draw_tri3d(-1, tri, 3, trans);
+    extern int recvx_cnk_resolve_texture_slot(unsigned int tex_id);
+    recvx_gfx_draw_tri3d(recvx_cnk_resolve_texture_slot(g_cnk_cur_texid), tri, 3, trans);
     extern long g_cnk_tris_dbg;
     g_cnk_tris_dbg++;
 }
@@ -306,7 +316,7 @@ static const CHUNK_HEAD* cnk_walk_strip_generic(const CHUNK_HEAD* h,
                 (unsigned)c < CNK_VBUF_MAX)
             {
                 cnk_emit_strip_tri(a, b, c, au, av, bu, bv, cu, cv,
-                                   0xFFFFFFFFu, trans);
+                                   g_cnk_cur_diffuse, trans);
             }
 
             /* Slide window: i1<-i2, i2<-(next iteration's read). */
@@ -335,6 +345,10 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
      * that was the 3.7M-triangle white-noise room draw. */
     if (type <= 7)
         return (const CHUNK_HEAD*)((const unsigned short*)h + 1);
+    if (type == 8) { /* NJD_CT_TID (njCnkCtTid, ps2_NinjaCnk.c:892) */
+        g_cnk_cur_texid = h->usSize & 0xFFF;
+        return (const CHUNK_HEAD*)((const unsigned short*)h + 2);
+    }
     if (type <= 15)
         return (const CHUNK_HEAD*)((const unsigned short*)h + 2);
 
@@ -342,6 +356,16 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
      * if they do (some models pack vlist+plist), handle them. */
     if (type >= 32 && type <= 51) {
         return cnk_handle_vert(h);
+    }
+
+    /* Material chunks carrying a diffuse ARGB (njCnkCmD/CmDa/CmDs/CmDas,
+     * ps2_NinjaCnk.c:910 — data is always BGRA byte order, diffuse first
+     * when present). D/DA/DS/DAS = MATOFF+1/+3/+5/+7. */
+    if (type == 17 || type == 19 || type == 21 || type == 23) {
+        const unsigned char* p = (const unsigned char*)(h + 1);
+        g_cnk_cur_diffuse = ((uint32_t)p[3] << 24) | ((uint32_t)p[2] << 16) |
+                            ((uint32_t)p[1] << 8)  |  (uint32_t)p[0];
+        return CHUNK_NEXT(h);
     }
 
     /* Strip chunks. */
@@ -355,7 +379,7 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
     case 67: /* NJD_CS_VN — plain w/ normals (we ignore normals) */
         return cnk_walk_strip_generic(h, 1, 0.0f, trans);
     default:
-        /* Unknown sized chunk (materials 16..31, volumes 56..63, other
+        /* Unknown sized chunk (remaining materials, volumes 56..63, other
          * strip variants) — skip safely via header size. */
         return CHUNK_NEXT(h);
     }

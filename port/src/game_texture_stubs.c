@@ -409,6 +409,16 @@ static Uint32       g_current_texnum;
 Sint32 njSetTexture(NJS_TEXLIST* tl) { g_active_tl = tl; return 0; }
 Sint32 njSetTextureNum(Uint32 n)     { g_current_texnum = n; return 0; }
 
+/* Resolve a CNK material's texture id (NJD_CT_TID, ninja_cnk.c) against
+ * the texlist njSetTexture last latched (bhAllDrawModel calls
+ * njSetTexture(rom->mdl.texP) right before drawing the room). Returns
+ * a gfx pool slot, or -1 if unresolvable (draws white/untextured). */
+int recvx_cnk_resolve_texture_slot(unsigned int tex_id) {
+    if (!g_active_tl || tex_id >= g_active_tl->nbTexture) return -1;
+    NJS_TEXMEMLIST* ml = (NJS_TEXMEMLIST*)(uintptr_t)g_active_tl->textures[tex_id].texaddr;
+    return pool_slot_of(ml);
+}
+
 /* ------------------------------------------------------------------ */
 /* Draw primitives — forward to the backend gfx API                   */
 /* ------------------------------------------------------------------ */
