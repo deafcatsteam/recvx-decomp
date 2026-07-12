@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 15% |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 70% — boots to gameplay with real room load headless; rendering/input/collision next |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -403,6 +403,60 @@ genuinely-async DMA read didn't, breaking an invariant the state machine
 relies on across repeated load cycles (e.g. a flag not reset between the
 first and second attract-loop pass). Not yet root-caused — this is where P2
 diagnosis should pick up next.
+
+**2026-07-12 (evening) — bug #3 fixed + REAL ROOM LOADING works end to end:**
+
+1. **`bhDispMessage` crash root-caused and fixed (`e6e59f3e`).** Not an
+   async-timing bug after all: at game start `bhInitGame` re-arms the
+   monitor's sysmes.ald reload (`mn_mode0=1`, `memp=keepmem`). State 1
+   updates `mes_ip` but `mes_sp` is only re-derived one frame later in
+   state 2; in that window the NOW LOADING draw (`system.c:2257`, gated
+   only on `mes_sp != NULL`) dereferences the stale `mes_sp`, reads
+   message text bytes (`0xFFFF00C5`) as a table offset, and walks `dp`
+   4 GB into unmapped memory. On PS2 the wild read stayed inside the
+   mirrored 32 MB address space (one frame of garbage glyphs); on x64 it
+   faults. Fix: NULL `mes_sp` when the reload is issued so the existing
+   guard covers the window. Verified under gdb (crash gone, game proceeds
+   to first room load).
+
+2. **`Expand` implemented for real (`ad13ea5f`).** The decomp `expand.c`
+   is 100% MIPS EE inline asm; the no-op stub left `rdtsz` garbage and
+   stalled the game right after the first `rm_*.rdx` read. `port/src/
+   expand_pc.c` re-implements the LZSS bit format decoded from the asm.
+   Validated standalone under ASan against 4 real RDX_LNK.AFS entries
+   (clean termination, version-10.0 float header in every output).
+
+3. **Real room loading (`69f19992`).** `room.c`, `objitm.c`, `eneset.c`,
+   `player.c`, `dread.c`, `ps2_NaColi.c` compiled in (all zero PS2 asm).
+   Three x64 "PS2 32-bit file image" ports were required:
+   - `bhSetRoom`: explicit ROM_WORK header conversion (the PS2 in-place
+     u32 relocation sweep shears every field on x64) + a converted
+     CUT_WORK array copy (32-bit `cuttp`, stride 0x2A8).
+   - `bhMnbBinRealize`: raw-byte parse + native NJS_MDATA2_MOD calloc
+     (PS2 in-place walk wrote 8-byte pointers over the next entry).
+   - MN_WORK allocs: hardcoded `12288` (= 512 × 24 PS2 bytes) →
+     `sizeof(MN_WORK) * 512`; pointer-truncation aligns → `uintptr_t`;
+     `dread.c` NULL-page derefs PS2 tolerated → guarded (`RX_MLWP_OK`).
+   Support: real nj math in `ninja_3d.c` (njSqrt/njCalcVector/
+   njUnitVector/njInnerProduct/njRotateXYZ [Z,Y,X]/njUnitRotPortion/
+   Push/PopMatrixEx), new `game_room_stubs.c` (~90 no-op gameplay stubs:
+   bhEne01..71 AI handlers, hitchk, lights, effects, weapon SE), texture
+   pool 64 → 512 slots.
+
+   **Result: 300 s headless run, zero crashes.** Boot → warning → title →
+   attract → game start → `rm_0130.rdx` decompressed, ROM_WORK/cameras/
+   models/motions realized, ~127 texture slots decoded+uploaded (room,
+   player, weapons, enemies), player+weapon data loaded, gameplay loop
+   stable. P2's "boots to gameplay with real room load" structural goal
+   is met headless.
+
+**Where P2 picks up next:** visible rendering of the loaded room (the 3D
+draw path `Ps2DrawOTag`/OT-walk is still stubbed — the loop runs but draws
+little), real input driving the player (input.c exists; player motion
+handlers are live but collision `hitchk.c` and camera `camera.c` are
+stubbed), then enemy AI files (`bhEne*` — 34 no-op stubs to replace file
+by file). Texture pool still never recycles per room (512 slots ≈ a few
+room changes before exhaustion).
 
 ---
 
