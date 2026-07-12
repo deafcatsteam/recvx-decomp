@@ -94,8 +94,7 @@ void bhSetExplosion(NJS_POINT3* pos)  { (void)pos; }
 void bhActionWeapon(BH_PWORK* op)     { (void)op; }
 void bhObjWpn(BH_PWORK* op)           { (void)op; }
 /* bhCalcHair now real (player.c). */
-void bhCalcModel(BH_PWORK* ewP)       { (void)ewP; }
-void bhPutModel(BH_PWORK* ewP)        { (void)ewP; }
+/* bhCalcModel / bhPutModel / bhCalcTree now real (MdlPut.c). */
 void bhControlMask(BH_PWORK* pp)      { (void)pp; }
 void bhInitMask(BH_PWORK* pp)         { (void)pp; }
 /* bhInitRoomChangePlayer now real (player.c). */
@@ -234,6 +233,20 @@ void bhSetWaterSplash3(NJS_POINT3* pos, int ang, int type, float sx, float sy, f
                                       { (void)pos;(void)ang;(void)type;(void)sx;(void)sy;(void)sz; }
 void bhSetYakkyou(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
 void bhSetWeapon(O_WRK* op, int wpn_no, int flg) { (void)op;(void)wpn_no;(void)flg; }
+
+/* MdlPut.c dependencies not yet real:
+ *   njDrawModel  — basic (non-chunk) NJS_MODEL drawer; no room/player/
+ *                  enemy model in this game uses the non-chunk format,
+ *                  so a no-op is safe (nothing currently reaches it).
+ *   npPushMdlstr/npPopMdlstr — skin vertex-buffer save/restore around a
+ *                  skinned draw; no-op is safe without real skinning.
+ *   npCalcSkin/npCalcSkinFM  — GPU-skin blend matrices; no-op leaves
+ *                  skinned models in bind pose instead of crashing. */
+void njDrawModel(NJS_MODEL* model)                   { (void)model; }
+void npPushMdlstr(NJS_CNK_OBJECT* objp, int obj_n)   { (void)objp;(void)obj_n; }
+void npPopMdlstr(NJS_CNK_OBJECT* objp, int obj_n)    { (void)objp;(void)obj_n; }
+void npCalcSkinFM(void* pwp, int obj_n, int* sknp)   { (void)pwp;(void)obj_n;(void)sknp; }
+void npCalcSkin(void* pwp, int obj_n, int* sknp)     { (void)pwp;(void)obj_n;(void)sknp; }
 
 /* light.c's light-definition table — player.c indexes it for the room
  * lighting setup. Zeroed placeholder until light.c is compiled. */

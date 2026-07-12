@@ -553,3 +553,13 @@ void njCnkEasyMultiDrawObject(NJS_CNK_OBJECT* obj) {
 void njCnkEasyDrawObject(NJS_CNK_OBJECT* obj) {
     njCnkEasyMultiDrawObject(obj);
 }
+
+/* MdlPut.c's bhPutModel (single-entity draw — player/enemies/objects, as
+ * opposed to bhAllDrawModel's whole-room draw) picks one of these 4 via
+ * bhJumpCnkDraw[draw_tp]. All 4 walk the exact same on-disk chunk format;
+ * "Simple" vs "Easy" and multi-vs-single only change the PS2 lighting
+ * model feeding njCnkCvVnPs2's VU0 asm (single/multi-light count), which
+ * we don't emulate — so all 4 share the single real tree walker. */
+void njCnkSimpleMultiDrawModel(NJS_CNK_MODEL* model) { njCnkEasyMultiDrawModel(model); }
+void njCnkEasyDrawModel(NJS_CNK_MODEL* model)         { njCnkEasyMultiDrawModel(model); }
+void njCnkSimpleDrawModel(NJS_CNK_MODEL* model)       { njCnkEasyMultiDrawModel(model); }

@@ -24,8 +24,19 @@ void bhPutModel(BH_PWORK* ewP)
     
     mlwP = ewP->mlwP;
     owP = mlwP->owP;
-    
-    if (mlwP->texP != NULL) 
+
+#ifdef RECVX_PC_PORT
+    /* Known-incomplete port invariant: sys->ewk_n (bhCheckEneWorkNum's
+     * enemy-slot watermark) has been observed higher than rom->ene_n,
+     * meaning some ene[] slots reach bhDrawEnemy with mdl_n/obj_num set
+     * (from bhSetEneMdl) but never allocated an owP (bhFinishRoom's
+     * bhKeepObjWork loop, which is bounded by rom->ene_n). Root cause
+     * not yet isolated (multi-room enemy-slot bookkeeping) — skip the
+     * draw rather than dereference a NULL owP. */
+    if (owP == NULL) return;
+#endif
+
+    if (mlwP->texP != NULL)
     {
         njSetTexture(mlwP->texP);
     }
@@ -273,6 +284,12 @@ void bhCalcTree(NJS_MATRIX* basP, ML_WORK* mlwP)
 
     owP = mlwP->owP;
     objP = mlwP->objP;
+
+#ifdef RECVX_PC_PORT
+    /* See the matching guard in bhPutModel above — same unallocated-owP
+     * port issue. */
+    if (owP == NULL) return;
+#endif
 
     njPushMatrix(basP);
 

@@ -49,6 +49,9 @@ float crmat[16];
  * bhInitCamera points cam.mtx/cam.mtxb at these. Size/alignment must
  * match ps2_dummy.h:145 exactly (see the palbuf lesson below). */
 float cmmat[2][16] __attribute__((aligned(64)));
+/* Set by njControl3D (ps2_NinjaCnk.c:207, real, compiled); read by
+ * MdlPut.c's bhPutModel mirror-draw path. Real def also in ps2_dummy.c. */
+unsigned int _nj_control_3d_flag_;
 
 /* ----------------------------------------------------------------------
  * sy* — Sega Ynsight / Shinobi helpers (ps2_sg_maloc.c / KATANA).
@@ -117,7 +120,7 @@ void bhInitScreenSaver(void)          {}
 void bhDrawScreenSaver(void)          {}
 /* bhStFlg / bhCrFlg / bhCkFlg now live in src/ps2/veronica/prog/flag.c —
  * pulled into RECVX_GAME_SOURCES. */
-void bhSetPad(void)                   {}
+/* bhSetPad now real (pad.c). */
 void bhDeleteYakkyou(void)            {}
 /* bhMesLen, bhDispMessage(Ex), bhDispTime -- now from real message.c */
 

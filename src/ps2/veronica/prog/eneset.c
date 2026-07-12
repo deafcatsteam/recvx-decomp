@@ -527,15 +527,21 @@ void bhEne00(BH_PWORK* ep)
     }
     
     bhCalcModel(ep);
-    
+
+#ifdef RECVX_PC_PORT
+    /* See the owP-allocation note in MdlPut.c's bhPutModel/bhCalcTree —
+     * same not-yet-isolated port issue (ewk_n can exceed rom->ene_n). */
+    if (ep->mlwP->owP == NULL) return;
+#endif
+
     ep->watr.c1.x = ep->mlwP->owP->mtx[12];
     ep->watr.c1.y = ep->mlwP->owP->mtx[13];
     ep->watr.c1.z = ep->mlwP->owP->mtx[14];
-    
+
     ep->watr.c2.x = ep->watr.c1.x;
     ep->watr.c2.y = 15.0f + ep->watr.c1.y;
     ep->watr.c2.z = ep->watr.c1.z;
-    
+
     ep->watr.r = ep->car;
 }
 

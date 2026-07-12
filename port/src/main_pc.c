@@ -521,6 +521,16 @@ static int run_game_loop(const recvx_backend* backend) {
     njUserInit();
     RX_LOG("game", "njUserInit returned");
 
+    /* pd_port (main.c) only gets set away from its -1 default by
+     * bhCheckPadPort (sync.c), which we don't compile (it also owns
+     * a big chunk of async pad-DMA-completion polling we don't need —
+     * njGetPeripheral/input.c already gives bhSetPad a synchronous,
+     * always-present SDL-backed peripheral). Force it directly so
+     * pad.c's bhSetPad takes the "peripheral present" branch instead
+     * of zeroing all pad state every frame. */
+    extern int pd_port;
+    pd_port = 0;
+
     RX_LOG("game", "gamedata dir: %s", g_gamedata_path);
     recvx_set_gamedata_dir(g_gamedata_path);
     if (MountSoundAfs() != 0) {

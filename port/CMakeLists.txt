@@ -345,6 +345,20 @@ if(RECVX_BUILD_GAME)
         # cam.px/ay/... every frame). cmmat/crmat globals stubbed in
         # stub_game.c (real ones live in the uncompiled ps2_dummy.c).
         ${RECVX_SRC}/ps2/veronica/prog/camera.c
+        # Digital/analog pad decode (bhSetPad): reads njGetPeripheral(0)
+        # (real, SDL-backed — port/src/input/input.c) into sys->pad_on/
+        # pad_ax/pad_ay/etc that bhControlPlayer (player.c) reads every
+        # frame. pd_port forced to 0 in main_pc.c (see comment there) —
+        # bypasses sync.c's async pad-DMA-polling bhCheckPadPort, which
+        # we don't compile.
+        ${RECVX_SRC}/ps2/veronica/prog/pad.c
+        # Per-entity model draw (bhPutModel/bhCalcModel/bhCalcTree) —
+        # player/enemy/object draw path, as opposed to bhAllDrawModel's
+        # whole-room draw. bhCalcModel populates owP->mtx per node,
+        # which bhEne00 (eneset.c) reads right after calling it —
+        # without this file compiled, owP was never set and enemy AI
+        # dereferenced garbage the moment an enemy activated.
+        ${RECVX_SRC}/ps2/veronica/prog/MdlPut.c
         # RE fixed-camera cut system — picks the camera (cam.px/ay/cut)
         # from the converted CUT_WORK array based on player position.
         ${RECVX_SRC}/ps2/veronica/prog/cut.c
