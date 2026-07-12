@@ -420,6 +420,22 @@ if(RECVX_BUILD_GAME)
         # start on the Task 4.2 effects subsystem — the rest of it
         # (effect.c, effsub2.c) lands as its own task.
         ${RECVX_SRC}/ps2/veronica/prog/effsub3.c
+        # Motion blend/speed-curve helpers (bhSetMotion/SetMtnFast(Hokan)/
+        # SetMtnNormal(Hokan)/SetMtnSlow(Hokan)/AngZyxToYzx/AngYzxToZyx/
+        # bhCalcFixOffset/bhFixPosition/bhGetObjMotion). Zero PS2 asm.
+        # Replaces 4 shadowing no-op stubs previously in
+        # game_room_stubs.c, and the AngZyxToYzx/AngYzxToZyx verbatim
+        # copies temporarily added to ninja_3d.c for weapon.c/playpch.c
+        # (Task 4.1) — this is their real, complete home.
+        ${RECVX_SRC}/ps2/veronica/prog/Motion.c
+        # Enemy AI: bhEne28 lives here (shared "sub-placement" logic used
+        # by several small enemies) alongside its helpers (bhSub_DirTarget/
+        # bhSubpl/em60_init/em_sce/init_subpl/move_subpl/mv00_subpl*).
+        # Zero PS2 asm. First Task 4.3 file (Enemy AI roster).
+        ${RECVX_SRC}/ps2/veronica/prog/subpl.c
+        # Enemy AI: bhEne71 (smallest enemy file at 114 lines — used as
+        # the Task 4.3 proof-of-pattern integration). Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/en71.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

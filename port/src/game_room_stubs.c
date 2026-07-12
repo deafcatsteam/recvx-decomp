@@ -42,15 +42,14 @@ void bhEne24(BH_PWORK* epw) { (void)epw; }
 void bhEne25(BH_PWORK* epw) { (void)epw; }
 void bhEne26(BH_PWORK* epw) { (void)epw; }
 void bhEne27(BH_PWORK* epw) { (void)epw; }
-void bhEne28(void)          {}
+/* bhEne28/bhSubpl now real (subpl.c). */
 void bhEne29(BH_PWORK* ewP) { (void)ewP; }
 void bhEne30(BH_PWORK* epw) { (void)epw; }
 void bhEne53(BH_PWORK* epw) { (void)epw; }
 void bhEne54(BH_PWORK* epw) { (void)epw; }
 void bhEne55(BH_PWORK* epw) { (void)epw; }
-void bhEne71(BH_PWORK* epw) { (void)epw; }
+/* bhEne71 now real (en71.c). */
 void bhEne_InitDamage(BH_PWORK* epw) { (void)epw; }
-void bhSubpl(BH_PWORK* epw) { (void)epw; }
 
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
 /* bhCheckCut now real (cut.c). bhCheckEnemies/bhCheckPlayer/bhCheckWall/
@@ -84,9 +83,8 @@ int  bhSetEffectTb(EF_WORK* efp, NJS_POINT3* off, unsigned char* lkp, int lkono)
 /* bhCalcModel / bhPutModel / bhCalcTree now real (MdlPut.c). */
 void bhControlMask(BH_PWORK* pp)      { (void)pp; }
 void bhInitMask(BH_PWORK* pp)         { (void)pp; }
-/* bhInitRoomChangePlayer now real (player.c). */
-int  bhSetMotion(BH_PWORK* ewP, int add, int mode, void* datP)
-                                      { (void)ewP;(void)add;(void)mode;(void)datP; return 0; }
+/* bhInitRoomChangePlayer now real (player.c). bhSetMotion now real
+ * (Motion.c). */
 int  bhSetShadow(char* jtb, unsigned char* lkp, int lkono, float sx, float sy, float sz)
                                       { (void)jtb;(void)lkp;(void)lkono;(void)sx;(void)sy;(void)sz; return 0; }
 
@@ -227,23 +225,12 @@ void CallPlayerWeaponSeEx(NJS_POINT3* pPos, int SeNo, int SlotNo) { (void)pPos;(
  * bhCPM2_act_suw_pch/bhCPM2_act_wsc_pch now real (playpch.c). */
 void bhCPM0_event(void) {}
 void bhCPM2_act_scp(void) {}
-void bhCalcFixOffset(BH_PWORK* ewP, char* datP, NJS_POINT3* offP, NJS_POINT3* rtnP)
-{
-    (void)ewP; (void)datP; (void)offP;
-    if (rtnP) { rtnP->x = 0.0f; rtnP->y = 0.0f; rtnP->z = 0.0f; }
-}
-/* bhAddSpeed/bhCalcLockEneYR/bhSearchNearEnemy/bhSearchNearEnemy2/
+/* bhCalcFixOffset/bhFixPosition/bhGetObjMotion now real (Motion.c).
+ * bhAddSpeed/bhCalcLockEneYR/bhSearchNearEnemy/bhSearchNearEnemy2/
  * bhSearchNearEnemyB/bhSearchNextEnemy/bhSetGunFire/bhSetMagazine/
  * bhSetWaterSplash/bhSetWaterSplash3/bhSetYakkyou now real (pwksub.c).
  * bhCheckBullet/bhCheckGunAtari/bhCheckKnifeAtari/bhCountBullet/
  * bhSetWeapon now real (weapon.c). */
-void  bhFixPosition(BH_PWORK* ewP, char* datP) { (void)ewP;(void)datP; }
-void  bhGetObjMotion(BH_PWORK* ewP, int obj_no, float* pos, int* ang)
-{
-    (void)ewP; (void)obj_no;
-    if (pos) { pos[0] = pos[1] = pos[2] = 0.0f; }
-    if (ang) { ang[0] = ang[1] = ang[2] = 0; }
-}
 
 /* MdlPut.c dependencies not yet real:
  *   njDrawModel  — basic (non-chunk) NJS_MODEL drawer; no room/player/

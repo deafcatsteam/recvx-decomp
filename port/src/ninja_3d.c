@@ -390,29 +390,7 @@ Bool njInvertMatrix(NJS_MATRIX* m) {
     return 1;
 }
 
-/* Motion.c:968/990 — BAMS Euler-angle-order conversion (Zyx <-> Yzx).
- * Pure C in the decomp (0 asm hits in the whole file) — verbatim copy,
- * only depends on njSinCos above. */
-void AngZyxToYzx(int* zyx, int* yzx) {
-    float fSin0, fSin1, fSin2, fCos0, fCos1, fCos2, b;
-    njSinCos(zyx[0], &fSin0, &fCos0);
-    njSinCos(zyx[1], &fSin1, &fCos1);
-    njSinCos(zyx[2], &fSin2, &fCos2);
-    b = fSin2 * fSin1;
-    yzx[0] = (int)(10430.381f * atan2f((fCos2*fSin0) - (b*fCos0), (fCos2*fCos0) + (b*fSin0)));
-    yzx[1] = (int)(10430.381f * atan2f(fSin1, fCos2*fCos1));
-    yzx[2] = (int)(10430.381f * asinf(fSin2*fCos1));
-}
-void AngYzxToZyx(int* yzx, int* zyx) {
-    float fSin0, fSin1, fSin2, fCos0, fCos1, fCos2, b;
-    njSinCos(yzx[0], &fSin0, &fCos0);
-    njSinCos(yzx[1], &fSin1, &fCos1);
-    njSinCos(yzx[2], &fSin2, &fCos2);
-    b = fSin1 * fSin2;
-    zyx[0] = (int)(10430.381f * atan2f((fCos1*fSin0) + (b*fCos0), (fCos1*fCos0) - (b*fSin0)));
-    zyx[1] = (int)(10430.381f * asinf(fSin1*fCos2));
-    zyx[2] = (int)(10430.381f * atan2f(fSin2, fCos1*fCos2));
-}
+/* AngZyxToYzx/AngYzxToZyx now real (Motion.c). */
 
 /* ps2_dummy.h:150 — scratch matrix cache used by playpch.c's joint IK
  * (MixSetToJointRot/bhArmIkMdk). Real definition lives in the
