@@ -34,7 +34,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
-| **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟡 Detailed plan ready | 0% |
+| **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
@@ -1137,6 +1137,50 @@ For each error: fix minimally, re-push, re-watch the CI run.
 
 Expected terminal state: `windows-build.yml` run status is `success`, and the
 build log's tail shows `recvx_pc.vcxproj -> ...\recvx_pc.exe`.
+
+**Actual results (2026-07-12, 4 CI rounds):**
+
+1. `windows-latest` now resolves to a windows-2025 image shipping VS 2026 by
+   default; our `x64-vcpkg` preset hardcodes generator `"Visual Studio 17
+   2022"`, so `project()` failed with "could not find any instance of Visual
+   Studio" even though vcpkg's own port builds (freetype, sdl2-ttf) succeeded
+   fine on that same image (vcpkg autodetects whichever VS is present).
+   Fixed by pinning `runs-on: windows-2022` instead of touching the shared
+   preset (real VS2022 devs also use it locally). Commit `e7b9eb30`.
+2. `stub_game.c`: MSVC doesn't parse GCC's `__attribute__((aligned(64)))`
+   syntax at all. Added a real portable `RX_ALIGN64` prefix macro to
+   `recvx_port.h` (`__declspec(align(64))` / `__attribute__((aligned(64)))`)
+   rather than swallowing the attribute, since `cmmat`/`palbuf` are
+   alignment-sensitive (misalignment silently corrupts adjacent BSS per the
+   existing comments). Commit `992db819`.
+3. `afs_mount.c`: MSVC has no `dirent.h`. Added a `_WIN32` branch using
+   `FindFirstFileA`/`FindNextFileA`/`FindClose` for the flat case-insensitive
+   directory scan; POSIX path unchanged. Commit `2195151e`.
+4. `recvx_game` target failed entirely with `Cannot open include file:
+   'ninja.h'` — root cause: `include/recvx-decomp-katana` (and cri/mwcc/
+   ps2_sdk) are git submodules the workflow's `actions/checkout@v4` never
+   initialized. Fixed with `submodules: recursive`. Commit `39fdc435`.
+5. With submodules present, hit a deeper, structural failure: `error C2371:
+   'size_t'/'ptrdiff_t' redefinition; different basic types` (KATANA's
+   `stddef.h` vs MSVC's own) plus `error C1014: too many include files:
+   depth = 1024` in `port/include/compat/ninjacnk.h` — an include-recursion
+   loop. This is the KATANA CRT-shadow-header masking system (built and
+   tuned around GCC's `-include`-then`-D` command-line ordering trick, see
+   the `recvx_game` CMakeLists.txt comments around line 392) behaving
+   differently under MSVC's `/FI` force-include mechanism. Not a one-line
+   fix — same class of problem as 3 fixes in, each in a different file,
+   per systematic-debugging's "question the architecture" threshold.
+
+**Status: paused, not green.** Per explicit user decision (given a real
+Windows machine exists but "flemme de l'allumer", and CI-only compile-parity
+was already judged non-blocking for P4/P5 gameplay work), stopped after this
+one agreed extra attempt rather than continuing to chase the include-order
+tangle blind. The `windows-build.yml` workflow stays in the repo (harmless,
+runs on push/PR/dispatch) so it can be picked back up later — either by
+someone debugging the KATANA-shadow-header/MSVC interaction properly, or by
+testing directly on the user's own Windows machine instead of CI trial-and-
+error. 3 of the 4 fixes above are genuine, valuable, already-merged
+cross-platform bugs independent of whether P3 is ever finished.
 
 - [ ] **Step 4: Commit each fix batch separately**
 
