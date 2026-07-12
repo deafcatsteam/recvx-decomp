@@ -330,6 +330,17 @@ if(RECVX_BUILD_GAME)
         # Sega Ninja line/plane/sphere collision math. Zero PS2 asm —
         # pure C, needed by hitchk-adjacent code and room placement.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_NaColi.c
+        # Room-geometry / floor / entity-vs-entity collision. Zero PS2 asm —
+        # confirmed via direct grep (no asm/__asm__/vcallms in the file).
+        # Every external symbol it calls is already real and compiled
+        # (njSqrt/njUnitVector/njInnerProduct/njScalor/njSinCos in
+        # ninja_3d.c; njDistanceP2L/njDistanceL2PL/njCollisionCheckBS in
+        # ps2_NaColi.c; bhSetMessage in message.c) except bhCheckFloorNum
+        # and bhSetEffect, which fall back to their existing no-op stubs
+        # in game_room_stubs.c (pwksub.c/effect.c still uncompiled) —
+        # non-blocking placeholders, not crashes. Replaces 16 shadowing
+        # no-op stubs previously in game_room_stubs.c (see git history).
+        ${RECVX_SRC}/ps2/veronica/prog/hitchk.c
         # Player state machine + init (bhInitPlayer allocates plp->exp0/1/3
         # — bhFinishRoom dereferences exp0 unconditionally). Zero PS2 asm.
         ${RECVX_SRC}/ps2/veronica/prog/player.c

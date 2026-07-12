@@ -53,19 +53,12 @@ void bhEne_InitDamage(BH_PWORK* epw) { (void)epw; }
 void bhSubpl(BH_PWORK* epw) { (void)epw; }
 
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
-/* bhCheckCut now real (cut.c). */
-void bhCheckEnemies(BH_PWORK* pp)     { (void)pp; }
+/* bhCheckCut now real (cut.c). bhCheckEnemies/bhCheckPlayer/bhCheckWall/
+ * bhCheckWall2Box/bhCheckWallType/bhCheckWallType2/bhResetAtariAttr now
+ * real (hitchk.c). */
 int  bhCheckFloorNum(float py)        { (void)py; return 0; }
 int  bhCheckL2Wall(NJS_LINE* lp, unsigned int flg, float* len)
                                       { (void)lp;(void)flg;(void)len; return 0; }
-void bhCheckPlayer(BH_PWORK* pp)      { (void)pp; }
-void bhCheckWall(BH_PWORK* pw)        { (void)pw; }
-void bhCheckWall2Box(BH_PWORK* pw)    { (void)pw; }
-ATR_WORK* bhCheckWallType(NJS_POINT3* pos, unsigned int flg, float ar, float ah)
-                                      { (void)pos;(void)flg;(void)ar;(void)ah; return NULL; }
-ATR_WORK* bhCheckWallType2(NJS_POINT3* pos, unsigned int flg, float aw, float ad, float ah, int idx_ct)
-                                      { (void)pos;(void)flg;(void)aw;(void)ad;(void)ah;(void)idx_ct; return NULL; }
-void bhResetAtariAttr(void)           {}
 void bhSetFloorNum(BH_PWORK* pp)      { (void)pp; }
 int  bhCheckClipModel(BH_PWORK* pp)   { (void)pp; return 0; }
 
@@ -211,23 +204,12 @@ void bhCalcFixOffset(BH_PWORK* ewP, char* datP, NJS_POINT3* offP, NJS_POINT3* rt
 }
 int   bhCalcLockEneYR(BH_PWORK* pp, int idx) { (void)pp;(void)idx; return 0; }
 short bhCheckBullet(void) { return 0; }
-void  bhCheckExmAtari(BH_PWORK* pp) { (void)pp; }
-ATR_WORK* bhCheckFloorEffect(int flr_no, float px, float pz) { (void)flr_no;(void)px;(void)pz; return NULL; }
-void  bhCheckFloorP(BH_PWORK* pp) { (void)pp; }
-int   bhCheckFloorSound(BH_PWORK* pp, int flr_no, float px, float pz) { (void)pp;(void)flr_no;(void)px;(void)pz; return 0; }
 int   bhCheckGunAtari(GA_WORK* gap) { (void)gap; return 0; }
 void  bhCheckKnifeAtari(GA_WORK* gap) { (void)gap; }
-int   bhCheckWallEx(BH_PWORK* pw, NJS_POINT3* npos, NJS_POINT3* opos, float par, float pah)
-                                      { (void)pw;(void)npos;(void)opos;(void)par;(void)pah; return 0; }
-ATR_WORK* bhCheckWater(NJS_POINT3* pos) { (void)pos; return NULL; }
-void  bhClrUseKaidanFlag(BH_PWORK* pp) { (void)pp; }
 int   bhCountBullet(void) { return 0; }
 void  bhFixPosition(BH_PWORK* ewP, char* datP) { (void)ewP;(void)datP; }
 int   bhGetFrameNum(unsigned int fnm_old, unsigned int fnm_new, int fno_now)
                                       { (void)fnm_old;(void)fnm_new;(void)fno_now; return 0; }
-/* Without real floor collision, "ground height at pos" = the caller's
- * own y — keeps the player from snapping to 0 or falling forever. */
-float bhGetGroundPosition(NJS_POINT3* pos) { return pos ? pos->y : 0.0f; }
 void  bhGetObjMotion(BH_PWORK* ewP, int obj_no, float* pos, int* ang)
 {
     (void)ewP; (void)obj_no;
@@ -241,7 +223,6 @@ int  bhSearchNextEnemy(BH_PWORK* pp, int r, float h) { (void)pp;(void)r;(void)h;
 void bhSetGunFire(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
 void bhSetLightTab(LGT_WORK* lt, int lno) { (void)lt;(void)lno; }
 void bhSetMagazine(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
-void bhSetUseKaidanFlag(BH_PWORK* pp, ATR_WORK* exp, int idx) { (void)pp;(void)exp;(void)idx; }
 void bhSetWaterSplash(BH_PWORK* pp, int jno, int type, float sx, float sy, float sz)
                                       { (void)pp;(void)jno;(void)type;(void)sx;(void)sy;(void)sz; }
 void bhSetWaterSplash3(NJS_POINT3* pos, int ang, int type, float sx, float sy, float sz)
