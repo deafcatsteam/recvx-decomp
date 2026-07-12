@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 88% — textured room renders correctly (recognizable RE:CVX corridor); lighting/input/collision next |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 92% — input pipeline wired + crash-hardened (SDL keys reach player.c); lighting/collision/enemy-slot bug next |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -527,6 +527,43 @@ Verified stable across 250s+, frame-identical, zero crashes.
 **Still deferred:** real per-vertex/per-light lighting (currently just
 ambient — `njCnkSetEasyLight*` family is still no-op), player input
 driving movement, collision (`hitchk.c`), enemy AI (34 `bhEne*` stubs).
+
+**2026-07-12 (same morning, continued again) — player input pipeline wired
+(`94387db9`):**
+
+Wired `pad.c` (`bhSetPad`, zero PS2 asm) into the build: reads
+`njGetPeripheral(0)` — already real and SDL-backed via
+`port/src/input/input.c` — into `sys->pad_on`/`pad_ax`/`pad_ay`, which
+the already-compiled `bhControlPlayer` (player.c) reads every frame.
+`pd_port` forced to 0 directly in `main_pc.c` (the real path to set it,
+`bhCheckPadPort` in `sync.c`, also owns ~600 lines of async pad-DMA-poll
+machinery we don't need — our SDL peripheral is always synchronously
+present). Also wired `MdlPut.c` (`bhPutModel`/`bhCalcModel`/`bhCalcTree`
+— per-entity draw for player/enemies/objects) and the remaining
+`njCnk*DrawModel` variants in `ninja_cnk.c`.
+
+Testing under **actual synthesized key input** (`xdotool` into the Xvfb
+X11 session — not just a static headless run) immediately surfaced a
+real crash: `bhDrawEnemy → bhPutModel → EasyMultiDrawTreeCnk` dereferenced
+a NULL `owP` (per-instance model array). Traced to `sys->ewk_n` (enemy
+slot watermark) observed **higher than** `rom->ene_n` — some `ene[]`
+slots reach the draw path with model data set (`bhSetEneMdl`, room load)
+but never got an `owP` allocated (`bhFinishRoom`'s `bhKeepObjWork` loop,
+bounded by `rom->ene_n`). **Not yet root-caused** to the exact multi-room
+enemy-slot bookkeeping divergence — added `RECVX_PC_PORT`-guarded NULL
+checks at the three call sites assuming `owP` is always valid (same
+defensive pattern as `dread.c`'s earlier `RX_MLWP_OK` guard) so
+unallocated entities are skipped rather than crashing.
+
+**Verified:** 200s+ run with continuous synthesized key input, zero
+crashes, title/attract-mode text and the 3D corridor render correctly
+throughout. Did not yet confirm the player actually walking in real
+gameplay (would require navigating NEW GAME from the title menu first) —
+that's the natural next verification step.
+
+**Still open:** the `ewk_n > rom->ene_n` enemy-slot root cause (currently
+band-aided, not fixed), real lighting, collision (`hitchk.c`), confirming
+in-gameplay player movement end-to-end.
 
 ---
 
