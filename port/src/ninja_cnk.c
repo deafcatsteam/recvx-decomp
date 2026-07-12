@@ -52,6 +52,14 @@
 /* Pulled from ninja_3d.c — top-of-stack matrix (model->world for whoever
  * called us; PS2 game pre-multiplies camera into this same stack). */
 extern NJS_MATRIX*  pNaMatMatrixStuckPtr;
+void njCalcVector(NJS_MATRIX* m, NJS_VECTOR* vs, NJS_VECTOR* vd);
+Float njUnitVector(NJS_VECTOR* v);
+Float njInnerProduct(NJS_VECTOR* v1, NJS_VECTOR* v2);
+
+/* Real setters, moved from ps2_NinjaCnk.c into game_room_stubs.c (that
+ * file is otherwise VU1/EE-asm-only). */
+extern CNK_LIGHT NaCnkLightEs;
+extern VU1_COLOR NaCnkAmbientEs;
 
 /* -------------------------------------------------------------------- */
 /* Vertex working buffer                                                */
@@ -215,6 +223,39 @@ static const CHUNK_HEAD* cnk_handle_vert(const CHUNK_HEAD* h) {
 /* Strip chunk handlers                                                 */
 /* -------------------------------------------------------------------- */
 
+/* CPU-side approximation of the PS2's VU0 CALCPOINT per-vertex lighting
+ * (real microcode: vsm/ps2_vu0.vsm, not portable). Rotates the object-space
+ * normal into the same space njCalcPoint already puts positions in (via the
+ * current model matrix), dots with the light direction NaCnkLightEs already
+ * stores pre-negated, clamps to [0,1], and blends diffuse+ambient — not
+ * exact hardware parity, just a first visible lighting pass. */
+static uint32_t cnk_shade_vertex(const cnk_vert_t* v, uint32_t base_color)
+{
+    NJS_VECTOR n_obj = { v->nx, v->ny, v->nz };
+    NJS_VECTOR n_world;
+    njCalcVector(pNaMatMatrixStuckPtr, &n_obj, &n_world);
+    njUnitVector(&n_world);
+
+    NJS_VECTOR light = { NaCnkLightEs.fCx, NaCnkLightEs.fCy, NaCnkLightEs.fCz };
+    float ndotl = njInnerProduct(&n_world, &light);
+    if (ndotl < 0.0f) ndotl = 0.0f;
+
+    float diff = ndotl * NaCnkLightEs.fI;
+    float r = diff * NaCnkLightEs.fR + NaCnkAmbientEs.fR;
+    float g = diff * NaCnkLightEs.fG + NaCnkAmbientEs.fG;
+    float b = diff * NaCnkLightEs.fB + NaCnkAmbientEs.fB;
+    if (r > 1.0f) r = 1.0f;
+    if (g > 1.0f) g = 1.0f;
+    if (b > 1.0f) b = 1.0f;
+
+    uint32_t base = v->color & base_color;
+    uint32_t a8 = (base >> 24) & 0xFF;
+    uint32_t r8 = (uint32_t)(r * ((base >> 16) & 0xFF));
+    uint32_t g8 = (uint32_t)(g * ((base >> 8) & 0xFF));
+    uint32_t b8 = (uint32_t)(b * (base & 0xFF));
+    return (a8 << 24) | (r8 << 16) | (g8 << 8) | b8;
+}
+
 /* Emit triangles via recvx_gfx_draw_tri3d. The TRIANGLE_STRIP pattern
  * generates a flipped winding on every other triangle — we handle that
  * by swapping i1/i2 instead of relying on GL_TRIANGLE_STRIP (we use
@@ -234,13 +275,13 @@ static void cnk_emit_strip_tri(int i0, int i1, int i2,
 
     tri[0].x = a->x; tri[0].y = a->y; tri[0].z = a->z;
     tri[0].u = u0;   tri[0].v = v0;
-    tri[0].color = a->color & base_color;
+    tri[0].color = cnk_shade_vertex(a, base_color);
     tri[1].x = b->x; tri[1].y = b->y; tri[1].z = b->z;
     tri[1].u = u1;   tri[1].v = v1;
-    tri[1].color = b->color & base_color;
+    tri[1].color = cnk_shade_vertex(b, base_color);
     tri[2].x = c->x; tri[2].y = c->y; tri[2].z = c->z;
     tri[2].u = u2;   tri[2].v = v2;
-    tri[2].color = c->color & base_color;
+    tri[2].color = cnk_shade_vertex(c, base_color);
 
     extern int recvx_cnk_resolve_texture_slot(unsigned int tex_id);
     recvx_gfx_draw_tri3d(recvx_cnk_resolve_texture_slot(g_cnk_cur_texid), tri, 3, trans);
@@ -535,6 +576,16 @@ void njCnkEasyMultiDrawObject(NJS_CNK_OBJECT* obj) {
     if (!obj) return;
     extern long g_cnk_tris_dbg;
     long before = g_cnk_tris_dbg;
+
+    /* TEMPORARY: light.c (the real per-room/player-relative light selector,
+     * ~20 njCnkSetEasyMultiLight/njCnkSetSimpleLight/njCnkSetSimpleMultiLight
+     * calls, not yet individually verified for VU0-asm-free status) isn't
+     * compiled yet, so nothing else calls njCnkSetEasyLight. Hardcode a
+     * fixed overhead "sun" light so cnk_shade_vertex has something to show.
+     * Replace this call site once light.c lands. */
+    njCnkSetEasyLight(0.0f, -1.0f, 0.0f);
+    njCnkSetEasyLightIntensity(0.7f, 0.35f);
+    njCnkSetEasyLightColor(1.0f, 1.0f, 1.0f);
 
     recvx_gfx_begin_3d(60.0f, 4.0f, 30000.0f);
     cnk_draw_object_tree(obj);

@@ -125,11 +125,32 @@ void njOverhauserSpline(Float* idata, Float* odata, NJS_SPLINE* attr, Float fram
     if (odata && idata) { odata[0] = idata[0]; odata[1] = idata[1]; odata[2] = idata[2]; }
 }
 
-/* ---- ninja chunk lighting setters — no-op until the GL lighting
- * path consumes them ---------------------------------------------------- */
-void njCnkSetEasyLight(Float x, Float y, Float z) { (void)x;(void)y;(void)z; }
-void njCnkSetEasyLightColor(Float r, Float g, Float b) { (void)r;(void)g;(void)b; }
-void njCnkSetEasyLightIntensity(Float inten, Float ambient) { (void)inten;(void)ambient; }
+/* ---- ninja chunk lighting: real setters (matched, moved from
+ * ps2_NinjaCnk.c since that file is otherwise saturated with VU1 DMA/EE
+ * inline asm we can't compile). Consumed by ninja_cnk.c's CPU-side
+ * Lambertian shading — see cnk_shade_vertex. ---------------------------- */
+CNK_LIGHT NaCnkLightEs = { 1.401298464f, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+VU1_COLOR NaCnkAmbientEs = { 1.0f, 1.0f, 1.0f, 1.0f };
+
+void njCnkSetEasyLight(Float x, Float y, Float z)
+{
+    NaCnkLightEs.fCx = -x;
+    NaCnkLightEs.fCy = -y;
+    NaCnkLightEs.fCz = -z;
+}
+void njCnkSetEasyLightIntensity(Float inten, Float ambient)
+{
+    NaCnkLightEs.fI = inten;
+    NaCnkAmbientEs.fB = ambient;
+    NaCnkAmbientEs.fG = ambient;
+    NaCnkAmbientEs.fR = ambient;
+}
+void njCnkSetEasyLightColor(Float r, Float g, Float b)
+{
+    NaCnkLightEs.fR = r;
+    NaCnkLightEs.fG = g;
+    NaCnkLightEs.fB = b;
+}
 void njCnkSetEasyMultiLightSwitch(Int light, Int flag) { (void)light;(void)flag; }
 void njCnkSetEasyMultiLightVector(Float vx, Float vy, Float vz) { (void)vx;(void)vy;(void)vz; }
 void njCnkSetSimpleMultiAmbient(Float ar, Float ag, Float ab) { (void)ar;(void)ag;(void)ab; }
