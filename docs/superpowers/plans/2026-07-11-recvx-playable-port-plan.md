@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 80% — room geometry renders on screen (untextured/unlit); texturing/lighting/input/collision next |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 88% — textured room renders correctly (recognizable RE:CVX corridor); lighting/input/collision next |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -499,6 +499,34 @@ up per-chunk color/texture-id and wire that into the texture pool
 (`bhSetMemPvpTexture` already populates it per-room), then real lighting
 via `njCnkSetEasyLight*`/`SimpleMultiLight*` (currently no-op stubs in
 `game_room_stubs.c`).
+
+**2026-07-12 (same morning, continued) — TEXTURED room renders: it's
+recognizably Resident Evil (`878ebdd2`):**
+
+Picked up the very next item on the list above. Decoded the two CNK
+chunk types the room plist actually carries:
+- `NJD_CT_TID` (type 8, 4-byte tiny chunk): texture id in `usSize &
+  0xFFF`, was silently skipped as a no-op short chunk — now latched
+  into a `g_cnk_cur_texid` global.
+- `NJD_CM_D`/`DA`/`DS`/`DAS` (types 17/19/21/23): diffuse ARGB material
+  chunks, byte order confirmed against the real `njCnkCmD` (B,G,R,A) —
+  repacked into `g_cnk_cur_diffuse`.
+
+New `recvx_cnk_resolve_texture_slot()` (game_texture_stubs.c) resolves a
+texture id against whichever texlist `njSetTexture` last latched — that's
+already `rom->mdl.texP`, set right before the room draw call — reusing
+the same pool-slot machinery the 2D quad path uses. `cnk_emit_strip_tri`
+now passes the resolved slot + latched color instead of the hardcoded
+white placeholder.
+
+**Result: the loaded room is now a recognizable, fully-textured RE
+Code:Veronica corridor** — stone brick walls/floor, archway, staircase,
+ceiling lamps, wall piping, correct scale/perspective/ambient tone.
+Verified stable across 250s+, frame-identical, zero crashes.
+
+**Still deferred:** real per-vertex/per-light lighting (currently just
+ambient — `njCnkSetEasyLight*` family is still no-op), player input
+driving movement, collision (`hitchk.c`), enemy AI (34 `bhEne*` stubs).
 
 ---
 
