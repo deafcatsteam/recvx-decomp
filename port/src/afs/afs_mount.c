@@ -17,6 +17,7 @@
 #include "recvx_afs.h"
 #include "recvx_port.h"
 
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -183,6 +184,61 @@ static int port_try_rdx_lookup(const char* name, void* dst) {
 #endif
 }
 
+/* Case-insensitive scan of the gamedata dir root for `name` (flat — none
+ * of the ISO-root files the game reads via RequestReadIsoFile/GetIsoFileSize
+ * live in subdirectories; only MOVIE/*.PSS does, and that's handled by
+ * recvx_fmv_open_loose separately). Fills `out` with the resolved on-disk
+ * path. Returns 0 on hit, -1 on miss. */
+static int port_loose_find_path(const char* name, char* out, size_t out_sz) {
+    const char* dir = recvx_gamedata_dir();
+    if (!dir) return -1;
+    DIR* d = opendir(dir);
+    if (!d) return -1;
+    int found = -1;
+    struct dirent* ent;
+    while ((ent = readdir(d)) != NULL) {
+        if (port_strcasecmp_ascii(ent->d_name, name) == 0) {
+            snprintf(out, out_sz, "%s/%s", dir, ent->d_name);
+            found = 0;
+            break;
+        }
+    }
+    closedir(d);
+    return found;
+}
+
+/* We only ship an extracted gamedata dir (no .iso image), so
+ * recvx_iso_global() is NULL in every dev/test run — GetIsoFileSize and
+ * RequestReadIsoFile need a loose-file fallback for ISO-root files (e.g.
+ * SYSMES.ALD) or bhSysCallMonitor's mn_md0==1 player-load chain (which
+ * kicks off the whole first-room-load sequence) stalls forever waiting
+ * on a file that will never be "found". */
+static int port_try_loose_iso_size(const char* name) {
+    char path[600];
+    if (port_loose_find_path(name, path, sizeof path) != 0) return -1;
+    FILE* f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fclose(f);
+    return sz > 0 ? (int)sz : -1;
+}
+
+static int port_try_loose_iso_read(const char* name, void* dst) {
+    char path[600];
+    if (port_loose_find_path(name, path, sizeof path) != 0) return -1;
+    FILE* f = fopen(path, "rb");
+    if (!f) return -1;
+    fseek(f, 0, SEEK_END);
+    long sz = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    size_t got = (sz > 0) ? fread(dst, 1, (size_t)sz, f) : 0;
+    fclose(f);
+    if (sz <= 0 || (long)got != sz) return -1;
+    RX_LOG("iso", "loose ISO-root read OK: %s -> %ld bytes (%s)", name, sz, path);
+    return 0;
+}
+
 int RequestReadIsoFile(const char* name, void* dst) {
     if (!name || !dst) { g_last_status = -1; return -1; }
 
@@ -191,28 +247,32 @@ int RequestReadIsoFile(const char* name, void* dst) {
 
     extern recvx_iso_t* recvx_iso_global(void);
     recvx_iso_t* iso = recvx_iso_global();
-    if (!iso) {
-        RX_LOG("iso", "RequestReadIsoFile FAIL: no ISO mounted (file=%s)", name);
-        g_last_status = -1;
-        return -1;
+    if (iso) {
+        uint32_t lba = 0, sz = 0;
+        if (recvx_iso_find(iso, name, &lba, &sz) == 0) {
+            /* sz is byte count; sector size is 2048 so round up. */
+            uint32_t nsec = (sz + 2047u) / 2048u;
+            if (recvx_iso_read_sectors(iso, lba, nsec, dst) == 0) {
+                RX_LOG("iso", "RequestReadIsoFile OK: %s -> %u bytes (lba=%u)",
+                       name, sz, lba);
+                g_last_status = 0;
+                return 0;
+            }
+            RX_LOG("iso", "RequestReadIsoFile FAIL: read err lba=%u nsec=%u (%s)",
+                   lba, nsec, name);
+            g_last_status = -1;
+            return -1;
+        }
     }
-    uint32_t lba = 0, sz = 0;
-    if (recvx_iso_find(iso, name, &lba, &sz) != 0) {
-        RX_LOG("iso", "RequestReadIsoFile FAIL: file not found (%s)", name);
-        g_last_status = -1;
-        return -1;
+
+    if (port_try_loose_iso_read(name, dst) == 0) {
+        g_last_status = 0;
+        return 0;
     }
-    /* sz is byte count; sector size is 2048 so round up. */
-    uint32_t nsec = (sz + 2047u) / 2048u;
-    if (recvx_iso_read_sectors(iso, lba, nsec, dst) != 0) {
-        RX_LOG("iso", "RequestReadIsoFile FAIL: read err lba=%u nsec=%u (%s)",
-               lba, nsec, name);
-        g_last_status = -1;
-        return -1;
-    }
-    RX_LOG("iso", "RequestReadIsoFile OK: %s -> %u bytes (lba=%u)", name, sz, lba);
-    g_last_status = 0;
-    return 0;
+
+    RX_LOG("iso", "RequestReadIsoFile FAIL: not found on ISO or loose (%s)", name);
+    g_last_status = -1;
+    return -1;
 }
 
 int RequestReadInsideFile(unsigned int pat, unsigned int id, void* dst) {
@@ -253,10 +313,13 @@ int GetIsoFileSize(const char* name) {
 #endif
     extern recvx_iso_t* recvx_iso_global(void);
     recvx_iso_t* iso = recvx_iso_global();
-    if (!iso) return 0;
-    uint32_t lba = 0, sz = 0;
-    if (recvx_iso_find(iso, name, &lba, &sz) != 0) return 0;
-    return (int)sz;
+    if (iso) {
+        uint32_t lba = 0, sz = 0;
+        if (recvx_iso_find(iso, name, &lba, &sz) == 0) return (int)sz;
+    }
+
+    int loose_sz = port_try_loose_iso_size(name);
+    return loose_sz > 0 ? loose_sz : 0;
 }
 
 int GetInsideFileSize(unsigned int pat, unsigned int id) {

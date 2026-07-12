@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 95% — crash-free through full boot→title→New Game→attract-loop cycle; real gap isolated: New Game never triggers the first room load (event/typewriter script chain not compiled) |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 98% — real room load ROOT-CAUSE FIXED (loose-file ISO fallback), confirmed real `rm_*.rdx` room geometry loads and renders with zero crashes; remaining: live-input confirmation of player movement in an interactive New Game session (blocked so far only by slow headless render/log I/O in the test environment, not a known code defect) |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -632,6 +632,82 @@ blocker for confirming in-room player movement), real lighting
 (`njCnkSetEasyLight*` family still no-op stubs), collision (`hitchk.c`
 not compiled), the Start-mid-movie desync bug in `bhSysCallMovie`
 (lower priority — avoidable by not pressing Start during FMV playback).
+
+---
+
+### 2026-07-12 (same day, continued) — real room-load root cause found and fixed: it was never the event/typewriter chain
+
+The previous entry's hypothesis — "room load never fires because the
+uncompiled typewriter/event script chain is what triggers it" — was
+**wrong**, or at least not the actual blocker. Traced the real mechanism:
+
+`bhFirstGameStart()` (`system.c:461`, called unconditionally from
+`bhSysCallOpening`) already sets `sys->mn_mode0 = 1` directly — no
+event-script involvement needed. That request flows into
+`bhSysCallMonitor` (`system.c`, the `mn_md0`/`mn_md1` nested state
+machine), which is **already fully compiled and 100%-matching**: it
+reads player/weapon data, then (case 10) requests `mn_mode0 = 4`, which
+drives the room-load state machine (`bhInitReadRDT`/`bhSetRDT`, building
+`"rm_%1d%02d%1d.rdx"` and reading it via `RequestReadIsoFile`/
+`GetFileSize`). None of this needed porting — it was already there and
+already wired to run every frame (the Monitor task is unsuspended the
+entire time, confirmed via `tk_flg`/`ts_flg` bit inspection).
+
+The actual reason it stalled forever: **we never mount a real `.iso`**.
+Every test run so far launched with `--gamedata <dir>` only. `GetIsoFileSize`
+and `RequestReadIsoFile` (`port/src/afs/afs_mount.c`) only had two data
+paths — the `RDX_LNK.AFS`-backed room-file special case, and a real
+mounted ISO via `recvx_iso_global()`. With no `.iso` file (we only have
+an extracted directory, confirmed: no `.iso` exists anywhere under
+`recvx-decomp/iso/`), `recvx_iso_global()` is always `NULL`, so
+`GetIsoFileSize("sysmes.ald")` always returned 0 — and `bhSysCallMonitor`'s
+`mn_md0==1` chain (case 1, waiting on exactly that file) stalled on
+frame 1 forever, every single run. That single stall is *why* `bhInitPlayer`/
+`bhInitEnemy` never ran with real data (explaining the whole family of
+NULL-guard crashes fixed in the previous entries) and why room load
+(`mn_mode0=4`) was never reached.
+
+**Fix:** added a loose-file fallback to both functions in
+`port/src/afs/afs_mount.c` — `port_loose_find_path()` does a
+case-insensitive scan of the gamedata dir root (flat, matches how these
+ISO-root files — `SYSMES.ALD`, etc. — actually sit on disk) and
+`port_try_loose_iso_read`/`port_try_loose_iso_size` read/size the file
+directly via `fopen`/`fseek`, tried after the real-ISO path fails/is
+absent. Mirrors the existing loose-file pattern `recvx_fmv_open_loose`
+already used for movies.
+
+**Verified:** rebuilt, re-ran the same gdb fast-forward test as the
+previous entries. Log now shows:
+```
+[iso] loose ISO-root read OK: sysmes.ald -> 89088 bytes (/iso-src/data/SYSMES.ALD)
+...
+[iso] rdx lookup OK: rm_0130.rdx -> idx=15 bytes=1285767
+...
+[iso] rdx lookup OK: rm_0100.rdx -> idx=12 bytes=3257704
+```
+Real room geometry (`rm_0130`/`rm_0100` — the courtyard/gate area) loads
+and renders correctly (screenshot-verified: "DEMO PLAY" attract-mode
+gameplay demo rendering the actual 3D room, textures and models intact),
+sustained over a long run with **zero crashes** — all four of the
+previous session's NULL guards are now confirmed no-ops in the normal
+path, since the data they were guarding against now actually loads.
+
+**Not yet done:** a live-input-confirmed interactive New Game session
+(catching the "Press Start" window with synthesized `xdotool` input to
+go through the real menu rather than the attract-mode auto-timeout path)
+to directly observe player movement. Attempted this but the headless
+test environment (Xvfb + software GL rendering under `gdb`, plus verbose
+per-model-per-frame logging) runs frames at roughly 1 every several
+seconds, making it impractical to reliably catch a ~15-second input
+window within a single session. This is a test-environment throughput
+problem, not a sign of a code defect — the underlying room-load/render
+pipeline is now proven correct with real data. Fast-follow: either trim
+per-frame log verbosity for test runs or drive the Start-press via a
+`gdb` breakpoint override (`break CheckStartButton` + `return 1`) using
+a *fresh* process rather than one already `gdb -batch`-attached (can't
+double-attach ptrace to the same PID).
+
+**P2 progress: 95% -> 98%.**
 
 ---
 
