@@ -24,7 +24,7 @@ void bhEne06(BH_PWORK* epw) { (void)epw; }
 void bhEne07(BH_PWORK* epw) { (void)epw; }
 void bhEne08(BH_PWORK* epw) { (void)epw; }
 void bhEne09(BH_PWORK* epw) { (void)epw; }
-void bhEne10(BH_PWORK* epw) { (void)epw; }
+/* bhEne10 now real (en10.c). */
 void bhEne11(BH_PWORK* epw) { (void)epw; }
 void bhEne12(BH_PWORK* epw) { (void)epw; }
 void bhEne13(BH_PWORK* epw) { (void)epw; }
@@ -34,21 +34,19 @@ void bhEne16(BH_PWORK* epw) { (void)epw; }
 void bhEne17(BH_PWORK* epw) { (void)epw; }
 void bhEne18(BH_PWORK* epw) { (void)epw; }
 void bhEne19(BH_PWORK* ewP) { (void)ewP; }
-void bhEne20(BH_PWORK* epw) { (void)epw; }
+/* bhEne20 now real (en20.c). */
 void bhEne21(BH_PWORK* epw) { (void)epw; }
 void bhEne22(BH_PWORK* epw) { (void)epw; }
 void bhEne23(BH_PWORK* epw) { (void)epw; }
 void bhEne24(BH_PWORK* epw) { (void)epw; }
 void bhEne25(BH_PWORK* epw) { (void)epw; }
 void bhEne26(BH_PWORK* epw) { (void)epw; }
-void bhEne27(BH_PWORK* epw) { (void)epw; }
-/* bhEne28/bhSubpl now real (subpl.c). */
+/* bhEne27 now real (en27.c). bhEne28/bhSubpl now real (subpl.c). */
 void bhEne29(BH_PWORK* ewP) { (void)ewP; }
 void bhEne30(BH_PWORK* epw) { (void)epw; }
 void bhEne53(BH_PWORK* epw) { (void)epw; }
 /* bhEne54/bhEne55 now real (en54.c/en55.c). bhEne71 now real
- * (en71.c). */
-void bhEne_InitDamage(BH_PWORK* epw) { (void)epw; }
+ * (en71.c). bhEne_InitDamage now real (zonzon1.c). */
 
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
 /* bhCheckCut now real (cut.c). bhCheckEnemies/bhCheckPlayer/bhCheckWall/
@@ -220,6 +218,20 @@ void CallPlayerActionSe(int SeNo, int Flag) { (void)SeNo;(void)Flag; }
 void CallPlayerFootStepSe(int FloorType, int Type, int Flag) { (void)FloorType;(void)Type;(void)Flag; }
 void CallPlayerVoice(int no) { (void)no; }
 void CallPlayerWeaponSeEx(NJS_POINT3* pPos, int SeNo, int SlotNo) { (void)pPos;(void)SeNo;(void)SlotNo; }
+/* Enemy SE triggers zonzon1.c calls (bhEne_CallSE/bhEne_CallSE_EX/
+ * bhEne_CallEffectSE) — real definitions are in sdfunc.c, a 3466-line
+ * audio/system file not compiled here since its file-request functions
+ * (RequestReadInsideFile/RequestReadIsoFile/etc) would very likely
+ * collide with the already-real AFS-backed file I/O (see afs/
+ * afs_mount.c and the "AFS reader ... replaces sdfunc.c's file-request
+ * surface" comment below in this file). No-op like the other CallPlayer*
+ * SE triggers above until audio triggering is wired up as its own task. */
+void RequestEnemySeBasic(int EnemyNo, NJS_POINT3* pPos, int SeNo, int Flag, int FadeRate)
+                                      { (void)EnemyNo;(void)pPos;(void)SeNo;(void)Flag;(void)FadeRate; }
+void RequestEnemySe(int EnemyNo, NJS_POINT3* pPos, int SeNo) { (void)EnemyNo;(void)pPos;(void)SeNo; }
+void RequestEnemySeEx(int EnemyNo, NJS_POINT3* pPos, int SeNo, int FadeRate)
+                                      { (void)EnemyNo;(void)pPos;(void)SeNo;(void)FadeRate; }
+int  ChechPlayEnemySe(int EnemyNo, int SeNo) { (void)EnemyNo;(void)SeNo; return 0; }
 /* PlyPchInit/PlyPchMain/bhArmIkMdk/bhCPM2_SearchPch/bhCPM2_act_atk_pch/
  * bhCPM2_act_suw_pch/bhCPM2_act_wsc_pch now real (playpch.c). */
 void bhCPM0_event(void) {}

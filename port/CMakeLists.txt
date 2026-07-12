@@ -446,6 +446,24 @@ if(RECVX_BUILD_GAME)
         # enemies). Zero PS2 asm.
         ${RECVX_SRC}/ps2/veronica/prog/en54.c
         ${RECVX_SRC}/ps2/veronica/prog/en55.c
+        # Enemy AI shared helper library #2: SE/voice calls, blood/
+        # mince/acid effect variants, damage calc, arrow markers
+        # (bhEne_CallSE/bhEne_SetBloodEffect*/bhEne_CalcDamage/etc).
+        # Zero PS2 asm. Needed njRotateEx/njScaleEx/njTranslateEx added
+        # to ninja_3d.c (njRotateEx already pure C in the decomp;
+        # njScaleEx/njTranslateEx are VU0 asm but identical math to the
+        # already-real njScale/njTranslate, just NJS_VECTOR-arg wrappers).
+        ${RECVX_SRC}/ps2/veronica/prog/zonzon1.c
+        # Line/segment-vs-geometry collision helpers (distinct from
+        # hitchk.c's box/wall checks) — bhCollisionCheckLine*/
+        # bhGetHitCollisionNormal/bhInOutCheck. Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/hitchkl.c
+        # Enemy AI: bhEne20/bhEne10/bhEne27. Zero PS2 asm. (bhEne08
+        # deferred — it also needs bhEne03_Collision from the
+        # not-yet-compiled en03.c, 6671 lines, its own future task.)
+        ${RECVX_SRC}/ps2/veronica/prog/en20.c
+        ${RECVX_SRC}/ps2/veronica/prog/en10.c
+        ${RECVX_SRC}/ps2/veronica/prog/en27.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

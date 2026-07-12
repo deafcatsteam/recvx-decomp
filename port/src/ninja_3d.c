@@ -230,6 +230,27 @@ void njScale(NJS_MATRIX* m, Float sx, Float sy, Float sz) {
     a[8]*=sz; a[9]*=sz; a[10]*=sz; a[11]*=sz;
 }
 
+/* ps2_NaMatrix.c:1727/1776/1759 — "Ex" variants take an NJS_VECTOR
+ * pointer (or an Angle array) instead of separate floats, otherwise
+ * identical math to njTranslate/njScale/njRotate{X,Y,Z} above
+ * (njTranslateEx/njScaleEx are VU0 asm doing the exact same per-row
+ * multiply-add on the top-of-stack matrix; njRotateEx is already pure C
+ * in the decomp, just an ordering wrapper). */
+void njTranslateEx(NJS_VECTOR* v) { if (v) njTranslate(NULL, v->x, v->y, v->z); }
+void njScaleEx(NJS_VECTOR* v)     { if (v) njScale(NULL, v->x, v->y, v->z); }
+void njRotateEx(Angle* ang, Sint32 lv) {
+    if (!ang) return;
+    if (lv != 0) {
+        njRotateY(NULL, ang[1]);
+        njRotateX(NULL, ang[0]);
+        njRotateZ(NULL, ang[2]);
+    } else {
+        njRotateZ(NULL, ang[2]);
+        njRotateY(NULL, ang[1]);
+        njRotateX(NULL, ang[0]);
+    }
+}
+
 /* KATANA: Float njScalor(NJS_VECTOR* v) — returns vector length. */
 Float njScalor(NJS_VECTOR* v) {
     if (!v) return 0.0f;
