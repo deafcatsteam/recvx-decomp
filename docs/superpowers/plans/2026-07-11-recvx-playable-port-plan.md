@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision (`hitchk.c`) and dynamic lighting (`light.c` + `njCnkSetEasyLight*`/`SimpleLight*` + CPU shading) done; see `2026-07-12-recvx-p4-collision-lighting-plan.md` | ~15% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + dynamic lighting done (see `2026-07-12-recvx-p4-collision-lighting-plan.md`); full task breakdown (combat, effects, enemy AI, save/load, paused P3 Windows work) now in this doc's "Phase 4 detail" section | ~15% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1227,11 +1227,291 @@ Windows-only gaps to track separately).
 
 ---
 
-## Phase 4–5 (roadmap only — not detailed yet)
+## Phase 4 detail: "Playable" gate
+
+**Goal:** full room traversal, combat, save/load, and no
+`RECVX_BUILD_GAME`-only crashes — the last gate before P5 (post-playable
+polish, not scoped here).
+
+**This section is the single gathering point for all P4 work, including
+work paused under other phases.** Sub-tasks that already have their own
+detailed plan doc are linked, not duplicated, below.
+
+| Sub-task | Status | Detail |
+|---|---|---|
+| P3 — Windows/MSVC parity | 🟠 Paused, ~40% — 3 real cross-platform bugs fixed, blocked on a KATANA CRT-shadow-header vs MSVC `/FI` structural include tangle (`error C2371`, `error C1014`). Stopped per explicit user agreement after the "one last CI push"; **resume here, on a real Windows machine, only if/when needed** — see Task 4.0 below. | This doc, "Phase 3 detail" above |
+| Task 1 — Collision (`hitchk.c`) | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
+| Task 2 — Lighting setters + CPU shading | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
+| Task 3 — `light.c` dynamic lighting | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
+| Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ⬜ Not started | below |
+| Task 4.2 — Effects (`effect.c`) | ⬜ Not started | below |
+| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ⬜ Not started | below |
+| Task 4.4 — Save/load (`ps2_McSaveFile.c`, `ps2_SaveScreen.c`, `ps2_SystemSaveScreen.c`) | ⬜ Not started | below |
+| Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
+
+**Investigation done so far (this pass):** grepped every remaining P4 source
+file for `asm`/`__asm__` (the tell for a VU0/EE-asm boundary that needs a
+CPU reimplementation, same as `njCnkSetEasyLight*`/`njProjectScreen` in
+Tasks 2–3). Result — **all of it is pure C**:
+
+```
+effect.c:            0 asm hits (1812 lines)
+weapon.c:             0 asm hits (1896 lines)
+playpch.c:            0 asm hits (1283 lines)
+ps2_McSaveFile.c:     0 asm hits (1096 lines)
+ps2_SaveScreen.c:     0 asm hits (1807 lines)
+ps2_SystemSaveScreen.c: 0 asm hits (1302 lines)
+```
+
+This is a real, meaningful difference from Tasks 1–3: no CPU
+reimplementation work is expected here, only the same
+integrate-and-delete-shadowing-stubs mechanics already proven twice
+(`hitchk.c`, `light.c`). The proven procedure, repeated per task below:
+
+1. `grep -c "asm\|__asm__" <file>` — confirm no VU0/EE asm (already done above).
+2. `grep -oE "^[A-Za-z_][A-Za-z0-9_ ]*\(" <file>` to list real function names,
+   `comm -12` against `game_room_stubs.c`'s stub names to find the exact
+   shadowing set (same technique used for `hitchk.c`'s 16-function overlap).
+3. Add the file to `port/CMakeLists.txt`'s `RECVX_GAME_SOURCES`, with a
+   comment documenting what it replaces and why (established convention —
+   see the `hitchk.c`/`light.c` entries already there).
+4. Build `recvx_game` + `recvx_pc`; fix any *new* symbol gaps the same way
+   Tasks 1–3 did (real body if cheap/pure-C, no-op stub with a comment if
+   genuinely out of scope) — do not silently re-stub something the file
+   itself defines.
+5. Delete the now-dead shadowing stubs from `game_room_stubs.c`.
+6. Smoke-test under Xvfb (no crash, same or better behavior than before).
+7. Update this table's status and commit.
+
+---
+
+### Task 4.0: Resume P3 (Windows/MSVC parity) — conditional, do last or on-demand
+
+**Files:** `.github/workflows/windows-build.yml`, and whatever the KATANA
+include-tangle fix touches once investigated (not yet known — this is
+genuinely a "return to Phase 1 (root-cause investigation)" situation per
+`systematic-debugging`, not a known fix).
+
+**Interfaces:** none — this is CI/build-config work, not game code.
+
+- [ ] **Step 1:** If a real Windows/Visual Studio machine becomes available,
+  reproduce the `error C2371`/`error C1014` locally first — a local repro
+  loop is far faster than iterating via GitHub Actions CI, which is how P3
+  was forced to work so far.
+- [ ] **Step 2:** Root-cause the KATANA CRT-shadow-header vs MSVC `/FI`
+  force-include ordering conflict (see "Phase 3 detail" above for the full
+  prior investigation). This is the point P3 stopped at per explicit user
+  agreement ("un dernier push CI, puis stop") — treat it as a fresh Phase 1
+  investigation, not a continuation of the same failed fix attempts.
+- [ ] **Step 3:** Once fixed, re-run Phase 3's Task 3 (manual Windows smoke
+  test) and mark P3 done in the Progress overview table at the top of this
+  doc.
+
+**This task is optional and may never trigger** — folded into P4 only so
+all outstanding work lives in one place, per the project owner's own call
+("P4 ouais on finira P3 sur le windows si besoin").
+
+---
+
+### Task 4.1: Combat core — `weapon.c` + `playpch.c`
+
+**Files:**
+- Modify: `port/CMakeLists.txt` (add both files to `RECVX_GAME_SOURCES`)
+- Modify: `port/src/game_room_stubs.c` (delete shadowed stubs)
+- Create/Modify: whatever new symbol gaps step 4 below surfaces
+
+**Interfaces:**
+- Consumes: `BH_PWORK`, `O_WRK`, `GA_WORK`, `WPN_TAB` types (already defined
+  in existing headers — used elsewhere in already-compiled files); the
+  collision primitives from `ps2_NaColi.c` (already compiled, Task 1);
+  `njCalcPoint`/`njInnerProduct`/etc from `ninja_3d.c` (already real).
+- Produces: real `bhActionWeapon`, `bhObjWpn`, `bhSetWeapon`,
+  `bhCountBullet`, `bhCheckGunAtari`, `bhCheckKnifeAtari`,
+  `bhCheckFlyAtari`, `bhSetBowDamage`, `bhCheckBombAtari`,
+  `bhCheckCapCol2Capsule`, `bhSetGunSplash`, `bhSetExplosion`,
+  `bhSetExplosionEffect(Ex)`, `PlyPchInit`, `PlyPchMain`,
+  `bhCPM2_act_atk_pch`, `bhCPM2_act_suw_pch`, `bhCPM2_act_wsc_pch`,
+  `bhCPM2_SearchPch`, `bhArmIkMdk` — currently the ~18 no-op stubs in
+  `game_room_stubs.c`'s "player.c dependencies (weapons...)" block
+  (`port/src/game_room_stubs.c:213`-ish).
+
+- [ ] **Step 1:** Confirm the shadow set via `comm -12` between `weapon.c`'s
+  + `playpch.c`'s top-level function names and the stub names in that block
+  (listed above from a direct read — re-verify before deleting, the file
+  may have grown since this plan was written).
+- [ ] **Step 2:** Add both files to `RECVX_GAME_SOURCES` in
+  `port/CMakeLists.txt`, following the existing comment convention.
+- [ ] **Step 3:** Build `recvx_game`. Expect new symbol gaps for anything
+  `weapon.c`/`playpch.c` call that isn't compiled yet — likely candidates
+  given what's already stubbed: `bhSetExplosion` already has a real body
+  (moved into `game_room_stubs.c` earlier per an existing comment there —
+  check whether `weapon.c`'s own definition now collides with it, same
+  bug class as the `njCnkSetEasyMultiLight`/`lgttab` duplicate-symbol
+  errors hit in Task 3) and effect-system calls (`bhSetEffect`,
+  `bhLinkBlood`) that depend on Task 4.2 below — may need to stay
+  no-op stubs until Task 4.2 lands, or land 4.1+4.2 together.
+- [ ] **Step 4:** Fix each gap: real body if pure C and cheap, otherwise a
+  clearly-commented no-op stub (same standard as Tasks 1–3 — don't fake
+  correctness).
+- [ ] **Step 5:** Delete the now-real stubs from `game_room_stubs.c`.
+- [ ] **Step 6:** Build clean, smoke-test under Xvfb (no crash).
+- [ ] **Step 7:** Update the status table above, commit.
+
+---
+
+### Task 4.2: Effects — `effect.c`
+
+**Files:**
+- Modify: `port/CMakeLists.txt` (add `effect.c`)
+- Modify: `port/src/game_room_stubs.c` (delete shadowed stubs)
+
+**Interfaces:**
+- Consumes: `njCnkEasyMultiDrawObject`/model draw path (`ninja_cnk.c`,
+  real), `NJS_PRIM`/`NJS_POINT2COL` 2D draw primitives (currently only
+  declared — `njDrawPolygon2D`/`njDrawLine2D` are still stubbed in
+  `ps2_NaDraw2D.h`'s corresponding `.c`, not yet investigated; may be a
+  new gap this task surfaces).
+- Produces: real `bhInitEffect`, `bhSetFontTexture`, `bhClearEffect`,
+  `bhClearEventEffect`, `bhClrEff_YT`, `bhPushEffectWork`,
+  `bhPopEffectWork`, `bhDeleteYakkyou`, `bhDrawPARAM2D`, `bhSetEffect`,
+  `bhSetEffectTb`, `bhSetEffectEvt`, `bhSetShadow`, `bhLinkBlood`,
+  `bhControlEffect`, `bhDrawEffect`, `bhDrawPolEffect`, `bhDrawMdfEffect`,
+  `bhDrawLinEffect`, `bhDrawNtxEffect3D` — replaces the "effects
+  (effect.c)" stub block in `game_room_stubs.c:65`-ish (`bhClearEffect`,
+  `bhSetEffect`, `bhSetEffectTb`, `bhSetExplosion`) plus `bhDrawEffect`/
+  `bhSetShadow` currently stubbed elsewhere in the file — re-verify exact
+  overlap via `comm -12` before deleting, same as every prior task.
+
+- [ ] **Step 1:** `comm -12` shadow-set check (see procedure above).
+- [ ] **Step 2:** Add `effect.c` to `RECVX_GAME_SOURCES`.
+- [ ] **Step 3:** Build; `bhDrawPolEffect`/`bhDrawMdfEffect`/
+  `bhDrawLinEffect`/`bhDrawNtxEffect3D` draw particle-style effects
+  (blood, muzzle flash, etc.) through the `NJS_PRIM`/2D draw path — check
+  whether that path already routes through `ninja_cnk.c`'s
+  `recvx_gfx_draw_tri3d`-style backend or needs its own thin CPU
+  reimplementation (a real, if small, new rendering path — budget time
+  for this, it's the one part of this task that isn't pure
+  integrate-and-delete).
+- [ ] **Step 4:** Fix gaps, same standard as before.
+- [ ] **Step 5:** Delete shadowed stubs, build clean, Xvfb smoke-test.
+- [ ] **Step 6:** Update status table, commit.
+
+---
+
+### Task 4.3: Enemy AI roster — `eneset.c` dispatch + `en*.c` files
+
+**Files:**
+- Modify: `port/CMakeLists.txt` (add files incrementally, one commit per
+  enemy or small batch — do not land all ~30 in one commit, per this
+  project's own "surgical, verifiable steps" convention)
+- Modify: `port/src/game_room_stubs.c` (delete each `bhEneNN` stub as its
+  real file lands)
+
+**Interfaces:**
+- Consumes: `BH_PWORK`, collision (`hitchk.c`/`ps2_NaColi.c`, real),
+  combat (`weapon.c`, Task 4.1), effects (`effect.c`, Task 4.2) — **this
+  task should land after 4.1/4.2**, since enemy behavior calls into both.
+- Produces: real `bhEne01`...`bhEne30`, `bhEne53`...`bhEne55`, `bhEne71`,
+  `bhEne_InitDamage` (currently ~34 no-op stubs in `game_room_stubs.c`'s
+  "enemy AI handlers" block, `port/src/game_room_stubs.c:17`-ish) wired
+  into `eneset.c`'s `bhJumpEnemy[100]` dispatch table
+  (`src/ps2/veronica/prog/eneset.c:51`).
+
+Per-enemy files found so far (re-enumerate at execution time, this list
+may be incomplete): `en01b.c`, `en02.c`, `en03.c`+`en03sub.c`, `en04.c`,
+`en05.c`+`en05sub.c`, `en06.c`+`en06sub.c`, `en07.c`, `en09.c`, `en10.c`,
+`en12.c`, `en13sub.c`, `en14.c`, `en15.c`, `en16.c`, `en17.c`, `en18.c`,
+`en19.c`, `en20.c`, `en21.c`, `en22.c`, `en24.c`, `en25.c`, `en27.c`,
+`en30.c`, `en54.c`, `en71.c`, plus shared helper `subpl.c`.
+
+- [ ] **Step 1:** `grep -c "asm\|__asm__"` every file in the list above —
+  confirm still zero before committing to the no-CPU-reimplementation
+  assumption (not yet checked individually, only spot-checked as a class
+  during this planning pass).
+- [ ] **Step 2:** Pick the lowest-numbered/simplest enemy first (likely
+  `en01b.c`/`bhEne01`, the base zombie — smallest state machine in most RE
+  games) as the proof-of-pattern integration.
+- [ ] **Step 3:** Apply the repeated procedure (top of this section) to
+  that one file: shadow-check, add to CMakeLists, build, fix gaps, delete
+  stub, smoke-test, commit.
+- [ ] **Step 4:** Repeat Step 3 for each remaining enemy file, one
+  file/commit at a time (or small logical batches — e.g. an enemy + its
+  `*sub.c` helper together). Do not batch all 30 into a single commit —
+  isolates which specific enemy broke something if a crash appears later.
+- [ ] **Step 5:** After all enemies land, verify `eneset.c`'s
+  `bhJumpEnemy[]` table (line 51) has every slot pointing at a real
+  function, not a leftover no-op.
+- [ ] **Step 6:** Update status table (can mark partial completion, e.g.
+  "12/30 enemies" — track actual count, don't round up).
+
+**Behavioral verification note:** compiling an enemy file only proves it
+links and doesn't crash on load — confirming each enemy's *actual combat
+behavior* (attack patterns, damage taken/dealt) needs live gameplay
+testing, which is still blocked by the same gdb pseudo-input harness
+limitation noted in Tasks 1 and 3 (stuck at item-select screen). Static
+verification (clean build + no crash) is the accepted bar until that
+harness limitation is fixed or a real controller/keyboard test is done —
+same standard the user already approved for collision.
+
+---
+
+### Task 4.4: Save/load — `ps2_McSaveFile.c` + `ps2_SaveScreen.c` + `ps2_SystemSaveScreen.c`
+
+**Files:**
+- Modify: `port/CMakeLists.txt` (add all three)
+- Modify: `port/src/game_room_stubs.c` (delete shadowed stubs, if any —
+  not yet confirmed there are any; save/load may currently just be
+  entirely absent from the compiled set rather than stubbed, which would
+  mean whatever calls into it is also not yet compiled)
+
+**Interfaces:**
+- Consumes: PS2 memory-card I/O (`sceMc*` or similar KATANA calls) — this
+  is the one place in this task list likely to need a **real port-side
+  reimplementation**, not just a CPU stand-in for VU0 math: memory-card
+  hardware doesn't exist on PC, so save/load needs a file-based
+  replacement (e.g. write the same on-disk save-file byte layout to a
+  local file instead of a memory card sector). This is conceptually
+  similar to how `port/src/afs/afs_mount.c` already reimplements the PS2
+  ISO/AFS filesystem layer for loose files on disk — same pattern applies
+  here.
+- Produces: whatever `bhSave*`/`bhLoad*`-style entry points `game.c`
+  already calls (not yet identified — first investigation step below).
+
+- [ ] **Step 1:** Grep `game.c`/`room.c`/menu code for the actual save/load
+  entry points these three files expose, and confirm whether anything
+  currently calls them at all (if nothing does yet, this may be entirely
+  new wiring, not a stub-replacement).
+- [ ] **Step 2:** Identify the real KATANA memory-card API surface these
+  files call (`sceMc*` family, likely) and design the PC-side file-backed
+  replacement, following the `afs_mount.c` precedent.
+- [ ] **Step 3:** Compile the three files, fix gaps per the standard
+  procedure.
+- [ ] **Step 4:** Manual round-trip test: save, quit, relaunch, load,
+  confirm player state (room, items, health) matches.
+- [ ] **Step 5:** Update status table, commit.
+
+---
+
+### Task 4.5: Full-playthrough crash sweep
+
+**Files:** none (verification-only).
+
+- [ ] **Step 1:** Once Tasks 4.1–4.4 are in, do an extended Xvfb run (or a
+  real keyboard/controller session if the harness limitation from Task 1/
+  4.3 gets fixed) through as much of the game as reachable — title, new
+  game, first several rooms, at least one combat encounter, one save.
+- [ ] **Step 2:** Log every crash/assert hit; root-cause each via
+  `systematic-debugging` before patching (same standard as P1–P3).
+- [ ] **Step 3:** Once a full loop (start → fight → save → reload) survives
+  without a `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress
+  overview table at the top of this doc and open P5 scoping.
+
+---
+
+## Phase 5 (roadmap only — not detailed yet)
 
 | Phase | What it needs | Depends on |
 |---|---|---|
-| P4 | Definition of "playable": full room traversal, save/load, combat, no engine-level (not gameplay-content) crashes | P2, P3 |
 | P5 | Post-playable improvements — network (Battle Mode), audio/graphics upgrades. Not scoped: needs its own spec once P4's actual codebase shape is known | P4 |
 
 ---
@@ -1252,3 +1532,21 @@ faked.
 **Type consistency:** `recvx_alloc_low4g(size_t) -> void*` matches the existing
 Windows branch's signature exactly (`port/src/tex_pool_alloc.c:31`) and the
 consumer's extern declaration (`port/src/game_texture_stubs.c:103`).
+
+**2026-07-13 update — Phase 4 detail added:** P4 was expanded from a
+one-line roadmap row into a full task breakdown once Tasks 1–3 (collision,
+lighting, `light.c`) landed and the remaining scope's file list was known.
+Kept honest to the "no fake TDD steps" rule above: Tasks 4.1/4.2/4.4 give
+real file/function lists (verified by direct `grep`/`wc -l` against the
+actual decomp source during this planning pass) and a concrete, proven
+integration procedure (shadow-check via `comm -12`, add to CMakeLists,
+build, fix gaps, delete stubs, smoke-test, commit) rather than invented
+code, since the exact compile errors each file will hit are genuinely
+unknown until attempted — same reasoning as the original P2 debug-loop
+framing. Task 4.3 (34 enemy files) is deliberately a repeatable procedure
+applied per-file rather than 34 bespoke task blocks, since writing unique
+steps for AI behavior not yet read in detail would itself be
+placeholder-plan territory. Task 4.0 folds P3's paused Windows/MSVC work
+into P4 per the project owner's explicit instruction to gather all P4
+work, including paused sub-tasks, into one place — it stays conditional
+and may never trigger.
