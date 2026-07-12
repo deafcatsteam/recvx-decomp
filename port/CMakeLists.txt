@@ -373,6 +373,20 @@ if(RECVX_BUILD_GAME)
         # RE fixed-camera cut system — picks the camera (cam.px/ay/cut)
         # from the converted CUT_WORK array based on player position.
         ${RECVX_SRC}/ps2/veronica/prog/cut.c
+        # Per-room directional + point light selection (bhControlLight/
+        # bhSetLight/bhSetHalfLight/bhInitLight/bhSetLightTab/
+        # bhSetEasyDirLight/bhGetLightVector). Zero PS2 asm — pure C game
+        # logic; the actual VU0-bound work is njCnkSetEasyLight* etc,
+        # already real in game_room_stubs.c/ninja_cnk.c. Needed
+        # njProjectScreen + fNaViwOffsetX/Y added to ninja_3d.c (CPU
+        # reimplementation of the point-light visibility cull — see
+        # comment there) and njCnkSetSimpleLight/Color/Intensity added
+        # to game_room_stubs.c (previously declared but never defined —
+        # nothing called them before this file). Replaces 7 shadowing
+        # no-op stubs previously in game_room_stubs.c (see git history).
+        # Point-light (Multi) rendering itself stays stubbed no-op —
+        # out of scope for this pass, see ninja_cnk.c's cnk_shade_vertex.
+        ${RECVX_SRC}/ps2/veronica/prog/light.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

@@ -49,11 +49,10 @@ void njDrawPolygon3D(void* p, int n, int t)           { (void)p;(void)n;(void)t;
  * port/src/ninja_cnk.c (Phase 3 of Path B) — real chunk walkers that
  * route triangles through recvx_gfx_draw_tri3d. */
 void njCnkSetEasyMultiAmbient(unsigned int c)         { (void)c; }
-void njCnkSetEasyMultiLight(int n, void* v)           { (void)n;(void)v; }
-void njCnkSetEasyMultiLightColor(int n, unsigned int c){ (void)n;(void)c; }
-void njCnkSetEasyMultiLightMatrices(int n, void* m)   { (void)n;(void)m; }
-void njCnkSetEasyMultiLightPoint(int n, void* p)      { (void)n;(void)p; }
-void njCnkSetEasyMultiLightRange(int n, float r)      { (void)n;(void)r; }
+/* njCnkSetEasyMultiLight/Color/Matrices/Point/Range moved to
+ * game_room_stubs.c (Phase 4/light.c) with the real (Int, Float...)
+ * signatures from ps2_NinjaCnk.h — these placeholders had drifted to
+ * ad hoc (int, void*) signatures no caller ever used. */
 
 /* npGetWHDSize is a model bounding-box helper — defined for real in
  * playpch.c which we haven't compiled. No-op for now.

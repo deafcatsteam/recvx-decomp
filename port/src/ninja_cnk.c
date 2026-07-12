@@ -577,16 +577,10 @@ void njCnkEasyMultiDrawObject(NJS_CNK_OBJECT* obj) {
     extern long g_cnk_tris_dbg;
     long before = g_cnk_tris_dbg;
 
-    /* TEMPORARY: light.c (the real per-room/player-relative light selector,
-     * ~20 njCnkSetEasyMultiLight/njCnkSetSimpleLight/njCnkSetSimpleMultiLight
-     * calls, not yet individually verified for VU0-asm-free status) isn't
-     * compiled yet, so nothing else calls njCnkSetEasyLight. Hardcode a
-     * fixed overhead "sun" light so cnk_shade_vertex has something to show.
-     * Replace this call site once light.c lands. */
-    njCnkSetEasyLight(0.0f, -1.0f, 0.0f);
-    njCnkSetEasyLightIntensity(0.7f, 0.35f);
-    njCnkSetEasyLightColor(1.0f, 1.0f, 1.0f);
-
+    /* light.c (the real per-room/player-relative light selector) now
+     * compiles and drives NaCnkLightEs every frame via bhControlLight/
+     * bhSetLight/bhSetHalfLight, called from room.c/game.c before this
+     * draw. No hardcoded light needed here anymore. */
     recvx_gfx_begin_3d(60.0f, 4.0f, 30000.0f);
     cnk_draw_object_tree(obj);
     recvx_gfx_end_3d();

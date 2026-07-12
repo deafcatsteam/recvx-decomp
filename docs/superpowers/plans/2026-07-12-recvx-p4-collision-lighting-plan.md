@@ -444,15 +444,65 @@ to 0, so only the 0.35 ambient term shows) — a real, visible change from the
 prior flat/uniform vertex-color tint. Screenshot saved for reference at
 `p4shots/lighting_after.png` in this session's scratchpad.
 
-- [ ] **Follow-up (not part of this task, not started):** compiling
-`light.c` for real dynamic lighting requires first verifying, one by one,
-whether each of the ~20 additional `njCnk*`/`njCnkSetSimple*` functions it
-calls (`njCnkSetEasyMultiLight*`, `njCnkSetSimpleLight*`,
-`njCnkSetSimpleMultiLight*` — full list in this task's investigation, not
-reproduced here) has a VU0-asm-free matched body in `ps2_NinjaCnk.c` the way
-the 3 "Easy" setters did, or whether some require further CPU
-reimplementation work like `ninja_3d.c`/`ninja_cnk.c` themselves needed. Scope
-that verification as its own task before attempting it.
+- [x] **Follow-up, done:** compiled `light.c` for real per-room/player-relative
+dynamic lighting (`bhControlLight`/`bhSetLight`/`bhSetHalfLight`/
+`bhInitLight`/`bhSetLightTab`/`bhSetEasyDirLight`/`bhGetLightVector`). See
+Task 3 below.
+
+---
+
+## Task 3: `light.c` — real dynamic lighting
+
+**Investigation:** `light.c` itself is pure C game logic (no VU0 asm) —
+confirmed via read-through and by grepping for `asm`/`vu0`/`.vsm`, none
+found. It calls `njCnk*` setters whose VU0-bound math already lives behind
+the CPU-side `cnk_shade_vertex` boundary from Task 2. Two new gaps found:
+1. `njCnkSetSimpleLight`/`Color`/`Intensity` were declared in
+   `ps2_NinjaCnk.h` but never defined anywhere in the port (no stub, no
+   real impl) — nothing had called them before `light.c`.
+2. `njProjectScreen` (called once, inside `bhControlLight`'s point-light
+   screen-visibility cull) is real VU0 asm in `ps2_NaMatrix.c` (perspective
+   divide via `vdiv`) — a genuine VU0 boundary like Task 2's lighting math.
+
+**Changes:**
+- `port/src/ninja_3d.c`: added `njProjectScreen` — CPU reimplementation
+  (transform via existing `njCalcPoint`, then `x/z, y/z` perspective divide
+  + `fNaViwOffsetX/Y` offset, both defined here at their PS2 power-on
+  default of 0). Only consumer is the point-light cull, and point-light
+  (Multi) rendering itself is still stubbed no-op, so this approximation is
+  inert for on-screen output today — reimplemented properly anyway since it
+  was cheap and correct given `njCalcPoint` already existed.
+- `port/src/game_room_stubs.c`: added real `njCnkSetSimpleLight`/`Color`/
+  `Intensity` (mirror the "Easy" versions — same `NaCnkLightEs`/
+  `NaCnkAmbientEs` globals, since `cnk_shade_vertex` doesn't distinguish
+  Easy/Simple chunk models). Added no-op stubs for 8 Multi-light functions
+  that were declared but never defined anywhere (`njCnkSetEasyMultiLight`,
+  `njCnkSetEasyMultiLightColor/Point/Range/Matrices`,
+  `njCnkSetSimpleMultiLight`, `njCnkSetSimpleMultiLightPoint/Range`).
+  Removed the 7 shadowing no-op stubs light.c now replaces for real
+  (`bhInitLight`, `bhSetLightTab`, `bhSetEasyDirLight`, `bhControlLight`,
+  `bhSetLight`, `bhSetHalfLight`, `bhGetLightVector`) and the placeholder
+  zeroed `lgttab[5]` (light.c defines the real initialized array).
+- `port/src/stubs/stub_ninja.c`: deleted 5 Multi-light stubs with stale,
+  never-matching `(int, void*)`-style signatures that would have collided
+  with the real `(Int, Float...)` ones now in `game_room_stubs.c`.
+- `port/src/ninja_cnk.c`: removed the hardcoded placeholder "sun" light
+  block in `njCnkEasyMultiDrawObject` — `bhControlLight`/`bhSetLight`
+  (already called every frame from already-compiled `room.c`/`game.c`)
+  now drive `NaCnkLightEs` with the real per-room light data instead.
+
+**Scope not covered:** point/spot multi-lights (torches etc.) stay no-op —
+`cnk_shade_vertex` only models one directional light. Extending it to blend
+multiple lights would be a further task.
+
+**Verification:** `recvx_game` and `recvx_pc` both build clean (only
+pre-existing warnings, same as every other file in the target). Ran
+`recvx_pc` under Xvfb through boot/logo/Capcom-splash/menu-cycling for 20s —
+no crash, same behavior as before this change (screenshot captured, no
+visual regression). Live in-room lighting comparison blocked by the same
+gdb-pseudo-input harness limitation noted in Task 1 (stuck at item-select
+screen before reaching a lit room) — accepted at the same static-verification
+bar Task 1 used, per prior user agreement.
 
 ---
 

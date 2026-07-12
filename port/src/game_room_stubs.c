@@ -62,19 +62,6 @@ int  bhCheckL2Wall(NJS_LINE* lp, unsigned int flg, float* len)
 void bhSetFloorNum(BH_PWORK* pp)      { (void)pp; }
 int  bhCheckClipModel(BH_PWORK* pp)   { (void)pp; return 0; }
 
-/* ---- lights (light.c) ------------------------------------------------ */
-void bhInitLight(void)                {}
-void bhSetLight(void)                 {}
-void bhSetHalfLight(void)             {}
-void bhSetEasyDirLight(float it)      { (void)it; }
-void bhGetLightVector(int xr, int yr, int zr, NJS_VECTOR* vec)
-{
-    (void)xr; (void)yr; (void)zr;
-    /* Callers read the result — hand back a sane unit down-vector
-     * instead of stack garbage. */
-    if (vec) { vec->x = 0.0f; vec->y = 1.0f; vec->z = 0.0f; }
-}
-
 /* ---- effects (effect.c) ---------------------------------------------- */
 void bhClearEffect(void)              {}
 int  bhSetEffect(int effno, POINT* pnt, unsigned char* lkp, int lkono)
@@ -100,7 +87,6 @@ int  bhSetShadow(char* jtb, unsigned char* lkp, int lkono, float sx, float sy, f
  * texture, mirrors, screen light control) — no-op for now -------------- */
 void bhControlCinesco(void)              {}
 void bhDrawCinesco(void)                 {}
-void bhControlLight(void)                {}
 void bhDrawEffect(void)                  {}
 void bhDrawScope(void)                   {}
 void bhDrawThermometer(void)             {}
@@ -151,13 +137,50 @@ void njCnkSetEasyLightColor(Float r, Float g, Float b)
     NaCnkLightEs.fG = g;
     NaCnkLightEs.fB = b;
 }
+
+/* "Simple" chunk models use the same single-light VU0 register set as
+ * "Easy" ones on real hardware (only the vertex format differs) — our
+ * cnk_shade_vertex doesn't distinguish the two, so these setters share
+ * NaCnkLightEs/NaCnkAmbientEs with the Easy versions above. */
+void njCnkSetSimpleLight(Float x, Float y, Float z)
+{
+    NaCnkLightEs.fCx = -x;
+    NaCnkLightEs.fCy = -y;
+    NaCnkLightEs.fCz = -z;
+}
+void njCnkSetSimpleLightIntensity(Float inten, Float ambient)
+{
+    NaCnkLightEs.fI = inten;
+    NaCnkAmbientEs.fB = ambient;
+    NaCnkAmbientEs.fG = ambient;
+    NaCnkAmbientEs.fR = ambient;
+}
+void njCnkSetSimpleLightColor(Float r, Float g, Float b)
+{
+    NaCnkLightEs.fR = r;
+    NaCnkLightEs.fG = g;
+    NaCnkLightEs.fB = b;
+}
+
+/* Point/spot multi-lights (torches, muzzle flashes, etc.) — not part of
+ * this pass. cnk_shade_vertex only models the single directional light
+ * above, so these stay no-op like before; real point-light rendering is
+ * unimplemented, not just unwired. */
+void njCnkSetEasyMultiLight(Int num) { (void)num; }
 void njCnkSetEasyMultiLightSwitch(Int light, Int flag) { (void)light;(void)flag; }
+void njCnkSetEasyMultiLightColor(Int light, Float lr, Float lg, Float lb) { (void)light;(void)lr;(void)lg;(void)lb; }
 void njCnkSetEasyMultiLightVector(Float vx, Float vy, Float vz) { (void)vx;(void)vy;(void)vz; }
+void njCnkSetEasyMultiLightPoint(Int light, Float px, Float py, Float pz) { (void)light;(void)px;(void)py;(void)pz; }
+void njCnkSetEasyMultiLightRange(Int light, Float nrange, Float frange) { (void)light;(void)nrange;(void)frange; }
+void njCnkSetEasyMultiLightMatrices(void) {}
 void njCnkSetSimpleMultiAmbient(Float ar, Float ag, Float ab) { (void)ar;(void)ag;(void)ab; }
+void njCnkSetSimpleMultiLight(Int num) { (void)num; }
 void njCnkSetSimpleMultiLightColor(Int light, Float lr, Float lg, Float lb) { (void)light;(void)lr;(void)lg;(void)lb; }
+void njCnkSetSimpleMultiLightVector(Float vx, Float vy, Float vz) { (void)vx;(void)vy;(void)vz; }
+void njCnkSetSimpleMultiLightPoint(Int light, Float px, Float py, Float pz) { (void)light;(void)px;(void)py;(void)pz; }
+void njCnkSetSimpleMultiLightRange(Int light, Float nrange, Float frange) { (void)light;(void)nrange;(void)frange; }
 void njCnkSetSimpleMultiLightMatrices(void) {}
 void njCnkSetSimpleMultiLightSwitch(Int light, Int flag) { (void)light;(void)flag; }
-void njCnkSetSimpleMultiLightVector(Float vx, Float vy, Float vz) { (void)vx;(void)vy;(void)vz; }
 
 /* ---- np* model helpers (ninja plus) ----------------------------------- */
 /* Real memory ops — data actually moves through these. */
@@ -242,7 +265,6 @@ int  bhSearchNearEnemy2(BH_PWORK* pp, int* r, float* h, int* id) { (void)pp;(voi
 int  bhSearchNearEnemyB(NJS_POINT3* pos, int ay, int ar, float len) { (void)pos;(void)ay;(void)ar;(void)len; return 0; }
 int  bhSearchNextEnemy(BH_PWORK* pp, int r, float h) { (void)pp;(void)r;(void)h; return 0; }
 void bhSetGunFire(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
-void bhSetLightTab(LGT_WORK* lt, int lno) { (void)lt;(void)lno; }
 void bhSetMagazine(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
 void bhSetWaterSplash(BH_PWORK* pp, int jno, int type, float sx, float sy, float sz)
                                       { (void)pp;(void)jno;(void)type;(void)sx;(void)sy;(void)sz; }
@@ -264,10 +286,6 @@ void npPushMdlstr(NJS_CNK_OBJECT* objp, int obj_n)   { (void)objp;(void)obj_n; }
 void npPopMdlstr(NJS_CNK_OBJECT* objp, int obj_n)    { (void)objp;(void)obj_n; }
 void npCalcSkinFM(void* pwp, int obj_n, int* sknp)   { (void)pwp;(void)obj_n;(void)sknp; }
 void npCalcSkin(void* pwp, int obj_n, int* sknp)     { (void)pwp;(void)obj_n;(void)sknp; }
-
-/* light.c's light-definition table — player.c indexes it for the room
- * lighting setup. Zeroed placeholder until light.c is compiled. */
-LGT_WORK lgttab[5];
 
 /* Declared in ps2_NaColi.h but never defined in the decomp (not matched
  * yet). Real implementation — ps2_NaColi.c's capsule-vs-box tests call it.

@@ -254,6 +254,32 @@ void njCalcPoints(NJS_MATRIX* m, NJS_POINT3* ps, NJS_POINT3* pd, Int num) {
     for (int i = 0; i < num; ++i) njCalcPoint(m, &ps[i], &pd[i]);
 }
 
+/* Screen-space offset applied by njProjectScreen below (view shake etc.
+ * on PS2). Nothing in the compiled port drives these yet, so they sit
+ * at their PS2 power-on default of 0. */
+Float fNaViwOffsetX = 0.0f;
+Float fNaViwOffsetY = 0.0f;
+
+/* The real ps2_NaMatrix.c version multiplies m into a screen matrix
+ * (NaViewScreenMatrix) via VU0 asm, then does a VU0 perspective divide
+ * (Q = 1/vf18z) before adding the view offset. We don't have
+ * NaViewScreenMatrix ported, so this reimplements the same shape —
+ * transform by m, divide x/y by camera-space z — using the existing
+ * CPU njCalcPoint. Only consumer once light.c compiles is the
+ * point-light visibility cull in bhControlLight, which only gates
+ * whether a point light gets recorded into lg_ptb/lg_pnt; point-light
+ * rendering itself is still stubbed no-op, so approximation here is
+ * inert for on-screen output. */
+void njProjectScreen(NJS_MATRIX* m, NJS_POINT3* p3, NJS_POINT2* p2) {
+    if (!m) m = pNaMatMatrixStuckPtr;
+    if (!m || !p3 || !p2) return;
+    NJS_POINT3 view;
+    njCalcPoint(m, p3, &view);
+    Float q = (view.z != 0.0f) ? (1.0f / view.z) : 0.0f;
+    p2->x = view.x * q + fNaViwOffsetX;
+    p2->y = view.y * q + fNaViwOffsetY;
+}
+
 void njGetTranslation(NJS_MATRIX* m, NJS_POINT3* p) {
     if (!m) m = pNaMatMatrixStuckPtr;
     if (!m || !p) return;
