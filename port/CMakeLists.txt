@@ -387,6 +387,39 @@ if(RECVX_BUILD_GAME)
         # Point-light (Multi) rendering itself stays stubbed no-op —
         # out of scope for this pass, see ninja_cnk.c's cnk_shade_vertex.
         ${RECVX_SRC}/ps2/veronica/prog/light.c
+        # Weapon system (bhSetWeapon/bhObjWpn/bhActionWeapon/bullet count/
+        # gun+knife+bomb+bow hit checks/splash/explosion). Zero PS2 asm —
+        # confirmed via grep. Replaces 15 shadowing no-op stubs previously
+        # in game_room_stubs.c (see git history).
+        ${RECVX_SRC}/ps2/veronica/prog/weapon.c
+        # Punch minigame + weapon aim/lock-on core (PlyPchInit/PlyPchMain/
+        # bhCPM2_act_*_pch/bhCPM2_SearchPch/bhArmIkMdk). Zero PS2 asm.
+        # Compiled alongside weapon.c since playpch.c's CheckGunHit and
+        # weapon.c's gun/knife atari checks share the same GA_WORK/WPN_TAB
+        # combat plumbing.
+        ${RECVX_SRC}/ps2/veronica/prog/playpch.c
+        # Capsule/sphere collision math extracted from njplus.c (see file
+        # header comment for exactly which lines/why — njplus.c as a whole
+        # has 12 VU0 asm blocks elsewhere, these 4 functions aren't among
+        # them). Needed by weapon.c's gun/knife/bomb/capsule hit checks.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/njplus_coli.c
+        # Player-work helpers: speed integration (bhAddSpeed — was
+        # extracted into game_room_stubs.c as a stopgap, now real here),
+        # enemy search (bhSearchNearEnemy/2/B, bhSearchNextEnemy), floor/
+        # wall queries also referenced by hitchk.c/Task 1
+        # (bhCheckFloorNum/bhCheckL2Wall/bhSetFloorNum/bhCheckClipModel —
+        # those had fallen back to their hitchk.c-era no-op stubs per that
+        # task's CMakeLists comment, now real), water splash, gun fire/
+        # magazine/yakkyou setup, and the capsule-vs-wall check weapon.c's
+        # hit tests need (bhCheckC2WallN). Zero PS2 asm — confirmed via
+        # grep. Replaces 16 shadowing no-op stubs previously in
+        # game_room_stubs.c (see git history).
+        ${RECVX_SRC}/ps2/veronica/prog/pwksub.c
+        # Effect-drawing sub-functions (gun sparks, etc.) that weapon.c's
+        # hit-detection calls into (bhSetEffGunSpark). Zero PS2 asm. Head
+        # start on the Task 4.2 effects subsystem — the rest of it
+        # (effect.c, effsub2.c) lands as its own task.
+        ${RECVX_SRC}/ps2/veronica/prog/effsub3.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
@@ -396,6 +429,19 @@ if(RECVX_BUILD_GAME)
     )
 
     add_library(recvx_game STATIC ${RECVX_GAME_SOURCES})
+    # pwksub.c's bhGetFreeMemory is a real PS2 bump allocator over a fixed
+    # sys->memp/freemem pool — freemem is never defined anywhere in the
+    # port (extern-only), so linking it for real would return NULL (or
+    # worse) for every one of its ~18 already-compiled callers (room.c,
+    # player.c, system.c, etc.), which currently get real heap memory from
+    # game_texture_stubs.c's calloc-backed bhGetFreeMemory — an already
+    # load-bearing design choice, not a placeholder. Rename pwksub.c's copy
+    # at the preprocessor level so it compiles (matched-source coverage)
+    # but never links against/replaces the one everything else calls.
+    set_source_files_properties(
+        ${RECVX_SRC}/ps2/veronica/prog/pwksub.c
+        PROPERTIES COMPILE_DEFINITIONS "bhGetFreeMemory=bhGetFreeMemory_pwksub_unused"
+    )
     # compat/ MUST come before the real PS2 SDK / MWCC include dirs so our
     # MSVC-safe shadows for PREFIX_PS2*.h / eetypes.h / libcdvd.h / etc.
     # win the include-path race. KATANA ninja headers stay real.

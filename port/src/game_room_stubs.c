@@ -55,12 +55,8 @@ void bhSubpl(BH_PWORK* epw) { (void)epw; }
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
 /* bhCheckCut now real (cut.c). bhCheckEnemies/bhCheckPlayer/bhCheckWall/
  * bhCheckWall2Box/bhCheckWallType/bhCheckWallType2/bhResetAtariAttr now
- * real (hitchk.c). */
-int  bhCheckFloorNum(float py)        { (void)py; return 0; }
-int  bhCheckL2Wall(NJS_LINE* lp, unsigned int flg, float* len)
-                                      { (void)lp;(void)flg;(void)len; return 0; }
-void bhSetFloorNum(BH_PWORK* pp)      { (void)pp; }
-int  bhCheckClipModel(BH_PWORK* pp)   { (void)pp; return 0; }
+ * real (hitchk.c). bhCheckFloorNum/bhCheckL2Wall/bhSetFloorNum/
+ * bhCheckClipModel now real (pwksub.c). */
 
 /* ---- effects (effect.c) ---------------------------------------------- */
 void bhClearEffect(void)              {}
@@ -68,11 +64,10 @@ int  bhSetEffect(int effno, POINT* pnt, unsigned char* lkp, int lkono)
                                       { (void)effno;(void)pnt;(void)lkp;(void)lkono; return 0; }
 int  bhSetEffectTb(EF_WORK* efp, NJS_POINT3* off, unsigned char* lkp, int lkono)
                                       { (void)efp;(void)off;(void)lkp;(void)lkono; return 0; }
-void bhSetExplosion(NJS_POINT3* pos)  { (void)pos; }
+/* bhSetExplosion now real (weapon.c). */
 
 /* ---- player / model / motion (player.c, MdlPut.c, motion) ------------ */
-void bhActionWeapon(BH_PWORK* op)     { (void)op; }
-void bhObjWpn(BH_PWORK* op)           { (void)op; }
+/* bhActionWeapon/bhObjWpn now real (weapon.c). */
 /* bhCalcHair now real (player.c). */
 /* bhCalcModel / bhPutModel / bhCalcTree now real (MdlPut.c). */
 void bhControlMask(BH_PWORK* pp)      { (void)pp; }
@@ -216,62 +211,27 @@ void CallPlayerActionSe(int SeNo, int Flag) { (void)SeNo;(void)Flag; }
 void CallPlayerFootStepSe(int FloorType, int Type, int Flag) { (void)FloorType;(void)Type;(void)Flag; }
 void CallPlayerVoice(int no) { (void)no; }
 void CallPlayerWeaponSeEx(NJS_POINT3* pPos, int SeNo, int SlotNo) { (void)pPos;(void)SeNo;(void)SlotNo; }
-void PlyPchInit(BH_PWORK* ewP) { (void)ewP; }
-void PlyPchMain(BH_PWORK* ewP) { (void)ewP; }
-/* bhAddSpeed is real (moved from src/ps2/veronica/prog/pwksub.c, "100%
- * matching" in decomp comments): pwksub.c as a whole isn't in
- * RECVX_GAME_SOURCES yet (it also holds the not-yet-ported collision/AI
- * search helpers stubbed below), so this no-op was silently shadowing the
- * function every bhCPM2_act_* motion handler calls to integrate plp->px/pz
- * from plp->spd + plp->ay each frame -- same shadowed-stub bug class as
- * njInitTexture (see game_texture_stubs.c): the player's speed/heading were
- * computed correctly every frame but never applied, so forced analog input
- * never moved the player. */
-void bhAddSpeed(BH_PWORK* pp, int r)
-{
-    int angle = (pp->ay + r) & 0xFFFF;
-
-    pp->px -= pp->spd * njSin(angle);
-    pp->pz -= pp->spd * njCos(angle);
-}
-void bhArmIkMdk(BH_PWORK* ewP, int bas_no, NJS_POINT3* effP, int rot) { (void)ewP;(void)bas_no;(void)effP;(void)rot; }
+/* PlyPchInit/PlyPchMain/bhArmIkMdk/bhCPM2_SearchPch/bhCPM2_act_atk_pch/
+ * bhCPM2_act_suw_pch/bhCPM2_act_wsc_pch now real (playpch.c). */
 void bhCPM0_event(void) {}
-void bhCPM2_SearchPch(void) {}
-void bhCPM2_act_atk_pch(void) {}
 void bhCPM2_act_scp(void) {}
-void bhCPM2_act_suw_pch(void) {}
-void bhCPM2_act_wsc_pch(void) {}
 void bhCalcFixOffset(BH_PWORK* ewP, char* datP, NJS_POINT3* offP, NJS_POINT3* rtnP)
 {
     (void)ewP; (void)datP; (void)offP;
     if (rtnP) { rtnP->x = 0.0f; rtnP->y = 0.0f; rtnP->z = 0.0f; }
 }
-int   bhCalcLockEneYR(BH_PWORK* pp, int idx) { (void)pp;(void)idx; return 0; }
-short bhCheckBullet(void) { return 0; }
-int   bhCheckGunAtari(GA_WORK* gap) { (void)gap; return 0; }
-void  bhCheckKnifeAtari(GA_WORK* gap) { (void)gap; }
-int   bhCountBullet(void) { return 0; }
+/* bhAddSpeed/bhCalcLockEneYR/bhSearchNearEnemy/bhSearchNearEnemy2/
+ * bhSearchNearEnemyB/bhSearchNextEnemy/bhSetGunFire/bhSetMagazine/
+ * bhSetWaterSplash/bhSetWaterSplash3/bhSetYakkyou now real (pwksub.c).
+ * bhCheckBullet/bhCheckGunAtari/bhCheckKnifeAtari/bhCountBullet/
+ * bhSetWeapon now real (weapon.c). */
 void  bhFixPosition(BH_PWORK* ewP, char* datP) { (void)ewP;(void)datP; }
-int   bhGetFrameNum(unsigned int fnm_old, unsigned int fnm_new, int fno_now)
-                                      { (void)fnm_old;(void)fnm_new;(void)fno_now; return 0; }
 void  bhGetObjMotion(BH_PWORK* ewP, int obj_no, float* pos, int* ang)
 {
     (void)ewP; (void)obj_no;
     if (pos) { pos[0] = pos[1] = pos[2] = 0.0f; }
     if (ang) { ang[0] = ang[1] = ang[2] = 0; }
 }
-int  bhSearchNearEnemy(BH_PWORK* pp, int* r, float* h, int* id) { (void)pp;(void)r;(void)h;(void)id; return 0; }
-int  bhSearchNearEnemy2(BH_PWORK* pp, int* r, float* h, int* id) { (void)pp;(void)r;(void)h;(void)id; return 0; }
-int  bhSearchNearEnemyB(NJS_POINT3* pos, int ay, int ar, float len) { (void)pos;(void)ay;(void)ar;(void)len; return 0; }
-int  bhSearchNextEnemy(BH_PWORK* pp, int r, float h) { (void)pp;(void)r;(void)h; return 0; }
-void bhSetGunFire(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
-void bhSetMagazine(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
-void bhSetWaterSplash(BH_PWORK* pp, int jno, int type, float sx, float sy, float sz)
-                                      { (void)pp;(void)jno;(void)type;(void)sx;(void)sy;(void)sz; }
-void bhSetWaterSplash3(NJS_POINT3* pos, int ang, int type, float sx, float sy, float sz)
-                                      { (void)pos;(void)ang;(void)type;(void)sx;(void)sy;(void)sz; }
-void bhSetYakkyou(BH_PWORK* pp, int wno, int jno, int hand, int ang) { (void)pp;(void)wno;(void)jno;(void)hand;(void)ang; }
-void bhSetWeapon(O_WRK* op, int wpn_no, int flg) { (void)op;(void)wpn_no;(void)flg; }
 
 /* MdlPut.c dependencies not yet real:
  *   njDrawModel  — basic (non-chunk) NJS_MODEL drawer; no room/player/

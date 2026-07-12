@@ -343,6 +343,83 @@ Float njInnerProduct(NJS_VECTOR* v1, NJS_VECTOR* v2) {
     return v1->x*v2->x + v1->y*v2->y + v1->z*v2->z;
 }
 
+/* ps2_NaMatrix.c:1368/1394 — in-place vector add/sub, plain scalar FPU
+ * asm on PS2 (lwc1/add.s/swc1), no VU0 involved. */
+void njAddVector(NJS_VECTOR* vd, NJS_VECTOR* vs) {
+    if (!vd || !vs) return;
+    vd->x += vs->x; vd->y += vs->y; vd->z += vs->z;
+}
+void njSubVector(NJS_VECTOR* vd, NJS_VECTOR* vs) {
+    if (!vd || !vs) return;
+    vd->x -= vs->x; vd->y -= vs->y; vd->z -= vs->z;
+}
+
+/* ps2_NaMatrix.c:1631 — cross product (VU0 vopmula/vopmsub "outer
+ * product" macro) plus the length of the result. */
+Float njOuterProduct(NJS_VECTOR* v1, NJS_VECTOR* v2, NJS_VECTOR* ov) {
+    if (!v1 || !v2 || !ov) return 0.0f;
+    float x = v1->y*v2->z - v1->z*v2->y;
+    float y = v1->z*v2->x - v1->x*v2->z;
+    float z = v1->x*v2->y - v1->y*v2->x;
+    ov->x = x; ov->y = y; ov->z = z;
+    return sqrtf(x*x + y*y + z*z);
+}
+
+/* ps2_NaMatrix.c:927 — inverse of a rigid (rotation+translation)
+ * transform via transpose-of-rotation + -(R^T * T), the standard fast
+ * inverse for orthonormal matrices; matches what the VU0 asm computes
+ * (vmulax/vmadday/vmaddz then vsub against the translation row). Row-
+ * major layout per njCalcPoint above: 3x3 part is a[0,1,2]/a[4,5,6]/
+ * a[8,9,10], translation is a[12,13,14]. */
+Bool njInvertMatrix(NJS_MATRIX* m) {
+    if (!m) m = pNaMatMatrixStuckPtr;
+    if (!m) return 1;
+    float* a = (float*)m;
+    float r0=a[0], r1=a[1], r2=a[2];
+    float r4=a[4], r5=a[5], r6=a[6];
+    float r8=a[8], r9=a[9], r10=a[10];
+    float tx=a[12], ty=a[13], tz=a[14];
+
+    a[1]=r4; a[4]=r1;
+    a[2]=r8; a[8]=r2;
+    a[6]=r9; a[9]=r6;
+
+    a[12] = -(r0*tx + r1*ty + r2*tz);
+    a[13] = -(r4*tx + r5*ty + r6*tz);
+    a[14] = -(r8*tx + r9*ty + r10*tz);
+    return 1;
+}
+
+/* Motion.c:968/990 — BAMS Euler-angle-order conversion (Zyx <-> Yzx).
+ * Pure C in the decomp (0 asm hits in the whole file) — verbatim copy,
+ * only depends on njSinCos above. */
+void AngZyxToYzx(int* zyx, int* yzx) {
+    float fSin0, fSin1, fSin2, fCos0, fCos1, fCos2, b;
+    njSinCos(zyx[0], &fSin0, &fCos0);
+    njSinCos(zyx[1], &fSin1, &fCos1);
+    njSinCos(zyx[2], &fSin2, &fCos2);
+    b = fSin2 * fSin1;
+    yzx[0] = (int)(10430.381f * atan2f((fCos2*fSin0) - (b*fCos0), (fCos2*fCos0) + (b*fSin0)));
+    yzx[1] = (int)(10430.381f * atan2f(fSin1, fCos2*fCos1));
+    yzx[2] = (int)(10430.381f * asinf(fSin2*fCos1));
+}
+void AngYzxToZyx(int* yzx, int* zyx) {
+    float fSin0, fSin1, fSin2, fCos0, fCos1, fCos2, b;
+    njSinCos(yzx[0], &fSin0, &fCos0);
+    njSinCos(yzx[1], &fSin1, &fCos1);
+    njSinCos(yzx[2], &fSin2, &fCos2);
+    b = fSin1 * fSin2;
+    zyx[0] = (int)(10430.381f * atan2f((fCos1*fSin0) + (b*fCos0), (fCos1*fCos0) - (b*fSin0)));
+    zyx[1] = (int)(10430.381f * asinf(fSin1*fCos2));
+    zyx[2] = (int)(10430.381f * atan2f(fSin2, fCos1*fCos2));
+}
+
+/* ps2_dummy.h:150 — scratch matrix cache used by playpch.c's joint IK
+ * (MixSetToJointRot/bhArmIkMdk). Real definition lives in the
+ * uncompiled ps2_dummy.c; zeroed here like lgttab/cmmat/palbuf were
+ * before their real owners compiled. */
+NJS_MATRIX lcmat[12];
+
 /* Re-normalize the 3x3 rotation rows (drift cleanup after repeated
  * incremental rotates — VU0 vrsqrt path on PS2). */
 void njUnitRotPortion(NJS_MATRIX* m) {
