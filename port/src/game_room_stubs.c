@@ -53,7 +53,7 @@ void bhEne_InitDamage(BH_PWORK* epw) { (void)epw; }
 void bhSubpl(BH_PWORK* epw) { (void)epw; }
 
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
-void bhCheckCut(int flg)              { (void)flg; }
+/* bhCheckCut now real (cut.c). */
 void bhCheckEnemies(BH_PWORK* pp)     { (void)pp; }
 int  bhCheckFloorNum(float py)        { (void)py; return 0; }
 int  bhCheckL2Wall(NJS_LINE* lp, unsigned int flg, float* len)
@@ -103,6 +103,35 @@ int  bhSetMotion(BH_PWORK* ewP, int add, int mode, void* datP)
                                       { (void)ewP;(void)add;(void)mode;(void)datP; return 0; }
 int  bhSetShadow(char* jtb, unsigned char* lkp, int lkono, float sx, float sy, float sz)
                                       { (void)jtb;(void)lkp;(void)lkono;(void)sx;(void)sy;(void)sz; return 0; }
+
+/* ---- game.c draw-path extras (cinesco bars, sniper scope, render-to-
+ * texture, mirrors, screen light control) — no-op for now -------------- */
+void bhControlCinesco(void)              {}
+void bhDrawCinesco(void)                 {}
+void bhControlLight(void)                {}
+void bhDrawEffect(void)                  {}
+void bhDrawScope(void)                   {}
+void bhDrawThermometer(void)             {}
+void bhDrawSmallScreenRenderTexture(void) {}
+void bhDrawFullScreenRenderTexture(void)  {}
+void njMirror(NJS_MATRIX* m, NJS_PLANE* pl) { (void)m;(void)pl; }
+void njSetCheapShadowMode(Int mode)      { (void)mode; }
+void njSetCnkBlendMode(Uint32 attr)      { (void)attr; }
+/* FOV is fixed at 60 deg in ninja_cnk.c's begin_3d for now. */
+void njSetPerspective(Angle ang)         { (void)ang; }
+void bhChangeBackColor(void)             {}
+void bhChangeBackColorEvt(void)          {}
+void bhChangeClipVolume(char stg_no, char rom_no, char rcase, int evc_no)
+                                         { (void)stg_no;(void)rom_no;(void)rcase;(void)evc_no; }
+void bhChangeClipVolumeRM(void)          {}
+void bhChangeViewClipRM(void)            {}
+/* Catmull-Rom camera spline (cinematic cameras). Output the first
+ * control point instead of stack garbage until implemented. */
+void njOverhauserSpline(Float* idata, Float* odata, NJS_SPLINE* attr, Float frame)
+{
+    (void)attr; (void)frame;
+    if (odata && idata) { odata[0] = idata[0]; odata[1] = idata[1]; odata[2] = idata[2]; }
+}
 
 /* ---- ninja chunk lighting setters — no-op until the GL lighting
  * path consumes them ---------------------------------------------------- */

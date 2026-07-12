@@ -337,6 +337,17 @@ if(RECVX_BUILD_GAME)
         # (bhReadPlayerData fills plp->mlwP that bhInitRoomChangePlayer
         # dereferences). 7 x64 pointer-truncation aligns fixed.
         ${RECVX_SRC}/ps2/veronica/prog/dread.c
+        # Main gameplay sequence + room draw. bhSysCallGame (system.c,
+        # already compiled) calls bhMainSequence; bhAllDrawModel draws
+        # rom->mdl.objP through njCnkEasyMultiDrawObject (ninja_cnk.c).
+        ${RECVX_SRC}/ps2/veronica/prog/game.c
+        # View matrix build (bhControlCamera fills cam.mtx from
+        # cam.px/ay/... every frame). cmmat/crmat globals stubbed in
+        # stub_game.c (real ones live in the uncompiled ps2_dummy.c).
+        ${RECVX_SRC}/ps2/veronica/prog/camera.c
+        # RE fixed-camera cut system — picks the camera (cam.px/ay/cut)
+        # from the converted CUT_WORK array based on player position.
+        ${RECVX_SRC}/ps2/veronica/prog/cut.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

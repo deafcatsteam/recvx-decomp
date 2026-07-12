@@ -565,9 +565,14 @@ void recvx_gfx_set_filter(int mode) {
  * glLoadMatrixf. Walking i,j with out[j*4+i] = in[i*4+j] is the
  * one-liner — kept here as a helper because we do it twice (view+model). */
 static void gfx_row_to_col(const float in[16], float out[16]) {
-    for (int i = 0; i < 4; ++i)
-        for (int j = 0; j < 4; ++j)
-            out[j * 4 + i] = in[i * 4 + j];
+    /* Ninja matrices are ROW-VECTOR convention (v' = v * M, translation
+     * in m[12..14]). The equivalent GL operator is M^T, and the
+     * column-major memory image of M^T is exactly the row-major bytes
+     * of M — so the correct "conversion" is a straight copy. The old
+     * explicit transpose loaded M (not M^T) as the operator, which sent
+     * the translation into the projective row (w' = 1 + t.v) and
+     * collapsed every triangle into slivers after the divide. */
+    memcpy(out, in, 16 * sizeof(float));
 }
 
 /* Cached matrices so a draw call sees both view and model together.

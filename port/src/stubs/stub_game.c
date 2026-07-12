@@ -45,6 +45,10 @@ float GameFar  = -20000.0f;
  * ninja.h NJS_MATRIX typedef. */
 float mbuf[128 * 16];
 float crmat[16];
+/* Camera matrix pair from ps2_dummy.c:31 (not compiled — GS/VU0 asm).
+ * bhInitCamera points cam.mtx/cam.mtxb at these. Size/alignment must
+ * match ps2_dummy.h:145 exactly (see the palbuf lesson below). */
+float cmmat[2][16] __attribute__((aligned(64)));
 
 /* ----------------------------------------------------------------------
  * sy* — Sega Ynsight / Shinobi helpers (ps2_sg_maloc.c / KATANA).
@@ -74,7 +78,7 @@ void* bhGetFreeMemory(unsigned int size, int align) {
 }
 
 /* bhChangeHWSetting + bhCheckSubTask live in system.c — don't stub. */
-void bhMainSequence(void)    {}
+/* bhMainSequence now real (game.c). */
 void bhControlEvent(void)    {}
 /* bhControlMessage -- now from real message.c */
 int  bhControlMap(void)      { return 0; }
@@ -88,7 +92,7 @@ void bhExitDoor(void)        {}
 int  bhReadDoorData(void)    { return 0; }
 /* bhInitObjItm now real (objitm.c); bhInitEnemy now real (eneset.c). */
 void bhInitEffect(void)      {}
-void bhInitCamera(void)      {}
+/* bhInitCamera now real (camera.c). */
 /* bhInitPlayer / bhResetPlayer / bhStandPlayerMotion now real (player.c). */
 void bhInitEvent(void)       {}
 /* bhReadPlayerData / bhReadWeaponData now real (dread.c). */
@@ -182,10 +186,13 @@ const void* pdGetPeripheral(uint32_t port) { return njGetPeripheral(port); }
  * Sound / SFX stubs — live in ps2_sg_sybt.c / sound.c once compiled.
  * CallSystemVoice lives in adv.c (line 50) — removed here.
  * ---------------------------------------------------------------------- */
-void RequestRoomSoundBank(int a)                  { (void)a; }
+void RequestRoomSoundBank(int stg, int rom, int rcase) { (void)stg;(void)rom;(void)rcase; }
 void RequestArmsSoundBank(int a)                  { (void)a; }
 void RequestPlayerVoiceSoundBank(int a)           { (void)a; }
-int  CheckTransEndSoundBank(int a)                { (void)a; return 1; }
+/* 0 = "no sound-bank DMA in flight". Returning 1 froze the sdm_flg
+ * drain in bhSysCallSndMonitor and left room loads on the NOW LOADING
+ * screen forever (mn_md0=4 state 11 waits for sdm_flg bit 0 to clear). */
+int  CheckTransEndSoundBank(void)                 { return 0; }
 int  GetRoomSoundCaseNo(void)                     { return 0; }
 void AllStopEnemySe(void)                         {}
 void SendSoundCommand(int a, int b, int c, int d) { (void)a;(void)b;(void)c;(void)d; }

@@ -57,7 +57,9 @@ extern NJS_MATRIX*  pNaMatMatrixStuckPtr;
 /* Vertex working buffer                                                */
 /* -------------------------------------------------------------------- */
 
-#define CNK_VBUF_MAX 4096
+/* Rooms carry far more verts than inventory items — rm_0130's mesh
+ * alone tops 4096. 32768 matches the u16 index space upper half. */
+#define CNK_VBUF_MAX 32768
 
 typedef struct {
     float    x, y, z;
@@ -83,18 +85,22 @@ static void cnk_decode_d8888(uint32_t in, uint32_t* argb) {
 }
 
 /* Vertex chunk: read base index + count from first two u16s of payload,
- * then `count` verts of stride-bytes each. Type number determines stride. */
-static void cnk_handle_vert(const CHUNK_HEAD* h) {
+ * then `count` verts of stride-bytes each. Type number determines stride.
+ * Returns the next chunk. The PS2 walkers (njCnkCvVn etc.) advance to the
+ * END OF THE VERTEX DATA, not via usSize — usSize is unreliable for the
+ * big room vertex chunks, so we do the same arithmetic. */
+static const CHUNK_HEAD* cnk_handle_vert(const CHUNK_HEAD* h) {
     const unsigned short* sp = CHUNK_PAYLOAD(h);
     unsigned short base  = sp[0];
     unsigned short count = sp[1];
+    unsigned int   orig_count = count;
     const float* fp = (const float*)(sp + 2);
 
     if (base + count > CNK_VBUF_MAX) {
         /* Refuse to overflow the buffer. Likely a corrupt model or
          * a chunk type we mis-decoded — silently clamp. */
-        if (base >= CNK_VBUF_MAX) return;
-        count = CNK_VBUF_MAX - base;
+        if (base >= CNK_VBUF_MAX) count = 0;
+        else                      count = CNK_VBUF_MAX - base;
     }
 
     /* Per-type stride in float-words (4 bytes each).
@@ -108,62 +114,92 @@ static void cnk_handle_vert(const CHUNK_HEAD* h) {
      * Anything else for now: try base layout (3f xyz), color stays
      * white. Will iterate as we hit real models. */
     unsigned char type = h->ucType;
+    unsigned int stride = 0;  /* in floats, for the end-of-data return */
 
     switch (type) {
     case 32: /* NJD_CV_SH */
-        for (unsigned i = 0; i < count; ++i, fp += 4) {
+        stride = 4;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x = fp[0]; v->y = fp[1]; v->z = fp[2];
+            const float* p = fp + (size_t)i * 4;
+            v->x = p[0]; v->y = p[1]; v->z = p[2];
             v->nx = 0; v->ny = 0; v->nz = 0;
             v->color = 0xFFFFFFFFu;
         }
         break;
     case 33: /* NJD_CV_VN_SH */
-        for (unsigned i = 0; i < count; ++i, fp += 8) {
+        stride = 8;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x  = fp[0]; v->y  = fp[1]; v->z  = fp[2];
-            v->nx = fp[4]; v->ny = fp[5]; v->nz = fp[6];
+            const float* p = fp + (size_t)i * 8;
+            v->x  = p[0]; v->y  = p[1]; v->z  = p[2];
+            v->nx = p[4]; v->ny = p[5]; v->nz = p[6];
             v->color = 0xFFFFFFFFu;
         }
         break;
     case 34: /* NJD_CV */
-        for (unsigned i = 0; i < count; ++i, fp += 3) {
+        stride = 3;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x = fp[0]; v->y = fp[1]; v->z = fp[2];
+            const float* p = fp + (size_t)i * 3;
+            v->x = p[0]; v->y = p[1]; v->z = p[2];
             v->nx = 0; v->ny = 0; v->nz = 0;
             v->color = 0xFFFFFFFFu;
         }
         break;
     case 35: /* NJD_CV_D8 */
-        for (unsigned i = 0; i < count; ++i, fp += 4) {
+        stride = 4;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x = fp[0]; v->y = fp[1]; v->z = fp[2];
+            const float* p = fp + (size_t)i * 4;
+            v->x = p[0]; v->y = p[1]; v->z = p[2];
             v->nx = 0; v->ny = 0; v->nz = 0;
-            cnk_decode_d8888(*(const uint32_t*)&fp[3], &v->color);
+            cnk_decode_d8888(*(const uint32_t*)&p[3], &v->color);
         }
         break;
     case 41: /* NJD_CV_VN */
-        for (unsigned i = 0; i < count; ++i, fp += 6) {
+        stride = 6;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x  = fp[0]; v->y  = fp[1]; v->z  = fp[2];
-            v->nx = fp[3]; v->ny = fp[4]; v->nz = fp[5];
+            const float* p = fp + (size_t)i * 6;
+            v->x  = p[0]; v->y  = p[1]; v->z  = p[2];
+            v->nx = p[3]; v->ny = p[4]; v->nz = p[5];
             v->color = 0xFFFFFFFFu;
         }
         break;
     case 42: /* NJD_CV_VN_D8 */
-        for (unsigned i = 0; i < count; ++i, fp += 7) {
+        stride = 7;
+        for (unsigned i = 0; i < count; ++i) {
             cnk_vert_t* v = &g_cnk_vbuf[base + i];
-            v->x  = fp[0]; v->y  = fp[1]; v->z  = fp[2];
-            v->nx = fp[3]; v->ny = fp[4]; v->nz = fp[5];
-            cnk_decode_d8888(*(const uint32_t*)&fp[6], &v->color);
+            const float* p = fp + (size_t)i * 7;
+            v->x  = p[0]; v->y  = p[1]; v->z  = p[2];
+            v->nx = p[3]; v->ny = p[4]; v->nz = p[5];
+            cnk_decode_d8888(*(const uint32_t*)&p[6], &v->color);
+        }
+        break;
+    case 51: /* Capcom PS2 vertex chunk (pCnkFuncTbl[51] = njCnkCvVnPs2).
+              * Layout decoded from ps2_NinjaCnk.c:1280: after base/count
+              * come 14 floats of VU0 clip data, then count verts of
+              * { x,y,z,w, nx,ny,nz,w } (two quadwords, stride 8 floats).
+              * This is what every room mesh uses. */
+        fp += 14;
+        stride = 8;
+        for (unsigned i = 0; i < count; ++i) {
+            cnk_vert_t* v = &g_cnk_vbuf[base + i];
+            const float* p = fp + (size_t)i * 8;
+            v->x  = p[0]; v->y  = p[1]; v->z  = p[2];
+            v->nx = p[4]; v->ny = p[5]; v->nz = p[6];
+            v->color = 0xFFFFFFFFu;
         }
         break;
     default:
-        /* Unknown vertex chunk — leave buffer as-is. The polygon walker
-         * will draw garbage triangles if it references unfilled indices,
-         * but that's preferable to crashing. */
-        break;
+        /* Unknown vertex chunk — leave buffer as-is and fall back to the
+         * usSize skip below. */
+        return CHUNK_NEXT(h);
     }
+
+    /* End of vertex data = next chunk (PS2 semantics). */
+    return (const CHUNK_HEAD*)(fp + (size_t)orig_count * stride);
 }
 
 /* -------------------------------------------------------------------- */
@@ -292,11 +328,20 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
     unsigned char type = h->ucType;
     int trans = (h->ucHeadBits & 0x8) ? 1 : 0;  /* alpha-blend bit */
 
+    /* Short chunks have NO size field (ninjacnk.h taxonomy):
+     *   0..7   NULL + bits chunks (NJD_CB_BA/DA/EXP/CP/DP) — 2 bytes total
+     *   8..15  tiny chunks (NJD_CT_TID texture id)         — 4 bytes total
+     * Reading a u16 "size" out of them desyncs the walk into garbage —
+     * that was the 3.7M-triangle white-noise room draw. */
+    if (type <= 7)
+        return (const CHUNK_HEAD*)((const unsigned short*)h + 1);
+    if (type <= 15)
+        return (const CHUNK_HEAD*)((const unsigned short*)h + 2);
+
     /* Vertex chunks shouldn't appear in the polygon list normally, but
      * if they do (some models pack vlist+plist), handle them. */
-    if (type >= 32 && type <= 50) {
-        cnk_handle_vert(h);
-        return CHUNK_NEXT(h);
+    if (type >= 32 && type <= 51) {
+        return cnk_handle_vert(h);
     }
 
     /* Strip chunks. */
@@ -310,7 +355,8 @@ static const CHUNK_HEAD* cnk_handle_polygon_chunk(const CHUNK_HEAD* h) {
     case 67: /* NJD_CS_VN — plain w/ normals (we ignore normals) */
         return cnk_walk_strip_generic(h, 1, 0.0f, trans);
     default:
-        /* Unknown polygon chunk — skip safely via header size. */
+        /* Unknown sized chunk (materials 16..31, volumes 56..63, other
+         * strip variants) — skip safely via header size. */
         return CHUNK_NEXT(h);
     }
 }
@@ -350,9 +396,21 @@ static void cnk_draw_model_local(NJS_CNK_MODEL* model) {
     }
 
     if (model->vlist) {
+        /* The vlist is a CHAIN of vertex chunks terminated by NJD_CE
+         * (255) — a room mesh ships several (different base indices).
+         * Reading only the first left most of the vertex buffer stale. */
         const CHUNK_HEAD* vh = (const CHUNK_HEAD*)model->vlist;
-        if (vh->ucType >= 32 && vh->ucType <= 50) {
-            cnk_handle_vert(vh);
+        int vguard = 0;
+        while (vh->ucType != 255 && vguard++ < 1024) {
+            if (vh->ucType >= 32 && vh->ucType <= 51) {
+                vh = cnk_handle_vert(vh);
+            } else if (vh->ucType <= 7) {
+                vh = (const CHUNK_HEAD*)((const unsigned short*)vh + 1);
+            } else if (vh->ucType <= 15) {
+                vh = (const CHUNK_HEAD*)((const unsigned short*)vh + 2);
+            } else {
+                vh = CHUNK_NEXT(vh);
+            }
         }
     }
 
@@ -442,4 +500,32 @@ void njCnkEasyMultiDrawObjectI(NJS_CNK_OBJECT* obj) {
             dbg_n++;
         }
     }
+}
+
+/* Room/world variants used by game.c's bhAllDrawModel. Same tree walk,
+ * but a far plane sized for RE rooms (thousands of units) instead of
+ * the inventory-examine close-up. The view matrix (cam.mtx) is already
+ * on the nj matrix stack — bhAllDrawModel does njSetMatrix(0, cam.mtx)
+ * right before calling us. */
+void njCnkEasyMultiDrawObject(NJS_CNK_OBJECT* obj) {
+    if (!obj) return;
+    extern long g_cnk_tris_dbg;
+    long before = g_cnk_tris_dbg;
+
+    recvx_gfx_begin_3d(60.0f, 4.0f, 30000.0f);
+    cnk_draw_object_tree(obj);
+    recvx_gfx_end_3d();
+    {
+        extern void recvx_log(const char* tag, const char* fmt, ...);
+        static int dbg_n = 0;
+        if (dbg_n < 8) {
+            recvx_log("cnk", "room object tree emitted %ld tris",
+                      g_cnk_tris_dbg - before);
+            dbg_n++;
+        }
+    }
+}
+
+void njCnkEasyDrawObject(NJS_CNK_OBJECT* obj) {
+    njCnkEasyMultiDrawObject(obj);
 }
