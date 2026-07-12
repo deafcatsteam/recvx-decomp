@@ -17,7 +17,11 @@
 #include "recvx_afs.h"
 #include "recvx_port.h"
 
-#include <dirent.h>
+#ifdef _WIN32
+# include <windows.h>
+#else
+# include <dirent.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -192,9 +196,24 @@ static int port_try_rdx_lookup(const char* name, void* dst) {
 static int port_loose_find_path(const char* name, char* out, size_t out_sz) {
     const char* dir = recvx_gamedata_dir();
     if (!dir) return -1;
+    int found = -1;
+#ifdef _WIN32
+    char glob[600];
+    snprintf(glob, sizeof glob, "%s/*", dir);
+    WIN32_FIND_DATAA fd;
+    HANDLE h = FindFirstFileA(glob, &fd);
+    if (h == INVALID_HANDLE_VALUE) return -1;
+    do {
+        if (port_strcasecmp_ascii(fd.cFileName, name) == 0) {
+            snprintf(out, out_sz, "%s/%s", dir, fd.cFileName);
+            found = 0;
+            break;
+        }
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+#else
     DIR* d = opendir(dir);
     if (!d) return -1;
-    int found = -1;
     struct dirent* ent;
     while ((ent = readdir(d)) != NULL) {
         if (port_strcasecmp_ascii(ent->d_name, name) == 0) {
@@ -204,6 +223,7 @@ static int port_loose_find_path(const char* name, char* out, size_t out_sz) {
         }
     }
     closedir(d);
+#endif
     return found;
 }
 
