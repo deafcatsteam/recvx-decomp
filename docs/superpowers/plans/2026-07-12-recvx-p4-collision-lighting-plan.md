@@ -422,6 +422,28 @@ EOF
 )"
 ```
 
+**Actual results (2026-07-13):** Steps 1-2 and 4-6 completed as planned;
+committed as `af7508ca`. Step 3's hardcoded light call was placed in
+`njCnkEasyMultiDrawObject` (`port/src/ninja_cnk.c`, the port-side room-draw
+entry point `bhAllDrawModel` calls every frame) rather than `main_pc.c` as
+originally sketched — cleaner because it's already the per-frame room-draw
+path (so the light state is always fresh, no per-room-load hook needed) and
+it's unambiguously port code, not decomp source, so no fidelity-rule
+question. One self-inflicted build error along the way: the first draft of
+the placeholder comment contained a literal `*/` inside its text
+(`njCnk*/njCnkSetSimple*`), which closed the C block comment early and broke
+the parser — fixed by rewording to avoid the sequence.
+
+Step 5 (visual verification) succeeded on the first real attempt, no forced
+input needed: unmanned attract-mode play reached the same "DEMO PLAY" dock/
+gate/jeep scene used for the P2 screenshot baseline. The new render shows
+clear directional shading — the wooden dock floor (surface normal pointing
+toward the hardcoded light) reads visibly brighter than the hedge walls and
+the archway's underside (normals facing away from the light, `ndotl` clamped
+to 0, so only the 0.35 ambient term shows) — a real, visible change from the
+prior flat/uniform vertex-color tint. Screenshot saved for reference at
+`p4shots/lighting_after.png` in this session's scratchpad.
+
 - [ ] **Follow-up (not part of this task, not started):** compiling
 `light.c` for real dynamic lighting requires first verifying, one by one,
 whether each of the ~20 additional `njCnk*`/`njCnkSetSimple*` functions it
