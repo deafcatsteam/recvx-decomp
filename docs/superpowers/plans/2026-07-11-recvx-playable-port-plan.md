@@ -33,7 +33,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 |---|---|---|---|
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
-| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 70% — boots to gameplay with real room load headless; rendering/input/collision next |
+| **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | 🟡 In progress | 80% — room geometry renders on screen (untextured/unlit); texturing/lighting/input/collision next |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
@@ -457,6 +457,48 @@ handlers are live but collision `hitchk.c` and camera `camera.c` are
 stubbed), then enemy AI files (`bhEne*` — 34 no-op stubs to replace file
 by file). Texture pool still never recycles per room (512 slots ≈ a few
 room changes before exhaustion).
+
+**2026-07-12 (morning) — room mesh actually renders on screen (`f25fc33d`):**
+
+Picked up exactly where the log above left off ("visible rendering of the
+loaded room"). Root-caused and fixed 4 separate bugs to get there:
+
+1. **Room load was stuck on NOW LOADING forever.** `bhSysCallSndMonitor`'s
+   `sdm_flg` drain state machine (`system.c:2296`) waits for
+   `CheckTransEndSoundBank() == 0`; the stub always returned 1. Fixed —
+   real semantic is 0 = idle, 1 = transition in progress.
+2. **Wired `game.c` (room draw entry, `bhAllDrawModel`), `camera.c`
+   (`bhControlCamera`), `cut.c` (fixed-camera-cut selection)** into the
+   build — all zero PS2 asm. `cmmat`/`crmat` (real def lives in
+   uncompiled `ps2_dummy.c`) stubbed with correct size in `stub_game.c`
+   (same lesson as the earlier `palbuf` bug).
+3. **`ninja_cnk.c`'s chunk walker was wrong for room meshes.** Didn't
+   handle SHORT chunks (types 0-15, no size field — walking them as
+   sized chunks desyncs into the rest of the blob, producing 3.7M
+   garbage triangles) or the Capcom PS2 vertex format (type 51,
+   `pCnkFuncTbl[51]=njCnkCvVnPs2`). Also the vlist is a CHAIN of vertex
+   chunks (multiple base-index ranges) — only the first was ever
+   decoded. All fixed; `CNK_VBUF_MAX` bumped 4096→32768.
+4. **`gfx_row_to_col` (backend_gl.c) had a wrong transpose.** Ninja
+   matrices are row-vector convention (`v' = v*M`); GL wants `M^T`,
+   whose column-major bytes equal M's row-major bytes as-is — no
+   transpose needed. The old explicit transpose sent translation into
+   the projective row, collapsing every triangle into slivers after
+   the perspective divide (visible as scattered thin lines, not a
+   filled room). Fixed to a straight `memcpy`.
+
+**Verified:** 250s headless run, zero crashes, geometry fills the 3D
+viewport in the correct silhouette/proportions for `rm_0130`. Screenshot
+confirms real geometry at real scale.
+
+**Not yet done — deliberately deferred:** the room renders **solid white,
+untextured, unlit** — `cnk_emit_strip_tri` always draws with `slot=-1`
+(white fallback texture) and vertex color forced to `0xFFFFFFFF`. Next
+concrete step: decode the `NJD_CM_*` material chunks (type 16-31) to pick
+up per-chunk color/texture-id and wire that into the texture pool
+(`bhSetMemPvpTexture` already populates it per-room), then real lighting
+via `njCnkSetEasyLight*`/`SimpleMultiLight*` (currently no-op stubs in
+`game_room_stubs.c`).
 
 ---
 
