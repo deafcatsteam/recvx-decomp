@@ -1243,9 +1243,9 @@ detailed plan doc are linked, not duplicated, below.
 | Task 1 — Collision (`hitchk.c`) | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 2 — Lighting setters + CPU shading | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 3 — `light.c` dynamic lighting | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
-| Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ⬜ Not started | below |
-| Task 4.2 — Effects (`effect.c`) | ⬜ Not started | below |
-| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ⬜ Not started | below |
+| Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ✅ Done — also pulled in `pwksub.c`/`effsub3.c`/new `njplus_coli.c` to close gaps | below |
+| Task 4.2 — Effects (`effect.c`) | 🟠 Backed out — bigger than scoped (~150 more handlers + real VU0/VU1 rendering-primitive work), see finding below | below |
+| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | 🟡 In progress | below |
 | Task 4.4 — Save/load (`ps2_McSaveFile.c`, `ps2_SaveScreen.c`, `ps2_SystemSaveScreen.c`) | ⬜ Not started | below |
 | Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
 
@@ -1382,19 +1382,44 @@ all outstanding work lives in one place, per the project owner's own call
   `bhSetShadow` currently stubbed elsewhere in the file — re-verify exact
   overlap via `comm -12` before deleting, same as every prior task.
 
-- [ ] **Step 1:** `comm -12` shadow-set check (see procedure above).
-- [ ] **Step 2:** Add `effect.c` to `RECVX_GAME_SOURCES`.
-- [ ] **Step 3:** Build; `bhDrawPolEffect`/`bhDrawMdfEffect`/
-  `bhDrawLinEffect`/`bhDrawNtxEffect3D` draw particle-style effects
-  (blood, muzzle flash, etc.) through the `NJS_PRIM`/2D draw path — check
-  whether that path already routes through `ninja_cnk.c`'s
-  `recvx_gfx_draw_tri3d`-style backend or needs its own thin CPU
-  reimplementation (a real, if small, new rendering path — budget time
-  for this, it's the one part of this task that isn't pure
-  integrate-and-delete).
-- [ ] **Step 4:** Fix gaps, same standard as before.
-- [ ] **Step 5:** Delete shadowed stubs, build clean, Xvfb smoke-test.
-- [ ] **Step 6:** Update status table, commit.
+- [x] **Step 1:** `comm -12` shadow-set check — confirmed 5-function
+  overlap (`bhClearEffect`, `bhDrawEffect`, `bhSetEffect`, `bhSetEffectTb`,
+  `bhSetShadow`).
+- [x] **Step 2:** Added `effect.c` to `RECVX_GAME_SOURCES`.
+- [x] **Step 3 finding — bigger than scoped, backed out:** `effect.c`
+  itself compiles (one pre-existing decomp-header bug hit and fixed along
+  the way — see below), but its `bhJumpEffect[150]` dispatch table
+  transitively needs ~150 more `bhEff*` handlers spread across
+  `effsub1.c`/`effsub1b.c`/`effsub2.c`/`effsub4.c`/`effsub5.c` (~21k more
+  lines total — `wc -l`: 7972+2121+4724+2136+3979 — all zero-asm at the
+  file level per grep, so likely tractable, but not investigated
+  function-by-function), **plus** several real VU0/VU1
+  rendering-primitive entry points that are new rendering work, not
+  stub-replacement: `njRotateEx`/`njScaleEx`/`njTranslateEx`
+  (`ps2_NaMatrix.c`), `njDrawLine3D`/the `njDrawPolygon3DEx` family/the
+  `njDrawTexture3DEx` family (`ps2_NaGraphics3D.c`/`ps2_NaDraw.c`),
+  `Ps2Shadow*` (`ps2_dummy.c`), `njCnkModDrawModel`
+  (`ps2_NinjaCnk.c`) — these would each need a CPU reimplementation
+  through the `ninja_cnk.c`-style `recvx_gfx_draw_tri3d` backend, same
+  scale of work as `cnk_shade_vertex` was for lighting. This is roughly
+  as large as Task 4.3's entire enemy roster, not a quick add — **backed
+  out of `RECVX_GAME_SOURCES` for this pass**, left as its own properly
+  scoped follow-up (not detailed here — would need its own task
+  breakdown once the rendering-primitive reimplementation shape is
+  known).
+- **Pre-existing decomp bug found+fixed along the way:** `effect.c:1775`
+  defines `bhDrawThunder` as `static`, but `include/ps2/veronica/prog/
+  effect.h:40` declared it non-static — a hard C11 error ("static
+  declaration follows non-static declaration") that MWCC apparently
+  tolerated but GCC doesn't. Confirmed via grep that nothing outside
+  `effect.c` calls it, so this is a decomp header inaccuracy, not
+  intentional API. Reverted the attempted fix (removing the header
+  prototype) together with backing out `effect.c` itself, since it's
+  moot while the file isn't compiled — **redo this fix** (declare it
+  `static` in `effect.h`, or make it non-static in `effect.c` — either
+  works since nothing else references it) when actually attempting this
+  task again.
+- [ ] **Step 4-6:** not reached — deferred to the follow-up task above.
 
 ---
 

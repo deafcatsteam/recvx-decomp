@@ -59,12 +59,24 @@ void bhSubpl(BH_PWORK* epw) { (void)epw; }
  * bhCheckClipModel now real (pwksub.c). */
 
 /* ---- effects (effect.c) ---------------------------------------------- */
+/* effect.c itself compiles clean, but its bhJumpEffect[150] dispatch
+ * table transitively needs ~150 more bhEff* handlers spread across
+ * effsub1.c/effsub1b.c/effsub2.c/effsub4.c/effsub5.c (~21k more lines,
+ * all zero-asm at the file level per grep — same tractable shape as
+ * Task 4.1) plus several real VU0/VU1 rendering-primitive entry points
+ * (njRotateEx/njScaleEx/njTranslateEx in ps2_NaMatrix.c,
+ * njDrawLine3D, the njDrawPolygon3DEx family, and the njDrawTexture3DEx
+ * family in ps2_NaGraphics3D.c/ps2_NaDraw.c, Ps2Shadow* in ps2_dummy.c,
+ * njCnkModDrawModel in ps2_NinjaCnk.c) that would need their own CPU
+ * reimplementations through the ninja_cnk.c-style recvx_gfx_draw_tri3d
+ * backend — real rendering work, not a stub-replacement. Scoped as its
+ * own follow-up task, not attempted this pass. bhSetExplosion now real
+ * (weapon.c). */
 void bhClearEffect(void)              {}
 int  bhSetEffect(int effno, POINT* pnt, unsigned char* lkp, int lkono)
                                       { (void)effno;(void)pnt;(void)lkp;(void)lkono; return 0; }
 int  bhSetEffectTb(EF_WORK* efp, NJS_POINT3* off, unsigned char* lkp, int lkono)
                                       { (void)efp;(void)off;(void)lkp;(void)lkono; return 0; }
-/* bhSetExplosion now real (weapon.c). */
 
 /* ---- player / model / motion (player.c, MdlPut.c, motion) ------------ */
 /* bhActionWeapon/bhObjWpn now real (weapon.c). */
