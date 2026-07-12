@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + dynamic lighting done (see `2026-07-12-recvx-p4-collision-lighting-plan.md`); full task breakdown (combat, effects, enemy AI, save/load, paused P3 Windows work) now in this doc's "Phase 4 detail" section | ~15% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI 7/34 + 2 shared helper libs; see this doc's "Phase 4 detail" section | ~20% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1245,7 +1245,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 3 — `light.c` dynamic lighting | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ✅ Done — also pulled in `pwksub.c`/`effsub3.c`/new `njplus_coli.c` to close gaps | below |
 | Task 4.2 — Effects (`effect.c`) | 🟠 Backed out — bigger than scoped (~150 more handlers + real VU0/VU1 rendering-primitive work), see finding below | below |
-| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | 🟡 In progress | below |
+| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | 🟡 In progress — 7/34 enemies (`en71`/`en54`/`en55`/`en20`/`en10`/`en27`/`en28`) + 2 shared helper libraries (`zonzon.c`, `zonzon1.c`) | below |
 | Task 4.4 — Save/load (`ps2_McSaveFile.c`, `ps2_SaveScreen.c`, `ps2_SystemSaveScreen.c`) | ⬜ Not started | below |
 | Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
 
@@ -1449,25 +1449,40 @@ may be incomplete): `en01b.c`, `en02.c`, `en03.c`+`en03sub.c`, `en04.c`,
 `en19.c`, `en20.c`, `en21.c`, `en22.c`, `en24.c`, `en25.c`, `en27.c`,
 `en30.c`, `en54.c`, `en71.c`, plus shared helper `subpl.c`.
 
-- [ ] **Step 1:** `grep -c "asm\|__asm__"` every file in the list above —
-  confirm still zero before committing to the no-CPU-reimplementation
-  assumption (not yet checked individually, only spot-checked as a class
-  during this planning pass).
-- [ ] **Step 2:** Pick the lowest-numbered/simplest enemy first (likely
-  `en01b.c`/`bhEne01`, the base zombie — smallest state machine in most RE
-  games) as the proof-of-pattern integration.
-- [ ] **Step 3:** Apply the repeated procedure (top of this section) to
-  that one file: shadow-check, add to CMakeLists, build, fix gaps, delete
-  stub, smoke-test, commit.
-- [ ] **Step 4:** Repeat Step 3 for each remaining enemy file, one
-  file/commit at a time (or small logical batches — e.g. an enemy + its
-  `*sub.c` helper together). Do not batch all 30 into a single commit —
-  isolates which specific enemy broke something if a crash appears later.
-- [ ] **Step 5:** After all enemies land, verify `eneset.c`'s
-  `bhJumpEnemy[]` table (line 51) has every slot pointing at a real
-  function, not a leftover no-op.
-- [ ] **Step 6:** Update status table (can mark partial completion, e.g.
-  "12/30 enemies" — track actual count, don't round up).
+- [x] **Step 1 (partial):** file-level `grep -c "asm"` confirmed zero for
+  every file actually attempted so far (listed below); the rest of the
+  roster (mostly 1500+-line files) not yet individually checked.
+- [x] **Step 2:** `en71.c` (114 lines, smallest) picked and landed as the
+  proof-of-pattern integration, plus `Motion.c`/`subpl.c` as its real
+  dependencies (`bhSetMotion`, `bhEne28`).
+- [x] **Step 3/4 progress — 7/34 enemies real, 2 shared helper libraries
+  landed:**
+  - `en71.c` → `bhEne71` — done (+ `Motion.c`, `subpl.c`/`bhEne28`)
+  - `en54.c`/`en55.c` → `bhEne54`/`bhEne55` — done (+ `zonzon.c`, the
+    first shared enemy-AI helper library: wall/floor/water collision
+    wrappers, blood/fire/particle setup, motion-change helpers — needed
+    by most enemies, not just these two; also added `njScalor2` to
+    `ninja_3d.c`)
+  - `en20.c`/`en10.c`/`en27.c` → `bhEne20`/`bhEne10`/`bhEne27` — done
+    (+ `zonzon1.c`, a second shared helper library: SE/voice triggers,
+    blood/mince/acid effect variants, damage calc — needed
+    `njTranslateEx`/`njScaleEx`/`njRotateEx` added to `ninja_3d.c`, and
+    `hitchkl.c`, a line/segment collision helper set distinct from
+    `hitchk.c`'s box/wall checks)
+  - `en08.c` — **deferred**, needs `bhEne03_Collision` from the
+    not-yet-compiled 6671-line `en03.c`
+  - Remaining ~27 enemies not yet attempted — mostly 1500+-line files
+    (`en01.c` alone is 9945 lines) or small `*sub.c` helper files whose
+    payoff depends on their much-larger parent file also landing
+    (`en01sub.c`/`en02sub.c`/`en03sub.c`/`en05sub.c`/`en06sub.c`/
+    `en13sub.c`/`en17sub.c`) — continue with the same procedure, next
+    likely candidates by size: `en08.c` (needs `en03.c` first, biggest
+    unlock since `en03.c` gates both), then the 1500-2200-line tier
+    (`en16.c`, `en18.c`, `en24.c`, `en25.c`, `en01b.c`, `en11.c`,
+    `en30.c`).
+- [ ] **Step 5:** not reached — most of the roster still stubbed.
+- [x] **Step 6:** status table above updated to "7/34 enemies" (not
+  rounded up).
 
 **Behavioral verification note:** compiling an enemy file only proves it
 links and doesn't crash on load — confirming each enemy's *actual combat
