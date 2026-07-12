@@ -1,0 +1,39 @@
+name: Windows MSVC Build
+
+on:
+  push:
+    branches: [pc-port]
+  pull_request:
+    branches: [pc-port]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+
+      - name: Configure (RECVX_BUILD_GAME=ON, MSVC x64)
+        working-directory: port
+        env:
+          VCPKG_ROOT: C:\vcpkg
+        run: cmake --preset x64-vcpkg -DRECVX_BUILD_GAME=ON
+
+      - name: Build
+        working-directory: port
+        run: cmake --build --preset x64-debug 2>&1 | Tee-Object -FilePath build-log.txt
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: port/build-log.txt

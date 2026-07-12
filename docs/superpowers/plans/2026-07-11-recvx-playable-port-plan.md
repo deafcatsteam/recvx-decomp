@@ -34,14 +34,15 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P0** | Fork/clone/sync + Linux devcontainer + Phase 0 (FMV-only) build links & runs | ✅ Done | 100% |
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
-| **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | ⬜ Blocked on P1/P2 | 0% |
+| **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟡 Detailed plan ready | 0% |
 | **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | ⬜ Blocked on P2/P3 | 0% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
-This document details **P1** task-by-task (concrete, plannable now). P2–P5 are
-listed as a roadmap only — they get their own detailed plan once P1 lands, since
-their scope depends on what P1 turns up (matches how `recvx-decomp-port`'s own
-`RECVX_BUILD_GAME` option was never actually exercised standalone before today).
+This document details **P1** and **P3** task-by-task (concrete, plannable now).
+P4-P5 remain a roadmap only — they get their own detailed plan once P3 lands,
+since their scope depends on what P1-P3 turn up (matches how
+`recvx-decomp-port`'s own `RECVX_BUILD_GAME` option was never actually
+exercised standalone before this project).
 
 ---
 
@@ -983,12 +984,209 @@ traversal, combat"), not P2 ("game boots to gameplay").
 
 ---
 
-## Phase 2–5 (roadmap only — not detailed yet)
+## Phase 3 detail: Windows/MSVC parity pass
+
+**Goal:** get the exact same `RECVX_BUILD_GAME=ON` config (already 100% working
+on Linux/GCC as of P2) building and booting under MSVC on Windows, since the
+`x64-vcpkg` preset (`port/CMakePresets.json`) and its `RECVX_BUILD_GAME`
+option (defaults `ON`, `port/CMakeLists.txt:226`) have **never actually been
+exercised** this whole project — every build/run so far happened in the Linux
+devcontainer. Per the risk note already in this doc's intro (line 14) and the
+original roadmap line, this is expected to be **lower-risk than P1**: the
+decomp game source was written against MSVC/MWCC originally, so most of P1's
+fixes (case-sensitive includes, `-fno-common`, GNU lvalue-cast extension,
+implicit-declaration hardening) are GCC-only problems that simply won't exist
+on MSVC. The realistic risk surface is narrower: (a) anything P1/P2 touched
+with a Linux-only fix that might have broken the MSVC path by accident, since
+neither was rebuilt on MSVC after those edits landed; (b) the reverse-class
+bug already seen once (`stub_ninja.c`) — code that silently relied on
+MSVC-specific behavior GCC happened to tolerate differently.
+
+**No local Windows machine is available in this environment** (Linux
+devcontainer + Docker only). Task 1 below sets up a `windows-latest` GitHub
+Actions job as the test harness instead of assuming local MSVC access — this
+also gives a durable, re-runnable regression check for future changes rather
+than a one-off manual verification. If the user has their own Windows/Visual
+Studio machine, Tasks 2+ can equally be run there instead of via CI; the fix
+loop itself doesn't depend on which one is used.
+
+**Tech Stack:** MSVC (Visual Studio 17 2022 generator, per `x64-vcpkg` preset),
+vcpkg `x64-windows` triplet, same CMake presets file already in the repo.
+
+**Files:** unknown until errors surface (same "bounded debug loop" framing as
+P1 Task 2) — likely candidates are the same ~16 game-source files P1 touched,
+plus anything P2 changed (`port/src/game_room_stubs.c`,
+`port/src/tex_pool_alloc.c`, the texture-handoff fixes, `pad.c`/`player.c`
+callers) since none of those were compiled with MSVC before.
+
+**Interfaces:**
+- Consumes: the fully-linked, boot-to-gameplay-confirmed Linux build from P1/P2
+  (nothing new to build on — this is a parity/regression pass on existing code).
+- Produces: a `windows-latest` CI workflow that builds `RECVX_BUILD_GAME=ON`
+  with MSVC and fails the job on any compile/link error, plus whatever source
+  fixes are needed to make it pass.
+
+### Task 1: Add a `windows-latest` GitHub Actions build workflow
+
+**Files:**
+- Create: `.github/workflows/windows-build.yml`
+
+- [ ] **Step 1: Write the workflow**
+
+```yaml
+name: Windows MSVC Build
+
+on:
+  push:
+    branches: [pc-port]
+  pull_request:
+    branches: [pc-port]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg C:\vcpkg
+          C:\vcpkg\bootstrap-vcpkg.bat
+
+      - name: Configure (RECVX_BUILD_GAME=ON, MSVC x64)
+        working-directory: port
+        env:
+          VCPKG_ROOT: C:\vcpkg
+        run: cmake --preset x64-vcpkg -DRECVX_BUILD_GAME=ON
+
+      - name: Build
+        working-directory: port
+        run: cmake --build --preset x64-debug 2>&1 | Tee-Object -FilePath build-log.txt
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build-log
+          path: port/build-log.txt
+```
+
+- [ ] **Step 2: Commit and push to trigger the first run**
+
+```bash
+cd ~/projects/recvx-decomp-port
+git add .github/workflows/windows-build.yml
+git commit -m "ci: add windows-latest MSVC build workflow for P3 parity pass"
+git push fork pc-port
+```
+
+- [ ] **Step 3: Watch the run and fetch the result**
+
+```bash
+gh run list --repo deafcatsteam/recvx-decomp --workflow windows-build.yml -L 1
+gh run watch --repo deafcatsteam/recvx-decomp <run-id>
+```
+
+Expected: either a green build (skip to Task 3) or a failed job with a
+`build-log.txt` artifact showing the first MSVC error — that becomes Task 2's
+input.
+
+---
+
+### Task 2: Fix MSVC compile/link errors until the workflow is green
+
+**This task is inherently exploratory**, same framing as P1 Task 2 — no error
+list can be written in advance since MSVC has never compiled this exact
+current source tree (including all of P1's and P2's edits). Treat as a
+bounded debug loop with a hard verification gate (the CI job passing), not a
+fixed list of edits.
+
+**Files:** unknown until errors surface.
+
+**Interfaces:**
+- Consumes: Task 1's CI workflow and its failure logs.
+- Produces: a green `windows-build.yml` run building `recvx_pc.exe` with
+  `RECVX_BUILD_GAME=ON`.
+
+- [ ] **Step 1: Download and read the failing build log**
+
+```bash
+gh run download --repo deafcatsteam/recvx-decomp <run-id> -n windows-build-log -D /tmp/recvx-win-build
+cat /tmp/recvx-win-build/build-log.txt | grep -i "error"
+```
+
+- [ ] **Step 2: For each distinct error, find root cause before fixing**
+
+Apply the same fidelity rule as P1/P2 (line 25 of this doc): only touch
+platform/toolchain-compat code, never gameplay logic. Given the risk analysis
+above, expect most errors (if any) to come from P1/P2's Linux-motivated edits
+rather than from the original decomp source — check `git log -p` on the
+specific line if the cause isn't obvious:
+
+```bash
+git log -p --follow -- <file with the error>
+```
+
+For each error: fix minimally, re-push, re-watch the CI run.
+
+- [ ] **Step 3: Repeat Step 1 until the workflow job is green**
+
+Expected terminal state: `windows-build.yml` run status is `success`, and the
+build log's tail shows `recvx_pc.vcxproj -> ...\recvx_pc.exe`.
+
+- [ ] **Step 4: Commit each fix batch separately**
+
+```bash
+git add <fixed files>
+git commit -m "build: fix MSVC compile error in <file> (<one-line what/why>)"
+git push fork pc-port
+```
+
+---
+
+### Task 3: Smoke-test the Windows boot (manual, since headless Windows CI can't drive a real window easily)
+
+**Files:** none (verification-only task).
+
+**Interfaces:**
+- Consumes: Task 2's green `recvx_pc.exe`.
+- Produces: a documented boot log/screenshot from a real Windows run,
+  confirming (or refuting) that the Linux P2 behavior (boot to title, New
+  Game, room load, player movement) reproduces on Windows.
+
+- [ ] **Step 1: Download the CI build artifact, or build locally on a Windows machine if the user has one**
+
+```bash
+gh run download --repo deafcatsteam/recvx-decomp <run-id> -n windows-build -D ./win-build
+```
+
+- [ ] **Step 2: Run against the real ISO/gamedata, same `--gamedata` flag as the Linux smoke test**
+
+```powershell
+.\recvx_pc.exe --gamedata <path-to-extracted-gamedata>
+```
+
+- [ ] **Step 3: Compare against the Linux P2 baseline**
+
+Check: does it boot to title? Does New Game load the first room? Does forced
+input move the player? Note any Windows-specific divergence (e.g. a crash
+Linux didn't hit, or vice versa) — that's new P3 scope, not a re-run of P1/P2.
+
+- [ ] **Step 4: Update this plan's progress table**
+
+Set P3 to done once Task 3 confirms parity (or documents specific,
+Windows-only gaps to track separately).
+
+---
+
+## Phase 4–5 (roadmap only — not detailed yet)
 
 | Phase | What it needs | Depends on |
 |---|---|---|
-| P2 | Fix whatever Task 3 found; wire real `--gamedata` extraction if needed; get from boot to actual controllable movement | P1 |
-| P3 | Same `RECVX_BUILD_GAME=ON` config built with MSVC on Windows — likely far less risky than P1 since the game source was written against MSVC originally; mostly a "does it still build" check plus any regressions from P1/P2's Linux-motivated edits | P1, P2 |
 | P4 | Definition of "playable": full room traversal, save/load, combat, no engine-level (not gameplay-content) crashes | P2, P3 |
 | P5 | Post-playable improvements — network (Battle Mode), audio/graphics upgrades. Not scoped: needs its own spec once P4's actual codebase shape is known | P4 |
 
