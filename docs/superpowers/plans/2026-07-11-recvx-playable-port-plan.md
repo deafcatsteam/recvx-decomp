@@ -567,6 +567,74 @@ in-gameplay player movement end-to-end.
 
 ---
 
+### 2026-07-12 (same morning, continued again) — ewk_n root-caused, full boot-to-loop stability, real gap found (`b30b5cd2`)
+
+Went back to the `ewk_n > rom->ene_n` bug marked "not yet root-caused" above.
+Found it: `bhInitEnemy()` zeroes `ene[]` with a hardcoded `180224` byte
+count — that's `128 * sizeof(BH_PWORK)` on the PS2 32-bit ABI (1408 bytes/
+struct). Confirmed via `gdb -batch -ex 'p sizeof(BH_PWORK)'` against the
+real build: on x64 it's 1936 bytes (pointer fields doubled), so the
+hardcoded byte count only zeroes `ene[0..92]` — `ene[93..127]` are left
+as whatever was previously on the heap. `bhCheckEneWorkNum()` scans all
+128 slots for `flg&0x1`, so garbage in the unzeroed tail can spuriously
+read as "occupied" and inflate `sys->ewk_n` past `rom->ene_n`. Fixed by
+zeroing `sizeof(ene)` instead of the literal constant, gated under
+`RECVX_PC_PORT` (original PS2 path untouched).
+
+With that fixed, did a real end-to-end test: built a small `gdb` script
+(`break PlayStartMovieEx if no==0`, then rewind `g_movie_start_ms` to
+fast-forward through the ~3:30 post-New-Game movie without touching
+Start — pressing Start mid-movie was itself found to desync the
+`bhSysCallMovie` state machine into a stray `bhReturnTitle()`, a
+separate, real, but lower-priority bug worth another look later).
+
+Fast-forwarding through the full boot -> title -> New Game -> post-game
+movie sequence surfaced 4 real NULL-deref crashes, all the same shape:
+our `bhSysCallMovie` case-6 port-shortcut unsuspends the Game/Map tasks
+(so `bhMainSequence`'s per-frame control calls start running) all at
+once, instead of the staggered order the real PS2's typewriter/event
+script chain would enforce (still uncompiled). Found and guarded, one
+crash at a time, via repeated gdb-batch run/break/backtrace cycles:
+
+  - `bhStandPlayerMotion` / `bhControlPlayer` (`player.c`): `plp->exp0`
+    dereferenced before `bhInitPlayer()` (which runs later, inside
+    `bhSysCallGame`'s own `mn_md1` file-load state machine) has run.
+  - `bhPutModel` / `bhCalcTree` (`MdlPut.c`): `mlwP` itself NULL (not
+    just `owP`, already guarded) — hit for the *player's own* model,
+    before `bhSetPlayer`/`bhReadPlayerData` assign `ply.mlwP`.
+  - `bhControlActiveCamera` (`cut.c`): `rom->cutp` NULL — confirms the
+    actual remaining gap (see below).
+
+All four guarded the same way as the pre-existing `owP==NULL` pattern.
+Verified stable across several *full* cycles (title -> New Game confirm
+-> post-game movie -> back to attract-mode loop) with **zero crashes**.
+
+**The real gap, now clearly isolated:** nothing in our port ever
+triggers an actual room load for New Game. `rom->cutp`/`rom->ene_n`/etc.
+stay NULL/0 the whole time — the opening sequence runs to completion
+(`AdvWork.Mode` 0 through 10) and then falls back to the attract-mode
+loop, because the event-script opcode chain that would normally call
+`bhSetRDT`/`bhInitReadRDT`/`bhSetRoom` for room 1 is the same
+not-yet-compiled typewriter/event chain referenced throughout this log.
+This is *not* a crash to guard around — it's a missing trigger. Next
+step for actual player-movement-in-a-room verification is to find (or
+synthesize, PC-port-shortcut style) that first-room-load call, not to
+keep adding NULL guards to deeper systems that all currently starve for
+the same reason.
+
+**P2 progress: 92% -> 95%** (crash-free through the entire opening
+sequence now; the one remaining gap is well-understood and scoped —
+triggering the actual first room load — rather than an open-ended pile
+of unknown crashes).
+
+**Still open:** trigger the first room load for New Game (the real
+blocker for confirming in-room player movement), real lighting
+(`njCnkSetEasyLight*` family still no-op stubs), collision (`hitchk.c`
+not compiled), the Start-mid-movie desync bug in `bhSysCallMovie`
+(lower priority — avoidable by not pressing Start during FMV playback).
+
+---
+
 ## Phase 2–5 (roadmap only — not detailed yet)
 
 | Phase | What it needs | Depends on |
