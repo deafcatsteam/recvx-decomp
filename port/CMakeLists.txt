@@ -436,6 +436,16 @@ if(RECVX_BUILD_GAME)
         # Enemy AI: bhEne71 (smallest enemy file at 114 lines — used as
         # the Task 4.3 proof-of-pattern integration). Zero PS2 asm.
         ${RECVX_SRC}/ps2/veronica/prog/en71.c
+        # Enemy AI shared helper library: wall/floor/water collision
+        # wrappers, blood/fire/particle effect setup, motion-change
+        # helpers (bhEne_ChgMtn/bhEne_CheckDirWall*/bhEne_CollisionCheck-
+        # Wall*/bhEne_SetBlood*/etc) called by most enemy behavior files,
+        # not just en54/en55. Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/zonzon.c
+        # Enemy AI: bhEne54/bhEne55 (271 lines each, near-identical small
+        # enemies). Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/en54.c
+        ${RECVX_SRC}/ps2/veronica/prog/en55.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

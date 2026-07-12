@@ -236,6 +236,14 @@ Float njScalor(NJS_VECTOR* v) {
     return sqrtf(v->x*v->x + v->y*v->y + v->z*v->z);
 }
 
+/* ps2_NaMatrix.c:1548 — squared length (no vsqrt in the VU0 asm, just
+ * vmul+vaddy+vaddz), used where callers compare against a squared
+ * threshold to skip the sqrt. */
+Float njScalor2(NJS_VECTOR* v) {
+    if (!v) return 0.0f;
+    return v->x*v->x + v->y*v->y + v->z*v->z;
+}
+
 /* Transform a single point: out = in * m (post-multiply for row-major). */
 void njCalcPoint(NJS_MATRIX* m, NJS_POINT3* ps, NJS_POINT3* pd) {
     if (!m) m = pNaMatMatrixStuckPtr;

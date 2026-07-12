@@ -46,9 +46,8 @@ void bhEne27(BH_PWORK* epw) { (void)epw; }
 void bhEne29(BH_PWORK* ewP) { (void)ewP; }
 void bhEne30(BH_PWORK* epw) { (void)epw; }
 void bhEne53(BH_PWORK* epw) { (void)epw; }
-void bhEne54(BH_PWORK* epw) { (void)epw; }
-void bhEne55(BH_PWORK* epw) { (void)epw; }
-/* bhEne71 now real (en71.c). */
+/* bhEne54/bhEne55 now real (en54.c/en55.c). bhEne71 now real
+ * (en71.c). */
 void bhEne_InitDamage(BH_PWORK* epw) { (void)epw; }
 
 /* ---- collision / floor (hitchk.c) ----------------------------------- */
