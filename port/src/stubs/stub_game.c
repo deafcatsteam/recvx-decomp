@@ -48,7 +48,7 @@ float crmat[16];
 /* Camera matrix pair from ps2_dummy.c:31 (not compiled — GS/VU0 asm).
  * bhInitCamera points cam.mtx/cam.mtxb at these. Size/alignment must
  * match ps2_dummy.h:145 exactly (see the palbuf lesson below). */
-float cmmat[2][16] __attribute__((aligned(64)));
+RX_ALIGN64 float cmmat[2][16];
 /* Set by njControl3D (ps2_NinjaCnk.c:207, real, compiled); read by
  * MdlPut.c's bhPutModel mirror-draw path. Real def also in ps2_dummy.c. */
 unsigned int _nj_control_3d_flag_;
@@ -566,7 +566,7 @@ void  StopVibrationEx(int port, int motor)         { (void)port;(void)motor; }
  * whatever global happens to sit right after it in BSS.
  * Ps2_current_texmemlist is defined in game_texture_stubs.c (typed
  * NJS_TEXMEMLIST* so adv.c:695 dereferences cleanly). */
-unsigned int palbuf[4096] __attribute__((aligned(64)));
+RX_ALIGN64 unsigned int palbuf[4096];
 
 /* ----------------------------------------------------------------------
  * adv.c pulls in: sound bank (PlayBgm/Voice), vibration (vibman),

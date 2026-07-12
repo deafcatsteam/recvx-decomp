@@ -10,6 +10,15 @@ extern "C" {
 #endif
 
 /* --------------------------------------------------------------------------
+ * Alignment (prefix form: RX_ALIGN64 goes before the declaration)
+ * -------------------------------------------------------------------------- */
+#if defined(_MSC_VER)
+# define RX_ALIGN64 __declspec(align(64))
+#else
+# define RX_ALIGN64 __attribute__((aligned(64)))
+#endif
+
+/* --------------------------------------------------------------------------
  * Logging
  * -------------------------------------------------------------------------- */
 void recvx_log(const char* tag, const char* fmt, ...);
