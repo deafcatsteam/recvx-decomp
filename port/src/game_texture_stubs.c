@@ -1215,11 +1215,4 @@ void recvx_port_diag_inventory(void) {
  * that shifts 32-bit offsets past `void* typ_exp @ 0x50`. */
 extern SYS_WORK* sys;
 
-/* bhSysCallTypewriter → ControlTypewriter → TypewriterMode[sys->typ_md0]()
- * on real PS2. TypewriterMode[] is defined in bup_00.c which we don't
- * compile yet, so on our port we just stub this to a no-op. The link
- * order requires *some* definition; bup_00.c will provide the real one
- * once its dependency chain compiles. */
-void ControlTypewriter(void) {
-    /* Intentional no-op. */
-}
+/* ControlTypewriter now real (bup_00.c). */

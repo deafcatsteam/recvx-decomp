@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI roster **34/34 done**; save/load + crash sweep not started; see this doc's "Phase 4 detail" section | ~35% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep not started; see this doc's "Phase 4 detail" section | ~45% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1246,7 +1246,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ✅ Done — also pulled in `pwksub.c`/`effsub3.c`/new `njplus_coli.c` to close gaps | below |
 | Task 4.2 — Effects (`effect.c`) | 🟠 Backed out — bigger than scoped (~150 more handlers + real VU0/VU1 rendering-primitive work), see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
-| Task 4.4 — Save/load (`ps2_McSaveFile.c`, `ps2_SaveScreen.c`, `ps2_SystemSaveScreen.c`) | ⬜ Not started | below |
+| Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
 | Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
 
 **Investigation done so far (this pass):** grepped every remaining P4 source
@@ -1518,37 +1518,94 @@ same standard the user already approved for collision.
 ### Task 4.4: Save/load — `ps2_McSaveFile.c` + `ps2_SaveScreen.c` + `ps2_SystemSaveScreen.c`
 
 **Files:**
-- Modify: `port/CMakeLists.txt` (add all three)
-- Modify: `port/src/game_room_stubs.c` (delete shadowed stubs, if any —
-  not yet confirmed there are any; save/load may currently just be
-  entirely absent from the compiled set rather than stubbed, which would
-  mean whatever calls into it is also not yet compiled)
+- Modify: `port/CMakeLists.txt` (added 8 decomp files, not 3 — see Step 1)
+- Modify: `port/src/stubs/stub_game.c` / `port/src/game_texture_stubs.c`
+  (deleted shadowed stubs)
+- Create: `port/src/save_mc_shim.c` (real port-side reimplementation)
 
 **Interfaces:**
-- Consumes: PS2 memory-card I/O (`sceMc*` or similar KATANA calls) — this
-  is the one place in this task list likely to need a **real port-side
-  reimplementation**, not just a CPU stand-in for VU0 math: memory-card
-  hardware doesn't exist on PC, so save/load needs a file-based
-  replacement (e.g. write the same on-disk save-file byte layout to a
-  local file instead of a memory card sector). This is conceptually
-  similar to how `port/src/afs/afs_mount.c` already reimplements the PS2
-  ISO/AFS filesystem layer for loose files on disk — same pattern applies
-  here.
-- Produces: whatever `bhSave*`/`bhLoad*`-style entry points `game.c`
-  already calls (not yet identified — first investigation step below).
+- Consumes: PS2 memory-card I/O (`sceMc*` KATANA calls) and GD-ROM sector
+  reads (`gdFsOpen`/`gdFsGetFileSize`/`gdFsRead`/`gdFsClose`) — both real
+  hardware boundaries needing a **port-side reimplementation**, not just a
+  CPU stand-in, following the `afs_mount.c` async-collapse precedent.
+- Produces: `sceMc*`/`gdFs*` symbols the 8 decomp files below call.
 
-- [ ] **Step 1:** Grep `game.c`/`room.c`/menu code for the actual save/load
-  entry points these three files expose, and confirm whether anything
-  currently calls them at all (if nothing does yet, this may be entirely
-  new wiring, not a stub-replacement).
-- [ ] **Step 2:** Identify the real KATANA memory-card API surface these
-  files call (`sceMc*` family, likely) and design the PC-side file-backed
-  replacement, following the `afs_mount.c` precedent.
-- [ ] **Step 3:** Compile the three files, fix gaps per the standard
-  procedure.
-- [ ] **Step 4:** Manual round-trip test: save, quit, relaunch, load,
-  confirm player state (room, items, health) matches.
-- [ ] **Step 5:** Update status table, commit.
+- [x] **Step 1:** Grepped `game.c`/`room.c`/`adv.c`/`system.c`/`bup_00.c`
+  for the actual save/load entry points and found the real scope is
+  **8 files, not 3**: `ps2_MemoryCard..c` (low-level card state machine),
+  `ps2_sg_bup.c` (`buInit`/`sceMcInit` wrapper), `ps2_McSaveFile.c`
+  (SAVEFILE/CONFIGFILE/ICONINFORMATION init + file-select UI),
+  `ps2_SaveScreen.c` + `ps2_LoadScreen.c` (item-menu "typewriter"
+  save/load, dispatched from `bup_00.c`'s `TypewriterMode[]`, called via
+  `bhSysCallTypewriter` in `system.c`), `ps2_SystemSaveScreen.c` +
+  `ps2_SystemLoadScreen.c` (pause-menu system save/load, already called
+  for real from `adv.c`), and `bup_00.c` itself. All 8 are zero PS2 asm.
+  `stub_game.c` already had placeholder stubs for `CreateMemoryCard`/
+  `GetMcSelectPortType`/`CheckMcSelectPortInfoState`/`CreateSysLoadScreen`/
+  `ExecuteSysLoadScreen`/`CreateSysSaveScreen`/`ExecuteSysSaveScreen`/
+  `TypewriterKeepMemory`, and `game_texture_stubs.c` had one for
+  `ControlTypewriter` — all shadow-confirmed and deleted once the real
+  files compiled.
+- [x] **Step 2:** Identified the real API surface and designed
+  `save_mc_shim.c` (game-target file, needs KATANA's real `GDFS_HANDLE`
+  type from `sg_gd.h`, so can't live in the stub library):
+  - `sceMc*` (`Init`/`GetInfo`/`Sync`/`Open`/`Close`/`Read`/`Write`/
+    `Mkdir`/`Chdir`/`GetDir`/`Format`) — a virtual memory card backed by a
+    real `<gamedata>/SAVE/` directory on disk. `ps2_MemoryCard..c`'s
+    ~20 call sites already retry-loop on `sceMcSync` before touching the
+    result, so (same as `afs_mount.c`) every `sceMcXxx` does its file I/O
+    synchronously and `sceMcSync` always reports "done" on the next call.
+    Extended `port/include/compat/libmc.h` with the full `sceMcTblGetDir`
+    struct (`ps2_MemoryCard..c` declares a real `static sceMcTblGetDir
+    CardInfo[21]` and reads `.EntryName`/`.AttrFile`, not just a pointer)
+    and the rest of the prototypes.
+  - `gdFsOpen`/`gdFsGetFileSize`/`gdFsRead`/`gdFsClose` — discovered via
+    `ps2_McSaveFile.c`'s `mcReadIconData`, which is **not** a stubbable
+    dead path: `ExecuteStateSysSaveWriteSysData` case 2 treats a failed
+    read as a card error, so every system save goes through it. It's only
+    ever asked for one file, `"bio_cv.ico"`, which ships as a loose file
+    at the gamedata root (`BIO_CV.ICO`, confirmed present in
+    `/iso-src/data`) — implemented as a case-insensitive scan of the
+    gamedata dir, same technique as `afs_mount.c`'s
+    `port_loose_find_path`.
+  - Found and worked around a latent, pre-existing bug in
+    `recvx_game_prelude.h`: its own "real CRT first" `#include <string.h>`/
+    `<stdio.h>` actually resolves to KATANA's SH-series copies (the KATANA
+    include dir is on the -I path for the whole TU, ahead of the system
+    default, and the `_STRING_SHC` etc. masking guards aren't defined
+    until after those includes) — invisible until now because no
+    previously-compiled file happened to call plain `strcpy`/`strcmp`
+    (KATANA's copy macros them to `_builtin_strcpy`/`_builtin_strcmp`,
+    the original Hitachi SH-C compiler's intrinsic names, meaningless to
+    GCC) or `snprintf` (predates C99). `ps2_MemoryCard..c`/
+    `ps2_McSaveFile.c` are "100% matching!" decomp and do call plain
+    `strcpy`/`strcmp`, so rather than touching the shared prelude (bigger
+    blast radius), `save_mc_shim.c` provides real `_builtin_strcpy`/
+    `_builtin_strcmp` definitions (manual loops, not `strcpy`/`strcmp`
+    calls — those would macro right back into themselves) and an
+    explicit `snprintf` prototype.
+- [x] **Step 3:** Compiled all 8 files + `save_mc_shim.c`. Docker build
+  clean, Xvfb smoke test clean (`[boot] clean exit`, same known
+  item-select-screen input-harness ceiling as every prior task).
+- [x] **Step 4:** Full UI round-trip is still blocked by the same
+  gdb-pseudo-input harness limitation as Tasks 1/4.3, so verified the
+  shim directly instead: a standalone test linked straight against
+  `save_mc_shim.c.o` did `sceMcMkdir` → `sceMcOpen`(create) →
+  `sceMcWrite` → `sceMcClose` → `sceMcOpen`(read) → `sceMcRead` →
+  `sceMcClose` and got back the exact bytes written; `sceMcGetDir`
+  wildcard listing found the file with the correct name/size; opening a
+  nonexistent file for read correctly returned -1. A second standalone
+  test called `gdFsOpen("bio_cv.ico", ...)` against the real `/iso-src/
+  data` gamedata dir and got the correct 46072-byte size and valid PS2
+  `.ICO` magic bytes back. Stronger bar than the usual "compiles, doesn't
+  crash" since this task introduced new PC-side logic, not just
+  recompiled decomp.
+- [x] **Step 5:** Status table updated, commit made.
+
+**Behavioral verification note:** same caveat as Task 4.3 — compiling and
+shim-testing proves the plumbing is correct, not that the in-game save/
+load UI is fully walkable, which needs the same real-input testing this
+whole plan has deferred since Task 1.
 
 ---
 

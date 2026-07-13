@@ -368,15 +368,10 @@ void mwPlySetDispMode(int m)             { (void)m; }
  * StatusMapFlagInit moved to sub1.c (real bodies). EraseItem /
  * ItemSearch / NameChangeSet also now real.
  * ---------------------------------------------------------------------- */
-/* ControlTypewriter is implemented in port/src/game_texture_stubs.c so it
- * can access the real SYS_WORK struct (requires KATANA types.h prelude).
- * Needed to skip the text-scroll intro and jump straight to MV_000.PSS
- * after NEW GAME is selected, since bup_00.c (TypewriterMode[] dispatcher)
- * isn't compiled yet. */
+/* ControlTypewriter / TypewriterKeepMemory now real (bup_00.c). */
 int  ControlRanking(void)   { return 0; }
 /* Expand is implemented for real in port/src/expand_pc.c (the decomp
  * expand.c is pure MIPS asm). */
-void TypewriterKeepMemory(void) {}
 void Ps2ClearOT(void)       {}
 
 /* ----------------------------------------------------------------------
@@ -487,25 +482,10 @@ void SetVolumeAdx2(unsigned int slot, float vol)   {
  * Linker resolves to the real impl there. */
 void bhReleaseFreeMemory(void* p)                  { (void)p; }
 
-/* Memory card — simulate a card present on port/slot 0 so NEW GAME is
- * selectable at the title menu. Real save/load still stubbed; this just
- * unblocks the FindFirstVmDrive() >= 0 check in adv.c CheckButton so the
- * user can reach the NEW GAME → TitleCall(3) transition that eventually
- * plays the opening FMV. Return value 2 = "PS2 memcard type detected" per
- * the decomp's CheckConnectVmDrive convention. */
-void* CreateMemoryCard(void* pCard)                { (void)pCard; return pCard; }
-int   GetMcSelectPortType(void* pCard, unsigned int port) {
-    (void)pCard;
-    return (port == 0) ? 2 : 0;
-}
-int   CheckMcSelectPortInfoState(unsigned int port){ (void)port; return 0; }
-
-/* Sys load/save screens — always return "ready" so boot chain advances
- * past the VM check in Adv_FirstWarningMessage mode 11. */
-void* CreateSysLoadScreen(void* s, void* arg)      { (void)s;(void)arg; return s; }
-int   ExecuteSysLoadScreen(void* ps)               { (void)ps; return 1; /* ok */ }
-void* CreateSysSaveScreen(void* s, void* arg)      { (void)s;(void)arg; return s; }
-int   ExecuteSysSaveScreen(void* ps)               { (void)ps; return 1; }
+/* CreateMemoryCard/GetMcSelectPortType/CheckMcSelectPortInfoState now real
+ * (ps2_MemoryCard..c). CreateSysLoadScreen/ExecuteSysLoadScreen now real
+ * (ps2_SystemLoadScreen.c). CreateSysSaveScreen/ExecuteSysSaveScreen now
+ * real (ps2_SystemSaveScreen.c). */
 void  SetAdjustDisplay(void)                       { }
 
 /* Real GetFileSize (gdlib.c:100) hits the PS2 GD-ROM layer directly, not

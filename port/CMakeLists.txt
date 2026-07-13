@@ -538,6 +538,33 @@ if(RECVX_BUILD_GAME)
         # (scePrintf + no return) — same dead-code shape already noted
         # for en08.c's dependency on it.
         ${RECVX_SRC}/ps2/veronica/prog/en03.c
+        # Task 4.4: save/load. All 8 files zero PS2 asm. Real hardware
+        # boundary (sceMc* memory-card driver + gdFsOpen GD-ROM read of
+        # BIO_CV.ICO) is reimplemented in save_mc_shim.c below, following
+        # the afs_mount.c async-collapse precedent.
+        #   ps2_MemoryCard..c / ps2_sg_bup.c — low-level card state machine
+        #     + buInit wrapper. Self-contained besides sceMc*/printf.
+        #   ps2_McSaveFile.c — SAVEFILE/CONFIGFILE/ICONINFORMATION field
+        #     init + file-select window UI. No external calls at all.
+        #   ps2_SaveScreen.c / ps2_LoadScreen.c — item-menu (typewriter)
+        #     save/load screens, called from bup_00.c's TypewriterMain.
+        #   ps2_SystemSaveScreen.c / ps2_SystemLoadScreen.c — pause-menu
+        #     system save/load, already called for real from adv.c.
+        #   bup_00.c — TypewriterMode[] dispatcher (Init/Main/Exit) that
+        #     bhSysCallTypewriter (system.c) calls; ties Create*Screen/
+        #     Execute*Screen together for the item-menu save flow.
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_MemoryCard..c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_sg_bup.c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_McSaveFile.c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_SaveScreen.c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_LoadScreen.c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_SystemSaveScreen.c
+        ${RECVX_SRC}/ps2/veronica/prog/ps2_SystemLoadScreen.c
+        ${RECVX_SRC}/ps2/veronica/prog/bup_00.c
+        # sceMc*/gdFsOpen real reimplementation for the above. Game target
+        # (not the stub library) because gdFsOpen needs the real KATANA
+        # GDFS_HANDLE type from sg_gd.h, which isn't compat-shadowed.
+        ${CMAKE_CURRENT_SOURCE_DIR}/src/save_mc_shim.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
