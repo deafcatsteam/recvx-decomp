@@ -22,7 +22,7 @@ void bhEne04(BH_PWORK* epw) { (void)epw; }
 void bhEne05(BH_PWORK* epw) { (void)epw; }
 void bhEne06(BH_PWORK* epw) { (void)epw; }
 void bhEne07(BH_PWORK* epw) { (void)epw; }
-void bhEne08(BH_PWORK* epw) { (void)epw; }
+/* bhEne08 now real (en08.c). */
 void bhEne09(BH_PWORK* epw) { (void)epw; }
 /* bhEne10 now real (en10.c). */
 void bhEne11(BH_PWORK* epw) { (void)epw; }
@@ -53,6 +53,12 @@ void bhEne53(BH_PWORK* epw) { (void)epw; }
  * bhCheckWall2Box/bhCheckWallType/bhCheckWallType2/bhResetAtariAttr now
  * real (hitchk.c). bhCheckFloorNum/bhCheckL2Wall/bhSetFloorNum/
  * bhCheckClipModel now real (pwksub.c). */
+
+/* bhEne03_Collision (en03.c, gates bhEne08) is UNIMPLEMENTED in the
+ * original decomp too (scePrintf + no return, en03.c:5046) — not a
+ * placeholder we're skipping, matches the source. Stubbed here rather
+ * than pulling in all of en03.c (6671 lines) for one dead function. */
+ATR_WORK* bhEne03_Collision(BH_PWORK* epw) { (void)epw; return NULL; }
 
 /* ---- effects (effect.c) ---------------------------------------------- */
 /* effect.c itself compiles clean, but its bhJumpEffect[150] dispatch

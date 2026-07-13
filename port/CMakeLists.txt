@@ -458,12 +458,16 @@ if(RECVX_BUILD_GAME)
         # hitchk.c's box/wall checks) — bhCollisionCheckLine*/
         # bhGetHitCollisionNormal/bhInOutCheck. Zero PS2 asm.
         ${RECVX_SRC}/ps2/veronica/prog/hitchkl.c
-        # Enemy AI: bhEne20/bhEne10/bhEne27. Zero PS2 asm. (bhEne08
-        # deferred — it also needs bhEne03_Collision from the
-        # not-yet-compiled en03.c, 6671 lines, its own future task.)
+        # Enemy AI: bhEne20/bhEne10/bhEne27. Zero PS2 asm.
         ${RECVX_SRC}/ps2/veronica/prog/en20.c
         ${RECVX_SRC}/ps2/veronica/prog/en10.c
         ${RECVX_SRC}/ps2/veronica/prog/en27.c
+        # Enemy AI: bhEne08. Zero PS2 asm, 323 lines. Its one en03.c
+        # dependency (bhEne03_Collision) is UNIMPLEMENTED in the original
+        # decomp too (en03.c:5046, scePrintf + no return) — stubbed in
+        # game_room_stubs.c instead of pulling in en03.c's other 6671
+        # lines for a dead function.
+        ${RECVX_SRC}/ps2/veronica/prog/en08.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
