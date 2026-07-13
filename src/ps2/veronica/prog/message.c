@@ -23,13 +23,19 @@ void bhSetMessage(int mes_typ, int mes_idx)
         break;
     case 1:
         sys->mes_dp = sys->mes_sp;
+
+#ifdef RECVX_PC_PORT
+        /* Same mes_sp validity-window hazard guarded in bhDispMessage/
+         * bhDispMessageEx above — see the comment there. */
+        if (sys->mes_dp == NULL) return;
+#endif
         break;
     default:
         return;
     }
-    
+
     sys->mes_idx = mes_idx + 1;
-    
+
     sys->mes_dp = (unsigned int*)((unsigned char*)sys->mes_dp + sys->mes_dp[sys->mes_idx]);
     
     sys->mes_ct = 0;
@@ -606,7 +612,24 @@ int bhDispMessage(float px, float py, float pri, int mes_typ, int mes_idx, int c
         break;
     case 1:
         mes_dp = sys->mes_sp;
-        
+
+#ifdef RECVX_PC_PORT
+        /* sys->mes_sp has a narrow, real-hardware-only validity window:
+         * it's computed from a temporary read buffer that later loading
+         * steps (system.c's bhSysCallMonitor, bup_00.c's Typewriter,
+         * ranking.c) reuse for other data without ever advancing memp
+         * past it, relying on the real many-frame disc-read gap before
+         * anything reads it again. Our synchronous I/O shim collapses
+         * that gap, so mes_sp is deliberately reset to NULL right at
+         * each reuse point rather than left dangling into freed/reused
+         * memory. Every caller of this mes_typ (NowLoadDisp, the save/
+         * load screens' select-message text) is a cosmetic label, so
+         * skipping the draw for the one-or-few frames mes_sp is NULL is
+         * the same "still no worse than one real frame of visual
+         * glitch" trade the original hardware already makes. */
+        if (mes_dp == NULL) return 0;
+#endif
+
         dp = (unsigned short*)((char*)mes_dp + sys->mes_sp[mes_idx + 1]);
         break;
     default:
@@ -710,7 +733,24 @@ int bhDispMessageEx(float px, float py, float pri, int mes_typ, int mes_idx, uns
         break;
     case 1:
         mes_dp = sys->mes_sp;
-        
+
+#ifdef RECVX_PC_PORT
+        /* sys->mes_sp has a narrow, real-hardware-only validity window:
+         * it's computed from a temporary read buffer that later loading
+         * steps (system.c's bhSysCallMonitor, bup_00.c's Typewriter,
+         * ranking.c) reuse for other data without ever advancing memp
+         * past it, relying on the real many-frame disc-read gap before
+         * anything reads it again. Our synchronous I/O shim collapses
+         * that gap, so mes_sp is deliberately reset to NULL right at
+         * each reuse point rather than left dangling into freed/reused
+         * memory. Every caller of this mes_typ (NowLoadDisp, the save/
+         * load screens' select-message text) is a cosmetic label, so
+         * skipping the draw for the one-or-few frames mes_sp is NULL is
+         * the same "still no worse than one real frame of visual
+         * glitch" trade the original hardware already makes. */
+        if (mes_dp == NULL) return 0;
+#endif
+
         dp = (unsigned short*)((char*)mes_dp + sys->mes_sp[mes_idx + 1]);
         break;
     default:

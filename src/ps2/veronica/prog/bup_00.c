@@ -203,7 +203,7 @@ void TypeWriterTextureInit()
             
             if (sz != 0)
             {
-                sys->memp = (unsigned char*)((unsigned int)(sys->memp + 63) & ~0x3F);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 RequestReadIsoFile("sysmes.ald", sys->memp);
                 
@@ -244,13 +244,24 @@ void TypeWriterTextureInit()
     case 2:
         if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, 1) != 0))
         {
-            sys->memp = (unsigned char*)((unsigned int)(sys->memp + 63) & ~0x3F);
-            
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
+
+#ifdef RECVX_PC_PORT
+            /* Same hazard as bhSysCallMonitor's case-3 fix (system.c):
+             * this read lands at the same sys->memp the case-1 mes_sp
+             * still points into. Our synchronous I/O shim can reach
+             * ExecuteSaveScreen's own bhDispMessage calls (mes_idx 472
+             * etc.) within the same handful of frames, reading through
+             * this now-overwritten pointer instead of the many-frame
+             * real-disc gap the original game relies on. */
+            sys->mes_sp = NULL;
+#endif
+
             RequestReadInsideFile(sys->sys_partid, 1, sys->memp);
-            
+
             tw->mode_00 = 3;
         }
-        
+
         break;
     case 3:
         if (GetReadFileStatus() == 0)
@@ -266,7 +277,7 @@ void TypeWriterTextureInit()
         {
             if (GetReadFileStatus() != 1)
             {
-                sys->memp = (unsigned char*)((unsigned int)(sys->memp + 63) & ~0x3F);
+                sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
                 
                 if (rom->mdl.texP != NULL)
                 {
@@ -285,7 +296,7 @@ void TypeWriterTextureInit()
     case 5:
         if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->itm_partid, 144) != 0))
         {
-            sys->memp = (unsigned char*)((unsigned int)(sys->memp + 63) & ~0x3F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
             
             RequestReadInsideFile(sys->itm_partid, 144, sys->memp);
             

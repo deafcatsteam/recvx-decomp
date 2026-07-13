@@ -17,7 +17,7 @@ unsigned char* bhGetFreeMemory(int size, int param) // second parameter is not p
 {
     unsigned char *temp; // not from the debugging symbols
     
-    sys->memp = (unsigned char*)(((int)sys->memp + 63) & ~0x3F);
+    sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
     
     if (((sys->memp + size) - freemem) > 12845056) 
     {

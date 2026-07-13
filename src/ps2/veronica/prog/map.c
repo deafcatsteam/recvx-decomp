@@ -1,5 +1,6 @@
 #include "../../../ps2/veronica/prog/map.h"
 #include "../../../ps2/veronica/prog/binfunc.h"
+#include "../../../ps2/veronica/prog/macros.h"
 #include "../../../ps2/veronica/prog/event.h"
 #include "../../../ps2/veronica/prog/flag.h"
 #include "../../../ps2/veronica/prog/main.h"
@@ -122,7 +123,7 @@ void bhInitMap(enum_2 set_mod)
         
         if (mwP->rom_texP != NULL) 
         {
-            sys->memp = (unsigned char*)(((int)sys->memp + 31) & ~0x1F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)32);
             
             mwP->rom_bakP = sys->memp;
             

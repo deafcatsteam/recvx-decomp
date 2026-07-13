@@ -105,6 +105,7 @@ static void mc_translate(const char* cardpath, char* out, size_t outsz) {
 }
 
 static int g_mc_result;     /* stashed outcome of the last kicked op */
+static int g_mc_pending;    /* 1 = an op was kicked since the last sceMcSync consumed it */
 static FILE* g_mc_fp;        /* the one concurrently-open card file */
 
 int sceMcInit(void) {
@@ -116,8 +117,10 @@ int sceMcGetInfo(int port, int slot, int* type, int* free_, int* format) {
     (void)port; (void)slot;
     if (type)   *type   = 2;    /* PS2-formatted card present */
     if (free_)  *free_  = 8192; /* plenty of free blocks */
-    if (format) *format = 0;    /* formatted */
+    if (format) *format = 1;    /* 1 = PS2-formatted (see ps2_SystemLoadScreen.c's
+                                 * cFormat==0 => "unformatted" error branch) */
     g_mc_result = 0;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -125,7 +128,17 @@ int sceMcSync(int mode, int* cmd, int* result) {
     (void)mode;
     if (cmd)    *cmd = 0;
     if (result) *result = g_mc_result;
-    return 1; /* always "complete" — the op above already ran */
+    /* ExecuteMemoryCardStandby (ps2_MemoryCard..c) polls sceMcSync(1,...)
+     * with nothing kicked to detect "idle" (real hardware returns -1 when
+     * no command is outstanding) before starting its own background
+     * card-connect poll (CheckMemoryCardChangeConnectTypeAll). Returning
+     * 1 unconditionally here means that gate never opens, so the card's
+     * connect state never gets past its zero-initialized default and the
+     * system-load screen's card-awareness check spins forever. Only
+     * report "done" for an op this shim actually kicked. */
+    if (!g_mc_pending) return -1;
+    g_mc_pending = 0;
+    return 1; /* the previously kicked op already ran, synchronously */
 }
 
 int sceMcOpen(int port, int slot, char* name, int mode) {
@@ -139,6 +152,7 @@ int sceMcOpen(int port, int slot, char* name, int mode) {
     const char* fmode = ((mode & 0x3) == 0x1) ? "rb" : "w+b";
     g_mc_fp = fopen(path, fmode);
     g_mc_result = g_mc_fp ? 0 : -1;
+    g_mc_pending = 1;
     return 0; /* kicked ok; real result lands in sceMcSync */
 }
 
@@ -146,6 +160,7 @@ int sceMcClose(int fd) {
     (void)fd;
     if (g_mc_fp) { fclose(g_mc_fp); g_mc_fp = NULL; }
     g_mc_result = 0;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -153,6 +168,7 @@ int sceMcRead(int fd, void* buf, int size) {
     (void)fd;
     size_t got = g_mc_fp ? fread(buf, 1, (size_t)size, g_mc_fp) : 0;
     g_mc_result = (int)got;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -160,6 +176,7 @@ int sceMcWrite(int fd, void* buf, int size) {
     (void)fd;
     size_t put = g_mc_fp ? fwrite(buf, 1, (size_t)size, g_mc_fp) : 0;
     g_mc_result = (int)put;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -169,6 +186,7 @@ int sceMcMkdir(int port, int slot, char* name) {
     mc_translate(name, path, sizeof path);
     port_mkdir(path);
     g_mc_result = 0;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -179,6 +197,7 @@ int sceMcChdir(int port, int slot, char* name, char* buf) {
      * on a stateful "current directory", so there's no real state to
      * track here. */
     g_mc_result = 0;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -253,6 +272,7 @@ int sceMcGetDir(int port, int slot, char* name, unsigned flag, int maxent, sceMc
     }
 
     g_mc_result = count;
+    g_mc_pending = 1;
     return 0;
 }
 
@@ -264,6 +284,7 @@ int sceMcFormat(int port, int slot) {
      * play — same "never actually hit" shape as bhEne03_Collision. */
     mc_root_dir();
     g_mc_result = 0;
+    g_mc_pending = 1;
     return 0;
 }
 

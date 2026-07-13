@@ -487,7 +487,21 @@ void bhFirstGameStart()
     njSetAspect(BHD_ASPECT_X, BHD_ASPECT_Y);
     
     sys->memp = keepmem;
-    
+
+#ifdef RECVX_PC_PORT
+    /* Same stale-pointer hazard as the case-1 fix in bhSysCallMonitor
+     * above: rewinding memp back to keepmem invalidates whatever
+     * sys->mes_sp pointed at (the system message table loaded during
+     * boot). bhDispMessage's NowLoadDisp draw only checks mes_sp !=
+     * NULL, so without this it reads through a dangling pointer into
+     * whatever New Game now allocates there (room/model data) instead
+     * of message bytes — a wild read that's a one-frame garbage-glyph
+     * flash on real PS2's mirrored address space but an x64 SIGSEGV.
+     * Monitor's own mn_md1 case 1/2 sequence re-derives a valid mes_sp
+     * a few frames later; NowLoadDisp stays silent until then. */
+    sys->mes_sp = NULL;
+#endif
+
     sys->obwp = (O_WRK*)bhGetFreeMemory(39936, 32);
     sys->itwp = (O_WRK*)bhGetFreeMemory(39936, 32);
     
@@ -1472,15 +1486,32 @@ void bhSysCallMonitor()
             
             break;
         case 3:
-            if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, 1) != 0)) 
+            if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, 1) != 0))
             {
                 sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
-                
+
+#ifdef RECVX_PC_PORT
+                /* Same hazard as the case-1 fix above: this read lands at
+                 * the same sys->memp the case-2 mes_sp still points into
+                 * (real hardware never advances memp past the system
+                 * message table here either — it relies on the disc read
+                 * this kicks off taking many real frames, long past the
+                 * point NowLoadDisp's one-frame draw already happened).
+                 * Our synchronous I/O shim collapses that wait to nearly
+                 * nothing, so case 4 can set NowLoadDisp=1 and this same
+                 * mn_md1 chain can reach bhSysCallMonitor's NowLoadDisp
+                 * draw within the same handful of frames — reading
+                 * mes_sp after this overwrite instead of before it, which
+                 * walks an unbounded loop through whatever player data
+                 * landed here until it wanders off the allocated pool. */
+                sys->mes_sp = NULL;
+#endif
+
                 RequestReadInsideFile(sys->sys_partid, 1, sys->memp);
-                
+
                 sys->mn_md1 = 4;
             }
-            
+
             break;
         case 4:
             if (GetReadFileStatus() == 0) 

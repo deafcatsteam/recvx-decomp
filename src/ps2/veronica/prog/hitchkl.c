@@ -1,4 +1,5 @@
 #include "../../../ps2/veronica/prog/hitchkl.h"
+#include "../../../ps2/veronica/prog/macros.h"
 #include "../../../ps2/veronica/prog/main.h"
 #include "../../../ps2/veronica/prog/ps2_NaColi.h"
 #include "../../../ps2/veronica/prog/ps2_NaMath.h"
@@ -765,7 +766,7 @@ int bhCollisionCheckL2MDL(NJS_POINT3* p1, NJS_POINT3* p2, NJS_CNK_MODEL* mdl, NJ
     
     pnum = ((unsigned char*)pPol)[4];
 
-    pd = (NJS_POINT3*)(((int)sys->memp + 31) & ~0x1F);
+    pd = (NJS_POINT3*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)32);
     
     pPol += 3;
 

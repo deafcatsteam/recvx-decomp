@@ -1,5 +1,6 @@
 #include "../../../ps2/veronica/prog/ranking.h"
 #include "../../../ps2/veronica/prog/bup_00.h"
+#include "../../../ps2/veronica/prog/macros.h"
 #include "../../../ps2/veronica/prog/effect.h"
 #include "../../../ps2/veronica/prog/event.h"
 #include "../../../ps2/veronica/prog/flag.h"
@@ -554,7 +555,7 @@ void RankingTextureInit()
         
         if (sz != 0)
         {
-            sys->memp = (unsigned char*)(((int)sys->memp + 0x3F) & ~0x3F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
              
             RequestReadIsoFile("sysmes.ald", sys->memp);
             
@@ -592,7 +593,7 @@ void RankingTextureInit()
     case 2:
         if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->sys_partid, 1) != 0)) 
         {
-            sys->memp = (unsigned char*)(((int)sys->memp + 0x3F) & ~0x3F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
             
             RequestReadInsideFile(sys->sys_partid, 1, sys->memp);
             
@@ -614,7 +615,7 @@ void RankingTextureInit()
         {
             sys->sbs_sp = sys->memp;
             
-            sys->memp = (unsigned char*)(((int)sys->memp + 0x3F) & ~0x3F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
             
             rk->mode_00 = 5;
         }
@@ -623,7 +624,7 @@ void RankingTextureInit()
     case 5:
         if ((GetReadFileStatus() == 0) && (GetInsideFileSize(sys->itm_partid, no + 277) != 0))
         {
-            sys->memp = (unsigned char*)(((int)sys->memp + 0x3F) & ~0x3F);
+            sys->memp = (unsigned char*)ALIGN_UP((uintptr_t)sys->memp, (uintptr_t)64);
             
             RequestReadInsideFile(sys->itm_partid, no + 277, sys->memp);
             

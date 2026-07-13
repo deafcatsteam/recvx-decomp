@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep not started; see this doc's "Phase 4 detail" section | ~55% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 6 real bugs found+fixed via real menu-driven New Game playthrough (first time this port has reached real gameplay through actual menu input rather than gdb shortcuts), one new enemy-motion-linkage crash found and documented, not yet fixed; see this doc's "Phase 4 detail" section | ~58% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1247,7 +1247,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 4.2 — Effects (`effect.c`) | ✅ Done — `effect.c` + all 8 `effsub*.c` (0/1/1b/2/3/4/5/6) compiled real; rendering primitives (`njDraw*3D*`/`Ps2Shadow*`/`njCnkModDrawModel`/particle draw) no-op, see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
-| Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
+| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 6 real bugs found+fixed (2 memory-card shim bugs, 3 x64 pointer-truncation sites, message-table stale-pointer hazard across 3 call sites); first real menu-driven New Game reached (real Start/Up/cursor input, not a gdb shortcut); one new enemy-motion-linkage crash found, documented, not yet fixed | below |
 
 **Investigation done so far (this pass):** grepped every remaining P4 source
 file for `asm`/`__asm__` (the tell for a VU0/EE-asm boundary that needs a
@@ -1671,17 +1671,141 @@ whole plan has deferred since Task 1.
 
 ### Task 4.5: Full-playthrough crash sweep
 
-**Files:** none (verification-only).
+**Files:** `port/src/save_mc_shim.c`, `src/ps2/veronica/prog/{system.c,bup_00.c,
+pwksub.c,hitchkl.c,ranking.c,map.c,message.c}`.
 
-- [ ] **Step 1:** Once Tasks 4.1–4.4 are in, do an extended Xvfb run (or a
-  real keyboard/controller session if the harness limitation from Task 1/
-  4.3 gets fixed) through as much of the game as reachable — title, new
-  game, first several rooms, at least one combat encounter, one save.
-- [ ] **Step 2:** Log every crash/assert hit; root-cause each via
-  `systematic-debugging` before patching (same standard as P1–P3).
-- [ ] **Step 3:** Once a full loop (start → fight → save → reload) survives
-  without a `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress
-  overview table at the top of this doc and open P5 scoping.
+- [x] **Step 1 (harness):** The gdb-pseudo-input ceiling from Tasks 1/4.3
+  turned out to be a real, fixable bug, not a test-environment limit (see
+  findings below) — once fixed, **real synthesized `xdotool` input**
+  (window-focus + spaced keydown/keyup, the technique proven in the P2
+  log) reliably drives the actual title menu: Start dismisses the
+  first-boot "system file broken" prompt, `Up` moves the cursor from the
+  default Load-game selection to New Game (a memory card is now
+  genuinely detected since Task 4.4 landed, so the old "no card → default
+  to New Game" shortcut no longer fires — correct, authentic behavior),
+  Start confirms it (`Adv_BioCvTitle` returns 2, the real
+  confirmed-New-Game code), and a `CheckButton`-forcing gdb breakpoint
+  (`set variable AdvWork.Cursor[0] = 1` on every hit) makes this
+  reproducible on demand instead of racing a ~1s input window.
+- [x] **Step 2: six real bugs found and fixed, root-caused via
+  `systematic-debugging` (read error → reproduce → trace backward → one
+  fix at a time → rebuild → reverify), each one moving the crash point
+  further into previously-unreached territory:**
+  1. **`sceMcSync` never reported "idle."** (`save_mc_shim.c`)
+     `ExecuteMemoryCardStandby` (`ps2_MemoryCard..c`) gates its
+     background card-connect poll on `sceMcSync(1,...) == -1` ("nothing
+     kicked"); the shim always returned 1, so that poll never ran and
+     `GetMemoryCardSelectPortState` stayed at its zero-initialized
+     default forever — the system-load screen's card-awareness check
+     span an infinite error-recovery loop with **no timeout**, a hard,
+     deterministic stall present since Task 4.4 landed (this is what all
+     of Tasks 4.2–4.4's "same known item-select-screen ceiling" log
+     entries were actually stuck on — never really an item-select
+     screen). Fixed with a `g_mc_pending` flag: `sceMcSync` now only
+     reports "done" for an op the shim actually kicked, `-1` otherwise,
+     matching real hardware semantics.
+  2. **`sceMcGetInfo`'s `format` output was inverted.** (`save_mc_shim.c`)
+     Returned `0` with a `/* formatted */` comment; every real caller
+     (`ps2_SystemLoadScreen.c`) checks `== 1` for "formatted OK" and `==
+     0` for "needs format," so the shim was telling the game its own
+     virtual card was corrupt. Fixed to `1`.
+  3. **`bhFirstGameStart`'s `sys->memp = keepmem` reset staled
+     `sys->mes_sp`.** (`system.c`) Same hazard class as the file's own
+     pre-existing case-1 fix, at a second site nothing had guarded yet.
+  4. **`bhSysCallMonitor`'s case 3 overwrites the same `sys->memp` the
+     case-2 `mes_sp` still points into**, and does so *before*
+     `NowLoadDisp` is even set (case 4). On real hardware the disc read
+     this kicks off takes many real frames — long enough that the "Now
+     Loading" text never actually gets drawn against the still-fresh
+     data. Our synchronous I/O shim collapses that wait to nothing, so
+     the draw can happen against already-overwritten memory within the
+     same handful of frames, walking an **unbounded** loop
+     (`cd = *dp++` with no bounds check, only a `0xFFFF` sentinel) until
+     it wanders off the allocated pool — a real, x64-only SIGSEGV.
+     `bup_00.c`'s Typewriter task has its own near-identical copy of this
+     exact case0-3 sequence with the same hazard at its own case 2. Both
+     fixed the same way as the file's own precedent: null `mes_sp` right
+     at the overwrite point rather than leaving it dangling.
+  5. **Fixing #3/#4 by nulling `mes_sp` exposed that `bhDispMessage`,
+     `bhDispMessageEx`, and `bhSetMessage` (`message.c`) never actually
+     checked it for NULL themselves** (only one specific caller,
+     `bhSysCallMonitor`'s NowLoadDisp, happened to guard its own call
+     site) — so the fix in #3/#4 just moved the same crash from "read
+     stale garbage" to "read through NULL," now from a third call site
+     (`ps2_SaveScreen.c`'s `SetDispSelectMessage`, i.e. the save screen's
+     own on-screen message text). Fixed at the root by guarding all
+     three consumers directly instead of chasing individual call sites:
+     skip the draw (return early) when `mes_sp`/`mes_dp` is NULL. Every
+     affected caller is a cosmetic text label, so a skipped draw for the
+     handful of frames the pointer is intentionally NULL is the same
+     "one frame of visual glitch, not a functional loss" trade the real
+     hardware already makes with its stale-but-mapped mirrored memory.
+  6. **Three more x64 pointer-truncation sites** in the established
+     `(int)ptr + N) & ~mask` family (same bug class fixed repeatedly in
+     P2-P4): `pwksub.c`'s `bhGetFreeMemory` itself (the single most
+     widely-called allocator in the entire codebase — this one had been
+     silently truncating `sys->memp` on **every single allocation** the
+     whole time), `hitchkl.c` (line-segment collision, would have hit
+     during real combat), and four sites in `bup_00.c`/`ranking.c`/
+     `map.c` written in the `(unsigned int)(ptr + N) & ~mask` variant
+     form. Fixed with the established `ALIGN_UP((uintptr_t)ptr, N)`
+     pattern; `ranking.c` isn't currently compiled into
+     `RECVX_GAME_SOURCES` so its fix is inert until that file is pulled
+     in, but correct and harmless to have landed now.
+- [x] **Step 3: verified a real, menu-driven, input-confirmed New Game
+  now reaches actual room gameplay with zero crashes** — title screen →
+  Start → cursor to New Game → Start confirms (`Adv_BioCvTitle` returns
+  2) → MV_000 intro movie plays and Start-skips cleanly → real room load
+  (`rm_0000.rdx`, the authentic New Game starting room, not the demo
+  path's `rm_0130`) → sustained real `Up`/`Left` movement input with
+  correct edge-detected press/release logging and sound effects firing
+  → Cross (attack/action) and Triangle (inventory) presses register and
+  are handled without crashing. This is the first time in the project's
+  history this state was reached through **real synthesized menu input**
+  end-to-end, not a gdb-forced shortcut.
+- [ ] **Step 4 (new finding, not yet fixed):** walking with `Up`+`Left`
+  triggers a **new, distinct SIGSEGV** in enemy AI, unrelated to the
+  memory-card/message-table bugs above:
+  ```
+  SetMtnNormal (ewP=<ene>, datP=<NormalTbl>, mode=32) at Motion.c:156
+  156:            if (md2P->p[0] != NULL)
+  #1 bhSetMotion (...) at Motion.c:56
+  #2 em60_init (epw=<ene>) at subpl.c:127
+  #3 init_subpl (epw=<ene>) at subpl.c:91
+  #4 bhSubpl (epw=<ene>) at subpl.c:81
+  #5 bhControlEnemy () at eneset.c:388
+  #6 bhMainSequence () at game.c:48
+  ```
+  `md2P` (`ewP->mnwP[ewP->mtn_no].md2P`) and `obj_no` both hold obviously
+  garbage values (a wild pointer and a >1.6M "object count") at the
+  crash, meaning this specific `ene[]` slot's `mnwP` (motion-work array)
+  was never populated by the room-load enemy-linkage loop
+  (`room.c:444`, bounded by `rom->ene_n`) before `bhControlEnemy`'s own
+  loop (`eneset.c:369`, bounded by `sys->ewk_n`) tried to run its motion
+  init — the same *shape* of bug as the P2-era `ewk_n > rom->ene_n`
+  class (already fixed for `bhInitEnemy`'s zero-fill), but not yet
+  confirmed to be the *same* root cause here; needs its own
+  `systematic-debugging` pass (trace how/where this specific enemy
+  `id`/slot enters `ene[]` outside the room's counted list) rather than
+  a guessed guard. Intermittent — reproduces on some movement paths, not
+  the first attempt, consistent with proximity-based enemy activation.
+  This is the concrete next blocker for Task 4.5's "full loop survives"
+  bar.
+- [ ] **Step 5:** Once the enemy-motion-linkage crash above is fixed and
+  a full loop (start → fight → save → reload) survives without a
+  `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress overview
+  table at the top of this doc and open P5 scoping.
+
+**Separate finding, out of scope for this pass:** a broad grep for the
+`(int)ptr + offset)` x64-truncation pattern turned up roughly two dozen
+more occurrences project-wide (`binfunc.c`, `door.c`, `adv.c`,
+`ps2_loadtim2.c`, `ps2_sg_sd.c`, `ps2_dummy.c`, `ps2_NaTextureFunction.c`,
+`ps2_sg_gd.c`, `event.c`, `njplus.c`), mostly in binary-blob/model-offset
+math rather than the `sys->memp` bump allocator specifically. None of
+these were on the call path for this session's crashes, so none were
+touched — but this is clearly a systemic pattern worth its own dedicated
+sweep-and-fix task rather than opportunistic fixes each time one is
+tripped over.
 
 ---
 
