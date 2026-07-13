@@ -471,6 +471,10 @@ if(RECVX_BUILD_GAME)
         # Enemy AI: bhEne16. Zero PS2 asm, fully self-contained (no
         # external calls besides scePrintf).
         ${RECVX_SRC}/ps2/veronica/prog/en16.c
+        # Enemy AI: bhEne24, bhEne25. Zero PS2 asm, both fully
+        # self-contained (no external calls besides scePrintf).
+        ${RECVX_SRC}/ps2/veronica/prog/en24.c
+        ${RECVX_SRC}/ps2/veronica/prog/en25.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

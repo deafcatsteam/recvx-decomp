@@ -38,8 +38,7 @@ void bhEne19(BH_PWORK* ewP) { (void)ewP; }
 void bhEne21(BH_PWORK* epw) { (void)epw; }
 void bhEne22(BH_PWORK* epw) { (void)epw; }
 void bhEne23(BH_PWORK* epw) { (void)epw; }
-void bhEne24(BH_PWORK* epw) { (void)epw; }
-void bhEne25(BH_PWORK* epw) { (void)epw; }
+/* bhEne24 now real (en24.c). bhEne25 now real (en25.c). */
 void bhEne26(BH_PWORK* epw) { (void)epw; }
 /* bhEne27 now real (en27.c). bhEne28/bhSubpl now real (subpl.c). */
 void bhEne29(BH_PWORK* ewP) { (void)ewP; }
