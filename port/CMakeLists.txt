@@ -481,6 +481,15 @@ if(RECVX_BUILD_GAME)
         # file en01.c is 9945 lines, its own future task.)
         ${RECVX_SRC}/ps2/veronica/prog/en11.c
         ${RECVX_SRC}/ps2/veronica/prog/en30.c
+        # Enemy AI: bhEne12, bhEne13, bhEne14, bhEne18, bhEne21, bhEne29.
+        # All zero PS2 asm, all fully self-contained (no external calls
+        # besides scePrintf and their own functions).
+        ${RECVX_SRC}/ps2/veronica/prog/en12.c
+        ${RECVX_SRC}/ps2/veronica/prog/en13.c
+        ${RECVX_SRC}/ps2/veronica/prog/en14.c
+        ${RECVX_SRC}/ps2/veronica/prog/en18.c
+        ${RECVX_SRC}/ps2/veronica/prog/en21.c
+        ${RECVX_SRC}/ps2/veronica/prog/en29.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
