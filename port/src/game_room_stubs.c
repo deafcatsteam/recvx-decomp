@@ -15,7 +15,7 @@
 #include <string.h>
 
 /* ---- enemy AI handlers (eneset.c bhJumpEnemy dispatch table) -------- */
-void bhEne01(BH_PWORK* epw) { (void)epw; }
+/* bhEne01 now real (en01.c). */
 /* bhEne02 now real (en02.c). */
 void bhEne03(BH_PWORK* epw) { (void)epw; }
 /* bhEne04 now real (en04.c). bhEne05 now real (en05.c). bhEne06 now

@@ -517,6 +517,21 @@ if(RECVX_BUILD_GAME)
         # all non-static) — checked against the whole prog/ and port/src
         # tree for name collisions before adding: none found.
         ${RECVX_SRC}/ps2/veronica/prog/en15.c
+        # Enemy AI: bhEne01. Zero PS2 asm, 9945 lines (biggest enemy
+        # file). All external calls already real (bhCheckEnemies/
+        # bhCheckFloorEffect/bhCheckPlayer/bhCheckWater/
+        # bhClrUseKaidanFlag from hitchk.c; bhEne_CallocWork/
+        # bhEne_SetCallFunc/bhSetEnemy from eneset.c; bhSetMotion from
+        # Motion.c; njDistanceP2P from ps2_NaColi.c; bhSetShadow is the
+        # existing effect.c no-op stub) except npSetAllMatColor, added
+        # to njplus_coli.c above. Also needs its two helper files:
+        # en01sub.c (3202 lines, zero asm, fully self-contained —
+        # defines bhEne01Head/Arm/Leg/Cap/Worm/Bom/Scope/Parent) and
+        # en01b.c (1983 lines, zero asm, self-contained — defines the
+        # bhEne01_*TypeB dispatch arrays + bhEne01_RotNeck).
+        ${RECVX_SRC}/ps2/veronica/prog/en01sub.c
+        ${RECVX_SRC}/ps2/veronica/prog/en01b.c
+        ${RECVX_SRC}/ps2/veronica/prog/en01.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

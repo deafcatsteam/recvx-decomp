@@ -2,16 +2,19 @@
  * Ninja-plus capsule/sphere collision math — extracted from
  * src/ps2/veronica/prog/njplus.c, which as a whole is saturated with
  * VU0 inline asm (12 asm blocks starting at line 754, mostly skinning/
- * matrix-stack helpers unrelated to these 4 functions). These 4 are
- * "100% matching!" pure C in the original file (verified: no asm before
- * line 631, where npDistanceP2C ends) and only call njCollisionCheckSS/
- * njDistanceL2L/njDistanceP2L (real, ps2_NaColi.c) and
- * njInnerProduct/njScalor/njUnitVector (real, ninja_3d.c) — both already
- * compiled. Needed by weapon.c's bhCheckGunAtari/bhCheckKnifeAtari/
- * bhCheckFlyAtari/bhCheckBombAtari/bhCheckCapCol2Capsule.
+ * matrix-stack helpers unrelated to these functions). The functions
+ * below are all "100% matching!" pure C in the original file and only
+ * call already-real code: njCollisionCheckSS/njDistanceL2L/
+ * njDistanceP2L (ps2_NaColi.c) and njInnerProduct/njScalor/
+ * njUnitVector (ninja_3d.c).
  *
- * Verbatim copy of njplus.c lines 33-631 (source comments/formatting
- * preserved from the decomp).
+ * npCollisionCheckCC/CCEx/SC and npDistanceP2C: verbatim copy of
+ * njplus.c lines 33-631 (no asm before line 754). Needed by weapon.c's
+ * bhCheckGunAtari/bhCheckKnifeAtari/bhCheckFlyAtari/bhCheckBombAtari/
+ * bhCheckCapCol2Capsule.
+ *
+ * npSetAllMatColor: verbatim copy of njplus.c lines 1375-1469, needed
+ * by en01.c. Source comments/formatting preserved from the decomp.
  */
 
 #include "njplus.h"
@@ -614,5 +617,105 @@ void npDistanceP2C(NJS_POINT3* pos, NJS_CAPSULE* cap, NJS_POINT3* htp)
         htp->x = pos->x;
         htp->y = pos->y;
         htp->z = pos->z;
+    }
+}
+
+/* Verbatim copy of njplus.c lines 1375-1469 (npSetAllMatColor) — also
+ * pure C ("100% matching!" in the decomp), needed by en01.c. Walks a
+ * chunk model's material list directly, no asm, no other dependencies. */
+// 100% matching!
+void npSetAllMatColor(NJS_CNK_OBJECT* objp, int obj_n, unsigned int argb)
+{
+    int i;
+    int offset;
+    short head;
+    short* plp;
+    unsigned char* mat;
+    unsigned char a;
+    unsigned char r;
+    unsigned char g;
+    unsigned char b;
+
+    a = ((argb & 0xFF000000) >> 24) & 0xFF;
+    r = ((argb & 0xFF0000) >> 16) & 0xFF;
+    g = ((argb & 0xFF00) >> 8) & 0xFF;
+    b = argb & 0xFF;
+
+    for (i = 0; i < obj_n; i++, objp++)
+    {
+        if ((objp->model != NULL) && (!(objp->evalflags & 0x8)))
+        {
+            plp = objp->model->plist;
+
+            while (TRUE)
+            {
+                head = (unsigned char)*plp++;
+
+                if ((head >= 64) && (head < 67))
+                {
+                    offset = *plp++;
+                    plp += offset;
+                }
+                else if (head == 8)
+                {
+                    plp++;
+                }
+                else if ((head >= 17) && (head < 24))
+                {
+                    mat = (unsigned char*)plp + 2;
+
+                    switch (head)
+                    {
+                    case 17:
+                    case 21:
+                        *mat++ = b;
+                        *mat++ = g;
+                        *mat++ = r;
+
+                        if (*mat != 0)
+                        {
+                            *mat = a;
+                        }
+
+                        break;
+                    case 19:
+                    case 23:
+                        *mat++ = b;
+                        *mat++ = g;
+                        *mat++ = r;
+
+                        if (*mat != 0)
+                        {
+                            *mat = a;
+                        }
+
+                        mat++;
+
+                        *mat++ = b;
+                        *mat++ = g;
+                        *mat++ = r;
+
+                        if (*mat != 0)
+                        {
+                            *mat = a;
+                        }
+
+                        break;
+                    }
+
+                    offset = *plp++;
+                    plp += offset;
+                }
+                else if ((head >= 56) && (head < 59))
+                {
+                    offset = *plp++;
+                    plp += offset;
+                }
+                else if (head == 255)
+                {
+                    break;
+                }
+            }
+        }
     }
 }
