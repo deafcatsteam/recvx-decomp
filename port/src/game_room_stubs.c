@@ -16,29 +16,26 @@
 
 /* ---- enemy AI handlers (eneset.c bhJumpEnemy dispatch table) -------- */
 void bhEne01(BH_PWORK* epw) { (void)epw; }
-void bhEne02(BH_PWORK* epw) { (void)epw; }
+/* bhEne02 now real (en02.c). */
 void bhEne03(BH_PWORK* epw) { (void)epw; }
-void bhEne04(BH_PWORK* epw) { (void)epw; }
-void bhEne05(BH_PWORK* epw) { (void)epw; }
-void bhEne06(BH_PWORK* epw) { (void)epw; }
-void bhEne07(BH_PWORK* epw) { (void)epw; }
+/* bhEne04 now real (en04.c). bhEne05 now real (en05.c). bhEne06 now
+ * real (en06.c). bhEne07 now real (en07.c). */
 /* bhEne08 now real (en08.c). */
-void bhEne09(BH_PWORK* epw) { (void)epw; }
+/* bhEne09 now real (en09.c). */
 /* bhEne10 now real (en10.c). */
 /* bhEne11 now real (en11.c). */
 /* bhEne12 now real (en12.c). bhEne13 now real (en13.c). bhEne14 now
  * real (en14.c). */
 void bhEne15(BH_PWORK* epw) { (void)epw; }
 /* bhEne16 now real (en16.c). */
-void bhEne17(BH_PWORK* epw) { (void)epw; }
+/* bhEne17 now real (en17.c). */
 /* bhEne18 now real (en18.c). */
-void bhEne19(BH_PWORK* ewP) { (void)ewP; }
+/* bhEne19 now real (en19.c). */
 /* bhEne20 now real (en20.c). */
 /* bhEne21 now real (en21.c). */
-void bhEne22(BH_PWORK* epw) { (void)epw; }
-void bhEne23(BH_PWORK* epw) { (void)epw; }
+/* bhEne22 now real (en22.c). bhEne23 now real (en23.c). */
 /* bhEne24 now real (en24.c). bhEne25 now real (en25.c). */
-void bhEne26(BH_PWORK* epw) { (void)epw; }
+/* bhEne26 now real (en26.c). */
 /* bhEne27 now real (en27.c). bhEne28/bhSubpl now real (subpl.c). */
 /* bhEne29 now real (en29.c). */
 /* bhEne30 now real (en30.c). */
@@ -57,6 +54,11 @@ void bhEne53(BH_PWORK* epw) { (void)epw; }
  * placeholder we're skipping, matches the source. Stubbed here rather
  * than pulling in all of en03.c (6671 lines) for one dead function. */
 ATR_WORK* bhEne03_Collision(BH_PWORK* epw) { (void)epw; return NULL; }
+
+/* bhEne06_BR00 (en06.c) is fully commented-out in the original decomp
+ * (its body is disassembly notes only, en06.c:1727) — same "never
+ * reversed" shape as bhEne03_Collision above, not a gap we introduced. */
+void bhEne06_BR00(BH_PWORK* epw) { (void)epw; }
 
 /* ---- effects (effect.c) ---------------------------------------------- */
 /* effect.c itself compiles clean, but its bhJumpEffect[150] dispatch

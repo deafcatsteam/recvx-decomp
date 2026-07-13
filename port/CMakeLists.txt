@@ -490,6 +490,27 @@ if(RECVX_BUILD_GAME)
         ${RECVX_SRC}/ps2/veronica/prog/en18.c
         ${RECVX_SRC}/ps2/veronica/prog/en21.c
         ${RECVX_SRC}/ps2/veronica/prog/en29.c
+        # Enemy AI: bhEne02, bhEne04, bhEne05, bhEne06, bhEne07, bhEne09,
+        # bhEne17, bhEne19, bhEne22, bhEne23, bhEne26. All zero PS2 asm,
+        # all self-contained except en05.c/en07.c which need
+        # bhCalcModel (MdlPut.c)/bhCheckEnemies/bhCheckPlayer (hitchk.c)/
+        # bhSetMotion (Motion.c)/bhEne_GetPartsPos/bhEne_SetWeponAtr
+        # (zonzon1.c) — all already real. (en15.c deferred — its
+        # top-level helpers use unprefixed generic names like Init/
+        # Move/Die/Attack/Damage/Chase, higher collision risk than the
+        # bhEneNN_-prefixed pattern everything else follows; wants its
+        # own careful pass.)
+        ${RECVX_SRC}/ps2/veronica/prog/en02.c
+        ${RECVX_SRC}/ps2/veronica/prog/en04.c
+        ${RECVX_SRC}/ps2/veronica/prog/en05.c
+        ${RECVX_SRC}/ps2/veronica/prog/en06.c
+        ${RECVX_SRC}/ps2/veronica/prog/en07.c
+        ${RECVX_SRC}/ps2/veronica/prog/en09.c
+        ${RECVX_SRC}/ps2/veronica/prog/en17.c
+        ${RECVX_SRC}/ps2/veronica/prog/en19.c
+        ${RECVX_SRC}/ps2/veronica/prog/en22.c
+        ${RECVX_SRC}/ps2/veronica/prog/en23.c
+        ${RECVX_SRC}/ps2/veronica/prog/en26.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
