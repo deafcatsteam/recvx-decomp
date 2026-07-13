@@ -468,6 +468,9 @@ if(RECVX_BUILD_GAME)
         # game_room_stubs.c instead of pulling in en03.c's other 6671
         # lines for a dead function.
         ${RECVX_SRC}/ps2/veronica/prog/en08.c
+        # Enemy AI: bhEne16. Zero PS2 asm, fully self-contained (no
+        # external calls besides scePrintf).
+        ${RECVX_SRC}/ps2/veronica/prog/en16.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

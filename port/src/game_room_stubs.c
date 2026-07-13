@@ -30,7 +30,7 @@ void bhEne12(BH_PWORK* epw) { (void)epw; }
 void bhEne13(BH_PWORK* epw) { (void)epw; }
 void bhEne14(BH_PWORK* epw) { (void)epw; }
 void bhEne15(BH_PWORK* epw) { (void)epw; }
-void bhEne16(BH_PWORK* epw) { (void)epw; }
+/* bhEne16 now real (en16.c). */
 void bhEne17(BH_PWORK* epw) { (void)epw; }
 void bhEne18(BH_PWORK* epw) { (void)epw; }
 void bhEne19(BH_PWORK* ewP) { (void)ewP; }
