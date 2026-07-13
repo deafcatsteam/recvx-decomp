@@ -25,7 +25,7 @@ void bhEne07(BH_PWORK* epw) { (void)epw; }
 /* bhEne08 now real (en08.c). */
 void bhEne09(BH_PWORK* epw) { (void)epw; }
 /* bhEne10 now real (en10.c). */
-void bhEne11(BH_PWORK* epw) { (void)epw; }
+/* bhEne11 now real (en11.c). */
 void bhEne12(BH_PWORK* epw) { (void)epw; }
 void bhEne13(BH_PWORK* epw) { (void)epw; }
 void bhEne14(BH_PWORK* epw) { (void)epw; }
@@ -42,7 +42,7 @@ void bhEne23(BH_PWORK* epw) { (void)epw; }
 void bhEne26(BH_PWORK* epw) { (void)epw; }
 /* bhEne27 now real (en27.c). bhEne28/bhSubpl now real (subpl.c). */
 void bhEne29(BH_PWORK* ewP) { (void)ewP; }
-void bhEne30(BH_PWORK* epw) { (void)epw; }
+/* bhEne30 now real (en30.c). */
 void bhEne53(BH_PWORK* epw) { (void)epw; }
 /* bhEne54/bhEne55 now real (en54.c/en55.c). bhEne71 now real
  * (en71.c). bhEne_InitDamage now real (zonzon1.c). */
