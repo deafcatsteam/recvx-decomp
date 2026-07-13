@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI 7/34 + 2 shared helper libs; see this doc's "Phase 4 detail" section | ~20% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI roster **34/34 done**; save/load + crash sweep not started; see this doc's "Phase 4 detail" section | ~35% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1245,7 +1245,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 3 — `light.c` dynamic lighting | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ✅ Done — also pulled in `pwksub.c`/`effsub3.c`/new `njplus_coli.c` to close gaps | below |
 | Task 4.2 — Effects (`effect.c`) | 🟠 Backed out — bigger than scoped (~150 more handlers + real VU0/VU1 rendering-primitive work), see finding below | below |
-| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | 🟡 In progress — 7/34 enemies (`en71`/`en54`/`en55`/`en20`/`en10`/`en27`/`en28`) + 2 shared helper libraries (`zonzon.c`, `zonzon1.c`) | below |
+| Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (`ps2_McSaveFile.c`, `ps2_SaveScreen.c`, `ps2_SystemSaveScreen.c`) | ⬜ Not started | below |
 | Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
 
@@ -1449,40 +1449,60 @@ may be incomplete): `en01b.c`, `en02.c`, `en03.c`+`en03sub.c`, `en04.c`,
 `en19.c`, `en20.c`, `en21.c`, `en22.c`, `en24.c`, `en25.c`, `en27.c`,
 `en30.c`, `en54.c`, `en71.c`, plus shared helper `subpl.c`.
 
-- [x] **Step 1 (partial):** file-level `grep -c "asm"` confirmed zero for
-  every file actually attempted so far (listed below); the rest of the
-  roster (mostly 1500+-line files) not yet individually checked.
+- [x] **Step 1:** file-level `grep -c "asm"` confirmed zero for every one
+  of the 34 enemy dispatch files plus every helper file pulled in
+  (`en01sub.c`, `en01b.c`, `zonzon.c`, `zonzon1.c`, `hitchkl.c`,
+  `subpl.c`) — the entire enemy AI roster is asm-free.
 - [x] **Step 2:** `en71.c` (114 lines, smallest) picked and landed as the
   proof-of-pattern integration, plus `Motion.c`/`subpl.c` as its real
   dependencies (`bhSetMotion`, `bhEne28`).
-- [x] **Step 3/4 progress — 7/34 enemies real, 2 shared helper libraries
-  landed:**
-  - `en71.c` → `bhEne71` — done (+ `Motion.c`, `subpl.c`/`bhEne28`)
-  - `en54.c`/`en55.c` → `bhEne54`/`bhEne55` — done (+ `zonzon.c`, the
-    first shared enemy-AI helper library: wall/floor/water collision
-    wrappers, blood/fire/particle setup, motion-change helpers — needed
-    by most enemies, not just these two; also added `njScalor2` to
-    `ninja_3d.c`)
-  - `en20.c`/`en10.c`/`en27.c` → `bhEne20`/`bhEne10`/`bhEne27` — done
-    (+ `zonzon1.c`, a second shared helper library: SE/voice triggers,
-    blood/mince/acid effect variants, damage calc — needed
-    `njTranslateEx`/`njScaleEx`/`njRotateEx` added to `ninja_3d.c`, and
-    `hitchkl.c`, a line/segment collision helper set distinct from
-    `hitchk.c`'s box/wall checks)
-  - `en08.c` — **deferred**, needs `bhEne03_Collision` from the
-    not-yet-compiled 6671-line `en03.c`
-  - Remaining ~27 enemies not yet attempted — mostly 1500+-line files
-    (`en01.c` alone is 9945 lines) or small `*sub.c` helper files whose
-    payoff depends on their much-larger parent file also landing
-    (`en01sub.c`/`en02sub.c`/`en03sub.c`/`en05sub.c`/`en06sub.c`/
-    `en13sub.c`/`en17sub.c`) — continue with the same procedure, next
-    likely candidates by size: `en08.c` (needs `en03.c` first, biggest
-    unlock since `en03.c` gates both), then the 1500-2200-line tier
-    (`en16.c`, `en18.c`, `en24.c`, `en25.c`, `en01b.c`, `en11.c`,
-    `en30.c`).
-- [ ] **Step 5:** not reached — most of the roster still stubbed.
-- [x] **Step 6:** status table above updated to "7/34 enemies" (not
-  rounded up).
+- [x] **Step 3/4: all 34/34 enemies real. Done.**
+  - `en71.c` → `bhEne71` (+ `Motion.c`, `subpl.c`/`bhEne28`)
+  - `en54.c`/`en55.c` → `bhEne54`/`bhEne55` (+ `zonzon.c`, first shared
+    helper library: wall/floor/water collision wrappers, blood/fire/
+    particle setup, motion-change helpers; added `njScalor2`)
+  - `en20.c`/`en10.c`/`en27.c` → `bhEne20`/`bhEne10`/`bhEne27` (+
+    `zonzon1.c`, second shared helper library: SE/voice triggers,
+    blood/mince/acid effects, damage calc; added `njTranslateEx`/
+    `njScaleEx`/`njRotateEx`; + `hitchkl.c`, line/segment collision)
+  - `en08.c` → `bhEne08` (its `bhEne03_Collision` dep is UNIMPLEMENTED
+    in the original decomp too — scePrintf + no return, en03.c:5046 —
+    stubbed rather than pulling in en03.c just for that)
+  - `en16.c` → `bhEne16` (fully self-contained, no deps beyond scePrintf)
+  - `en24.c`/`en25.c` → `bhEne24`/`bhEne25` (same, self-contained)
+  - `en11.c`/`en30.c` → `bhEne11`/`bhEne30` (same, self-contained)
+  - `en12.c`/`en13.c`/`en14.c`/`en18.c`/`en21.c`/`en29.c` → six more,
+    all self-contained
+  - `en02.c`/`en04.c`/`en05.c`/`en06.c`/`en07.c`/`en09.c`/`en17.c`/
+    `en19.c`/`en22.c`/`en23.c`/`en26.c` → eleven more in one batch;
+    `en05.c`/`en07.c` needed `bhCalcModel`/`bhCheckEnemies`/
+    `bhCheckPlayer`/`bhSetMotion`/`bhEne_GetPartsPos`/
+    `bhEne_SetWeponAtr`, all already real from earlier tasks;
+    `bhEne06_BR00` (en06.c:1727) turned out fully commented-out in the
+    decomp (disassembly notes only, no C body ever generated) — same
+    "never reversed" shape as `bhEne03_Collision`, stubbed to match
+  - `en15.c` → `bhEne15` **and** `bhEne53` (both dispatch entries share
+    this one file) — uses unprefixed generic helper names (`Init`/
+    `Move`/`Die`/`Attack`/`Damage`/`Chase`/`Stand`/etc, all non-static)
+    instead of the `bhEneNN_`-prefixed convention everything else
+    follows; checked every one against the whole `prog/` and
+    `port/src` tree for collisions before adding — none found
+  - `en01.c` (9945 lines, biggest file) → `bhEne01`, needed two helper
+    files: `en01sub.c` (3202 lines, defines `bhEne01Head`/`Arm`/`Leg`/
+    `Cap`/`Worm`/`Bom`/`Scope`/`Parent`) and `en01b.c` (1983 lines,
+    defines the `bhEne01_*TypeB` dispatch arrays + `bhEne01_RotNeck`);
+    also needed `npSetAllMatColor`, added as a 5th verbatim extraction
+    to `njplus_coli.c` (`njplus.c` lines 1375-1469, pure C, no asm)
+  - `en03.c` (6671 lines, last of the 34) → `bhEne03`, fully
+    self-contained; its `bhEne03_Collision` is the same
+    UNIMPLEMENTED-in-source function `en08.c` depends on — the stub
+    that used to live in `game_room_stubs.c` was deleted once the real
+    (still scePrintf-only) definition came from `en03.c` itself
+- [x] **Step 5:** all 34 `bhEneNN` stubs deleted from
+  `game_room_stubs.c`'s "enemy AI handlers" block — only
+  `bhEne06_BR00` remains as a stub, and it's a genuine
+  never-reversed decomp gap, not an integration gap.
+- [x] **Step 6:** status table above updated to "34/34 enemies — done".
 
 **Behavioral verification note:** compiling an enemy file only proves it
 links and doesn't crash on load — confirming each enemy's *actual combat
