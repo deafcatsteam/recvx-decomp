@@ -1446,7 +1446,6 @@ void bhEff_Sub371(O_WRK* op);
 void bhEff_Sub372(O_WRK* op);
 void bhEff_Sub373(O_WRK* op);
 void bhEff_Sub398(O_WRK* op);
-O_WRK* bhEff_AllocOwork();
 void bhEff_PtclSpriteDraw(O_WRK* op);
 void bhEff_LineDraw(O_WRK* op);
 void bhEff_SetSprite(O_WRK* op, UV_WORK* uvp, int mode);

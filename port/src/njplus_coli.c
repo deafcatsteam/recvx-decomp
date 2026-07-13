@@ -14,7 +14,11 @@
  * bhCheckCapCol2Capsule.
  *
  * npSetAllMatColor: verbatim copy of njplus.c lines 1375-1469, needed
- * by en01.c. Source comments/formatting preserved from the decomp.
+ * by en01.c.
+ *
+ * npCopyVlist: verbatim copy of njplus.c lines 1722-1738, needed by
+ * effsub1b.c (Task 4.2). Source comments/formatting preserved from the
+ * decomp.
  */
 
 #include "njplus.h"
@@ -618,6 +622,33 @@ void npDistanceP2C(NJS_POINT3* pos, NJS_CAPSULE* cap, NJS_POINT3* htp)
         htp->y = pos->y;
         htp->z = pos->z;
     }
+}
+
+/* Verbatim copy of njplus.c lines 1722-1738 (npCopyVlist) — also pure C
+ * ("100% matching!" in the decomp), needed by effsub1b.c (Task 4.2).
+ * Only calls njMemCopy4, already real (stub_game.c). */
+// 100% matching!
+int npCopyVlist(int* dstp, int* srcp)
+{
+    HDR_PS* pPs;
+    int nb;
+
+    pPs = (HDR_PS*)srcp;
+
+    if (pPs->ucType == 41)
+    {
+        nb = ((*(int*)&pPs->usIndexOfs >> 16) * 24) + 12;
+
+        njMemCopy4(dstp, srcp, nb / 4);
+    }
+    else
+    {
+        nb = (pPs->usIndexMax * 32) + 72;
+
+        njMemCopy4(dstp, srcp, nb / 4);
+    }
+
+    return nb;
 }
 
 /* Verbatim copy of njplus.c lines 1375-1469 (npSetAllMatColor) — also

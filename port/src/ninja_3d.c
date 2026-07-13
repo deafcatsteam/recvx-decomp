@@ -333,6 +333,10 @@ Float njSqrt(Float n) { return sqrtf(n); }
 /* ps2_NaMath.c:258 — VU0 vrsqrt. */
 Float njInvertSqrt(Float n) { return (n > 0.0f) ? 1.0f / sqrtf(n) : 0.0f; }
 
+/* ps2_NaMath.c:224 njFraction is "100% matching!" plain C (return n -
+ * floorf(n)) — verbatim copy, needed by effsub0.c (Task 4.2). */
+Float njFraction(Float n) { return n - floorf(n); }
+
 /* ps2_NaMatrix.c:649 — composition is Z, then Y, then X (matches the
  * real C body exactly). */
 void njRotateXYZ(NJS_MATRIX* m, Angle angx, Angle angy, Angle angz) {

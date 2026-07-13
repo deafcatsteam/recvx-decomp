@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c`) scoped and deferred (bigger than estimated); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep not started; see this doc's "Phase 4 detail" section | ~45% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep not started; see this doc's "Phase 4 detail" section | ~55% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1244,7 +1244,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 2 — Lighting setters + CPU shading | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 3 — `light.c` dynamic lighting | ✅ Done | `2026-07-12-recvx-p4-collision-lighting-plan.md` |
 | Task 4.1 — Combat core (`weapon.c` + `playpch.c`) | ✅ Done — also pulled in `pwksub.c`/`effsub3.c`/new `njplus_coli.c` to close gaps | below |
-| Task 4.2 — Effects (`effect.c`) | 🟠 Backed out — bigger than scoped (~150 more handlers + real VU0/VU1 rendering-primitive work), see finding below | below |
+| Task 4.2 — Effects (`effect.c`) | ✅ Done — `effect.c` + all 8 `effsub*.c` (0/1/1b/2/3/4/5/6) compiled real; rendering primitives (`njDraw*3D*`/`Ps2Shadow*`/`njCnkModDrawModel`/particle draw) no-op, see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
 | Task 4.5 — Full-playthrough crash sweep | ⬜ Not started | below |
@@ -1385,41 +1385,101 @@ all outstanding work lives in one place, per the project owner's own call
 - [x] **Step 1:** `comm -12` shadow-set check — confirmed 5-function
   overlap (`bhClearEffect`, `bhDrawEffect`, `bhSetEffect`, `bhSetEffectTb`,
   `bhSetShadow`).
-- [x] **Step 2:** Added `effect.c` to `RECVX_GAME_SOURCES`.
-- [x] **Step 3 finding — bigger than scoped, backed out:** `effect.c`
-  itself compiles (one pre-existing decomp-header bug hit and fixed along
-  the way — see below), but its `bhJumpEffect[150]` dispatch table
-  transitively needs ~150 more `bhEff*` handlers spread across
-  `effsub1.c`/`effsub1b.c`/`effsub2.c`/`effsub4.c`/`effsub5.c` (~21k more
-  lines total — `wc -l`: 7972+2121+4724+2136+3979 — all zero-asm at the
-  file level per grep, so likely tractable, but not investigated
-  function-by-function), **plus** several real VU0/VU1
-  rendering-primitive entry points that are new rendering work, not
-  stub-replacement: `njRotateEx`/`njScaleEx`/`njTranslateEx`
-  (`ps2_NaMatrix.c`), `njDrawLine3D`/the `njDrawPolygon3DEx` family/the
-  `njDrawTexture3DEx` family (`ps2_NaGraphics3D.c`/`ps2_NaDraw.c`),
-  `Ps2Shadow*` (`ps2_dummy.c`), `njCnkModDrawModel`
-  (`ps2_NinjaCnk.c`) — these would each need a CPU reimplementation
-  through the `ninja_cnk.c`-style `recvx_gfx_draw_tri3d` backend, same
-  scale of work as `cnk_shade_vertex` was for lighting. This is roughly
-  as large as Task 4.3's entire enemy roster, not a quick add — **backed
-  out of `RECVX_GAME_SOURCES` for this pass**, left as its own properly
-  scoped follow-up (not detailed here — would need its own task
-  breakdown once the rendering-primitive reimplementation shape is
-  known).
-- **Pre-existing decomp bug found+fixed along the way:** `effect.c:1775`
-  defines `bhDrawThunder` as `static`, but `include/ps2/veronica/prog/
-  effect.h:40` declared it non-static — a hard C11 error ("static
-  declaration follows non-static declaration") that MWCC apparently
-  tolerated but GCC doesn't. Confirmed via grep that nothing outside
-  `effect.c` calls it, so this is a decomp header inaccuracy, not
-  intentional API. Reverted the attempted fix (removing the header
-  prototype) together with backing out `effect.c` itself, since it's
-  moot while the file isn't compiled — **redo this fix** (declare it
-  `static` in `effect.h`, or make it non-static in `effect.c` — either
-  works since nothing else references it) when actually attempting this
-  task again.
-- [ ] **Step 4-6:** not reached — deferred to the follow-up task above.
+- [x] **Step 2:** Added `effect.c` + all 8 `effsub*.c` files
+  (`effsub0/1/1b/2/3/4/5/6.c` — `effsub3.c` was already in the build from
+  Task 4.1) to `RECVX_GAME_SOURCES`. Re-scoping note: the earlier "~150
+  more handlers" estimate was pessimistic — `bhJumpEffect[150]` has 64
+  `bhEffDmy` no-op slots, so only 77 unique handlers were actually
+  needed, plus two more dispatch tables (`bhJumpEffect0[100]` for IDs
+  150-249, `bhJumpEffect3[50]` for IDs 300-349) not mentioned in the
+  original finding — between them these cover every `bhEffNNN` handler
+  across all 8 `effsub*.c` files, i.e. essentially the whole subsystem
+  needed to be compiled together, not a subset.
+- [x] **Step 3 — compile-error fixes:**
+  - `effect.c:1775` `bhDrawThunder` — decomp header (`effect.h:40`)
+    declared it non-static but the definition is `static`; nothing
+    outside `effect.c` calls it (grep-confirmed). Removing the header
+    prototype alone wasn't enough — the call site at `effect.c:944`
+    (before the `static` definition at line 1775) then creates its own
+    implicit non-static declaration, same conflict via a different path.
+    Fixed by adding a `static void bhDrawThunder();` forward declaration
+    directly above `bhDrawEffect` (effect.c), ahead of first use.
+  - `effsub4.c:1863` `bhEff_AllocOwork` — same class of bug
+    (`effsub4.h:1449` declared it non-static, definition is `static`,
+    nothing else calls it). Fixed by deleting the stray header
+    prototype (no forward-decl needed — the only reference is the
+    definition itself).
+- [x] **Step 4 — link-gap fixes**, after the two compile fixes above the
+  build reached link stage cleanly for every `effsub*.c`. Undefined
+  references fell into three buckets:
+  - **Real, cheap, implemented for real:** `njFraction` (`ps2_NaMath.c:224`,
+    "100% matching!" one-liner `n - floorf(n)`) added to `ninja_3d.c`
+    alongside `njSqrt`/`njInvertSqrt`. `npCopyVlist` (`njplus.c:1722`,
+    "100% matching!", only calls already-real `njMemCopy4`) extracted
+    into `njplus_coli.c` following that file's existing
+    extract-from-njplus.c precedent (same as `npSetAllMatColor`).
+    `bhDrawScopeNumber` (sniper-scope HUD digits) and 8 more
+    `bhSetScreenFade`/`bhControlCinesco`/etc functions all live in
+    `screen.c` (1044 lines, zero PS2 asm, fully self-contained) — added
+    the whole file to `RECVX_GAME_SOURCES` and deleted the now-shadowed
+    stubs from `stub_game.c`/`game_room_stubs.c`.
+  - **Real but not worth pulling in:** `CallYakkyouSe`/`StopSystemSe`
+    (shell-casing SFX / stop-BGM triggers) live in `sdfunc.c` (3466
+    lines) — tried adding it, but it transitively requires the real
+    `sceMpeg`/ADX movie-audio SDK types (`sceMpegCbDataStr` etc in
+    `ps2_MovieFunc.h`), an unrelated and much bigger gap. Backed
+    `sdfunc.c` back out; `CallYakkyouSe`/`StopSystemSe` get clearly-
+    commented no-op stubs instead (affected SFX just don't play).
+  - **Genuine new rendering work, scoped out (as originally predicted):**
+    `njDrawLine3D`, the `njDrawPolygon3DEx` family, the
+    `njDrawTexture3DEx`/`njDrawTexture3DHEx`/`njDrawTexture` family,
+    `njSetTextureNumG`, `njGetSystemAttr`/`njSetSystemAttr`,
+    `njCnkModDrawModel`/`lCnkModClipFace`, `Ps2Shadow*` (5 functions),
+    `njPtclPolygonStart`/`njPtclDrawPolygon`/`njPtclPolygonEnd`,
+    `njPtclSpriteStart`/`njPtclDrawSprite`/`njPtclSpriteEnd`,
+    `_nj_screen_`, `PS2_Render_Tex_Sub`/`PS2_Render_tex_sub_flag`/
+    `Ps2CalcScreenCone`/`njRenderTextureNum(G)`/`njSetRenderWidth`/
+    `njSetScreenProjection` (screen.c's render-to-texture chain) — all
+    got clearly-commented no-op stubs in `game_room_stubs.c`, same
+    "logic real, pixels deferred" shape as `light.c`'s Multi-light.
+    `njRotateEx`/`njScaleEx`/`njTranslateEx` (originally flagged as part
+    of this gap) turned out to already be real, added to `ninja_3d.c`
+    back in Task 4.3's `zonzon1.c` integration.
+  - **Duplicate-symbol cleanup:** `bhSetFontTexture` had an earlier
+    hand-rolled substitute in `game_texture_stubs.c` (written before
+    `effect.c` compiled, hardcoding "skip 4 blocks" since `ef_info[]`
+    wasn't available) — deleted now that the real `effect.c` version
+    (which reads the real `ef_info[21]` table) is compiled; the hardcode
+    turned out to match anyway (4 of `ef_info`'s 21 entries have
+    `flg & 1` set).
+- **Real bug found+fixed (x64 pointer truncation), not a decomp
+  inaccuracy:** first Xvfb smoke-test run segfaulted in
+  `bhSetMemPvpTexture` reading a garbage `datp` pointer
+  (`0xffffffffb8094120` — a sign-extended 32-bit value). Root cause:
+  `effect.c`'s `bhInitEffect`/`bhSetFontTexture` both 32-bit-align a
+  pointer via `(unsigned char*)(((int)dp + 31) & ~0x1F)` — harmless on
+  the real PS2 (32-bit pointers) but on x64 this truncates `dp` to its
+  low 32 bits before rebuilding the pointer, losing the high bits
+  entirely. Same bug class already fixed elsewhere in this codebase
+  (`system.c`'s `ALIGN_UP`/`ALIGN_DOWN` macro usage) — fixed both call
+  sites the same way: `(unsigned char*)ALIGN_UP((uintptr_t)dp,
+  (uintptr_t)32)`. This was invisible until now because `effect.c`
+  itself was never compiled before this task.
+- [x] **Step 5:** Deleted all now-real shadowed stubs: `bhClearEffect`/
+  `bhSetEffect`/`bhSetEffectTb`/`bhSetShadow`/`bhDrawEffect` (effect.c),
+  `bhInitEffect`/`bhControlEffect`/`bhDeleteYakkyou` (effect.c,
+  `stub_game.c`), `bhSetScreenFade`/`bhControlScreenFade`/
+  `bhDrawScreenFade`/`bhSetScreenSaver`/`bhControlScreenSaver`/
+  `bhInitScreenSaver`/`bhDrawScreenSaver`/`Ps2_rendertex_initflag`
+  (screen.c, `stub_game.c`), `bhControlCinesco`/`bhDrawCinesco`/
+  `bhDrawScope`/`bhDrawThermometer`/`bhDrawSmallScreenRenderTexture`/
+  `bhDrawFullScreenRenderTexture` (screen.c, `game_room_stubs.c`),
+  `bhSetFontTexture` substitute (effect.c, `game_texture_stubs.c`).
+- [x] **Step 6:** Build clean (zero errors/warnings-as-undefined-refs).
+  Xvfb smoke test: same known item-select-screen ceiling as prior tasks
+  (`timeout` exit 124, `[boot] clean exit`), no crash.
+- [x] **Step 7:** Status table + progress overview updated above,
+  committed.
 
 ---
 

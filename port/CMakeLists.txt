@@ -276,9 +276,6 @@ if(RECVX_BUILD_GAME)
         # RDX_LNK.AFS so RequestReadIsoFile("rm_NNNN.rdx") can find the
         # right AFS entry. Pure data, no function bodies.
         ${RECVX_SRC}/ps2/veronica/prog/ps2_dvd_image.c
-        # NOT pulling effect.c -- it transitively requires ~250 bhEff*
-        # particle handlers, 3D model functions, and ninja math primitives
-        # that aren't in our build.
         # Text/font rendering: bhDispItemName, bhDispMessage, bhDispFont,
         # bhDispTime + bhSetMessage. Drives the bottom item-name strip
         # ("Grenade Launcher"), status messages, and the inventory's
@@ -416,9 +413,9 @@ if(RECVX_BUILD_GAME)
         # game_room_stubs.c (see git history).
         ${RECVX_SRC}/ps2/veronica/prog/pwksub.c
         # Effect-drawing sub-functions (gun sparks, etc.) that weapon.c's
-        # hit-detection calls into (bhSetEffGunSpark). Zero PS2 asm. Head
-        # start on the Task 4.2 effects subsystem — the rest of it
-        # (effect.c, effsub2.c) lands as its own task.
+        # hit-detection calls into (bhSetEffGunSpark). Zero PS2 asm. Rest
+        # of the effects subsystem (effect.c + effsub0/1/1b/2/4/5/6.c)
+        # added below as Task 4.2.
         ${RECVX_SRC}/ps2/veronica/prog/effsub3.c
         # Motion blend/speed-curve helpers (bhSetMotion/SetMtnFast(Hokan)/
         # SetMtnNormal(Hokan)/SetMtnSlow(Hokan)/AngZyxToYzx/AngYzxToZyx/
@@ -565,6 +562,33 @@ if(RECVX_BUILD_GAME)
         # (not the stub library) because gdFsOpen needs the real KATANA
         # GDFS_HANDLE type from sg_gd.h, which isn't compat-shadowed.
         ${CMAKE_CURRENT_SOURCE_DIR}/src/save_mc_shim.c
+        # Task 4.2: effects (effect.c). bhJumpEffect/bhJumpEffect0/
+        # bhJumpEffect3 dispatch tables cover 77 unique real handlers
+        # (rest are bhEffDmy no-ops) spread across effsub0/1/1b/2/4/5/6.c
+        # (effsub3.c already compiled above, for weapon.c's gun sparks).
+        # All zero PS2 asm. njRotateEx/njScaleEx/njTranslateEx already
+        # real (ninja_3d.c, see zonzon1.c comment above). The remaining
+        # rendering-primitive entry points these files call
+        # (njDrawLine3D/Ex, the njDrawPolygon3DEx family, the
+        # njDrawTexture3DEx/HEx family in ps2_NaDraw.c/ps2_NaGraphics3D.c,
+        # Ps2Shadow* in ps2_dummy.c, njCnkModDrawModel in ps2_NinjaCnk.c)
+        # are NOT reimplemented this pass — same as light.c's Multi-light
+        # rendering, they get clearly-commented no-op stubs in
+        # game_room_stubs.c below. Effect *state* (particle timers,
+        # blood/spark/explosion bookkeeping, screen shake, etc.) is real;
+        # the actual pixels for those specific draw calls are not — full
+        # CPU rendering-primitive reimplementation is its own follow-up.
+        ${RECVX_SRC}/ps2/veronica/prog/effect.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub0.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub1.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub1b.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub2.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub4.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub5.c
+        ${RECVX_SRC}/ps2/veronica/prog/effsub6.c
+        # HUD sniper-scope zoom number overlay (bhDrawScopeNumber) that
+        # effsub1b.c calls. Zero PS2 asm.
+        ${RECVX_SRC}/ps2/veronica/prog/screen.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

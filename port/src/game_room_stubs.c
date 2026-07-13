@@ -60,24 +60,54 @@
 void bhEne06_BR00(BH_PWORK* epw) { (void)epw; }
 
 /* ---- effects (effect.c) ---------------------------------------------- */
-/* effect.c itself compiles clean, but its bhJumpEffect[150] dispatch
- * table transitively needs ~150 more bhEff* handlers spread across
- * effsub1.c/effsub1b.c/effsub2.c/effsub4.c/effsub5.c (~21k more lines,
- * all zero-asm at the file level per grep — same tractable shape as
- * Task 4.1) plus several real VU0/VU1 rendering-primitive entry points
- * (njRotateEx/njScaleEx/njTranslateEx in ps2_NaMatrix.c,
- * njDrawLine3D, the njDrawPolygon3DEx family, and the njDrawTexture3DEx
- * family in ps2_NaGraphics3D.c/ps2_NaDraw.c, Ps2Shadow* in ps2_dummy.c,
- * njCnkModDrawModel in ps2_NinjaCnk.c) that would need their own CPU
- * reimplementations through the ninja_cnk.c-style recvx_gfx_draw_tri3d
- * backend — real rendering work, not a stub-replacement. Scoped as its
- * own follow-up task, not attempted this pass. bhSetExplosion now real
- * (weapon.c). */
-void bhClearEffect(void)              {}
-int  bhSetEffect(int effno, POINT* pnt, unsigned char* lkp, int lkono)
-                                      { (void)effno;(void)pnt;(void)lkp;(void)lkono; return 0; }
-int  bhSetEffectTb(EF_WORK* efp, NJS_POINT3* off, unsigned char* lkp, int lkono)
-                                      { (void)efp;(void)off;(void)lkp;(void)lkono; return 0; }
+/* bhClearEffect/bhSetEffect/bhSetEffectTb/bhSetShadow/bhDrawEffect now
+ * real (effect.c + effsub0/1/1b/2/3/4/5/6.c, Task 4.2). bhSetExplosion
+ * now real (weapon.c). Effect *state* (particle timers, blood/spark/
+ * explosion bookkeeping) is real; the rendering primitives below that
+ * those files call are not — same "logic real, pixels deferred" shape
+ * as light.c's Multi-light. Real CPU reimplementation of these through
+ * a ninja_cnk.c-style recvx_gfx_draw_tri3d backend is its own
+ * follow-up task, not attempted this pass. */
+void njDrawLine3D(NJS_POINT3COL* p, Int n, Uint32 attr) { (void)p;(void)n;(void)attr; }
+void njDrawPolygon3DEx(NJS_POLYGON_VTX* p, Int count, Int trans) { (void)p;(void)count;(void)trans; }
+void njDrawPolygon3DExStart(Int trans)   { (void)trans; }
+void njDrawPolygon3DExSetData(NJS_POLYGON_VTX* p, Int count) { (void)p;(void)count; }
+void njDrawPolygon3DExEnd(void)          {}
+void njDrawTexture3DEx(NJS_TEXTURE_VTX* p, Int count, Int trans) { (void)p;(void)count;(void)trans; }
+void njDrawTexture3DEx1P(NJS_TEXTURE_VTX* p, int count, int trans) { (void)p;(void)count;(void)trans; }
+void njDrawTexture3DHEx(NJS_TEXTUREH_VTX* p, int count, int trans) { (void)p;(void)count;(void)trans; }
+void njDrawTexture(NJS_TEXTURE_VTX* polygon, Int count, Int tex, Int flag)
+                                      { (void)polygon;(void)count;(void)tex;(void)flag; }
+Sint32 njSetTextureNumG(Uint32 globalIndex) { (void)globalIndex; return 0; }
+void njGetSystemAttr(NJS_SYS_ATTR* attr) { (void)attr; }
+void njSetSystemAttr(NJS_SYS_ATTR* attr) { (void)attr; }
+void njCnkModDrawModel(NJS_CNK_MODEL* model) { (void)model; }
+int  lCnkModClipFace = 0;
+void Ps2ShadowStart(void)                {}
+void Ps2ShadowDraw(void)                 {}
+void Ps2ShadowMain0(void)                {}
+void Ps2ShadowMain1(void)                {}
+void Ps2ShadowEnd(void)                  {}
+void njPtclPolygonStart(Uint32 col)      { (void)col; }
+void njPtclPolygonEnd(void)              {}
+void njPtclDrawPolygon(NJS_POINT3* p, Sint32 n, Float h) { (void)p;(void)n;(void)h; }
+void njPtclSpriteStart(Sint32 texid, Uint32 col, Sint32 flag) { (void)texid;(void)col;(void)flag; }
+void njPtclSpriteEnd(void)               {}
+void njPtclDrawSprite(NJS_POINT3* p, Sint32 n, Float w, Float h) { (void)p;(void)n;(void)w;(void)h; }
+NJS_SCREEN _nj_screen_ = {0};
+void PS2_Render_Tex_Sub(void)            {}
+unsigned int PS2_Render_tex_sub_flag = 0;
+void Ps2CalcScreenCone(void)             {}
+void njRenderTextureNum(Uint32 n)        { (void)n; }
+void njRenderTextureNumG(Uint32 globalIndex) { (void)globalIndex; }
+void njSetRenderWidth(Uint32 nWidth)     { (void)nWidth; }
+void njSetScreenProjection(float dist)   { (void)dist; }
+/* CallYakkyouSe/StopSystemSe (sdfunc.c) are sound-effect triggers (shell-
+ * casing SFX, stop looping BGM) — pulling sdfunc.c itself drags in the
+ * real sceMpeg/ADX movie-audio SDK headers (ps2_MovieFunc.h), a much
+ * bigger and unrelated gap. No-op: affected SFX simply don't play. */
+void CallYakkyouSe(NJS_POINT3* pPos, int SeNo) { (void)pPos;(void)SeNo; }
+void StopSystemSe(void)                  {}
 
 /* ---- player / model / motion (player.c, MdlPut.c, motion) ------------ */
 /* bhActionWeapon/bhObjWpn now real (weapon.c). */
@@ -87,18 +117,12 @@ void bhControlMask(BH_PWORK* pp)      { (void)pp; }
 void bhInitMask(BH_PWORK* pp)         { (void)pp; }
 /* bhInitRoomChangePlayer now real (player.c). bhSetMotion now real
  * (Motion.c). */
-int  bhSetShadow(char* jtb, unsigned char* lkp, int lkono, float sx, float sy, float sz)
-                                      { (void)jtb;(void)lkp;(void)lkono;(void)sx;(void)sy;(void)sz; return 0; }
 
 /* ---- game.c draw-path extras (cinesco bars, sniper scope, render-to-
  * texture, mirrors, screen light control) — no-op for now -------------- */
-void bhControlCinesco(void)              {}
-void bhDrawCinesco(void)                 {}
-void bhDrawEffect(void)                  {}
-void bhDrawScope(void)                   {}
-void bhDrawThermometer(void)             {}
-void bhDrawSmallScreenRenderTexture(void) {}
-void bhDrawFullScreenRenderTexture(void)  {}
+/* bhControlCinesco/bhDrawCinesco/bhDrawScope/bhDrawThermometer/
+ * bhDrawSmallScreenRenderTexture/bhDrawFullScreenRenderTexture now real
+ * (screen.c, Task 4.2). */
 void njMirror(NJS_MATRIX* m, NJS_PLANE* pl) { (void)m;(void)pl; }
 void njSetCheapShadowMode(Int mode)      { (void)mode; }
 void njSetCnkBlendMode(Uint32 attr)      { (void)attr; }

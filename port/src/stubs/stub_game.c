@@ -94,7 +94,8 @@ int  bhControlDoor(void)     { return 0; }
 void bhExitDoor(void)        {}
 int  bhReadDoorData(void)    { return 0; }
 /* bhInitObjItm now real (objitm.c); bhInitEnemy now real (eneset.c). */
-void bhInitEffect(void)      {}
+/* bhInitEffect / bhControlEffect / bhDeleteYakkyou now real (effect.c,
+ * Task 4.2). */
 /* bhInitCamera now real (camera.c). */
 /* bhInitPlayer / bhResetPlayer / bhStandPlayerMotion now real (player.c). */
 void bhInitEvent(void)       {}
@@ -108,20 +109,14 @@ void bhInitEvent(void)       {}
  * bhCopyMainmem2Texmem / bhCopyTexmem2MainmemSub / bhGarbageTexture
  * all moved to the real ps2_texture.c (now in RECVX_GAME_SOURCES). */
 void bhControlGameOver(void) {}
-void bhControlEffect(void)   {}
 void bhControlSpEvtComputer(void) {}
 void bhKeepSpEvtComputer(void)    {}
-void bhSetScreenFade(unsigned int argb, float sec) { (void)argb;(void)sec; }
-void bhControlScreenFade(void) {}
-void bhDrawScreenFade(void)    {}
-void bhSetScreenSaver(int a, float b) { (void)a;(void)b; }
-void bhControlScreenSaver(void)       {}
-void bhInitScreenSaver(void)          {}
-void bhDrawScreenSaver(void)          {}
+/* bhSetScreenFade / bhControlScreenFade / bhDrawScreenFade /
+ * bhSetScreenSaver / bhControlScreenSaver / bhInitScreenSaver /
+ * bhDrawScreenSaver now real (screen.c, Task 4.2). */
 /* bhStFlg / bhCrFlg / bhCkFlg now live in src/ps2/veronica/prog/flag.c —
  * pulled into RECVX_GAME_SOURCES. */
 /* bhSetPad now real (pad.c). */
-void bhDeleteYakkyou(void)            {}
 /* bhMesLen, bhDispMessage(Ex), bhDispTime -- now from real message.c */
 
 /* bhDispItemName, bhSetMessage, bhDispMessage etc. -- now provided by
@@ -388,7 +383,7 @@ void*        _nj_vertex_buf_;
 int          BackColorFlag;
 int          Ps2_albinoid_flag;
 int          Ps2_ice_flag;
-int          Ps2_rendertex_initflag;
+/* Ps2_rendertex_initflag now defined by screen.c (Task 4.2). */
 unsigned int Ps2_pad;
 /* WpnTab now defined by player.c. */
 

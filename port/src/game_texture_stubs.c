@@ -933,57 +933,9 @@ void recvx_pump_pad(void) {
  * Called from main_pc.c per-frame, after recvx_pump_pad. */
 extern S_WORK swork;
 
-/* ------------------------------------------------------------------ */
-/* Real bhSetFontTexture: mirrors effect.c:115 without depending on    */
-/* effect.c's ef_info[] table. Loads SYSTEM.AFS file 1's PVP pack into */
-/* sys->ef_tlist so EVERY text draw (Adv menus, inventory tabs, status */
-/* messages, character names) has real font glyphs to sample.          */
-/* ------------------------------------------------------------------ */
-extern int  bhSetMemPvpTexture(void* tlist, unsigned char* dp, int);
-extern void recvx_log(const char* tag, const char* fmt, ...);
-
-void bhSetFontTexture(void* datp) {
-    extern SYS_WORK* sys;
-    if (!datp) {
-        recvx_log("bh", "bhSetFontTexture: NULL datp (no font load)");
-        return;
-    }
-    if (sys->ss_flg & 0x40) {
-        return;  /* idempotent — real impl gates on this same bit */
-    }
-    unsigned char* buf = (unsigned char*)datp;
-    int blksz = *(int*)buf;
-    unsigned char* dp = buf + 4;
-    /* Skip 4 effect data blocks (ef_info[] entries with flg & 1 in
-     * effect.c — hardcoded since that table isn't compiled). */
-    for (int i = 0; i < 4; ++i) {
-        dp += blksz;
-        blksz = *(int*)dp;
-        dp += 4;
-    }
-    /* 32-byte align relative to buf, not absolute pointer. bhGetFreeMemory
-     * uses calloc (16-byte alignment) on x64, so absolute-pointer alignment
-     * would land ~16 bytes past the intended file offset. */
-    int dp_off = (int)(dp - buf);
-    int aligned = (dp_off + 31) & ~31;
-    unsigned char* pvp = buf + aligned;
-
-    unsigned int magic = *(unsigned int*)pvp;
-    if (magic != 0x00494C50u && magic != 0x324D4954u) {
-        recvx_log("bh",
-            "bhSetFontTexture: magic check FAILED @off=%d magic=0x%08x",
-            aligned, magic);
-        return;
-    }
-    sys->ef_tlist.textures = sys->ef_tex;
-    sys->ef_tlist.nbTexture = 0;
-    sys->ef_ct = bhSetMemPvpTexture(&sys->ef_tlist, pvp, 0);
-    sys->ef_tlist.nbTexture = 4;
-    sys->ss_flg |= 0x40;
-    recvx_log("bh",
-        "bhSetFontTexture OK: pvp @off=%d magic=0x%08x -> %d textures",
-        aligned, magic, sys->ef_ct);
-}
+/* bhSetFontTexture now real (effect.c, Task 4.2) — uses the actual
+ * ef_info[] table instead of this file's prior hand-rolled hardcoded-4
+ * substitute. */
 
 /* Load ITEM1.AFS file 145 — the inventory texture pack — into sys->subtxp
  * and run SbsTextureInit so swork.subtx_list gets populated. bup_00.c does

@@ -87,7 +87,7 @@ void bhInitEffect()
     
     sys->ef_tlist.nbTexture = 0;
     
-    sys->ef_ct = bhSetMemPvpTexture(&sys->ef_tlist, (unsigned char*)(((int)dp + 31) & ~0x1F), 0);
+    sys->ef_ct = bhSetMemPvpTexture(&sys->ef_tlist, (unsigned char*)ALIGN_UP((uintptr_t)dp, (uintptr_t)32), 0);
     
     sys->ef_tlist.nbTexture = sys->ef_ct;
     
@@ -136,7 +136,7 @@ void bhSetFontTexture(void* datp)
             }                          
         }                              
         
-        dp = (unsigned char*)(((int)dp + 31) & ~0x1F);
+        dp = (unsigned char*)ALIGN_UP((uintptr_t)dp, (uintptr_t)32);
         
         sys->ef_tlist.textures = sys->ef_tex;                  
         sys->ef_tlist.nbTexture = 0;                                        
@@ -844,6 +844,8 @@ void bhControlEffect()
         } 
     }
 }
+
+static void bhDrawThunder();
 
 // 100% matching!
 void bhDrawEffect()
