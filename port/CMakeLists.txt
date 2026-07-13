@@ -532,6 +532,12 @@ if(RECVX_BUILD_GAME)
         ${RECVX_SRC}/ps2/veronica/prog/en01sub.c
         ${RECVX_SRC}/ps2/veronica/prog/en01b.c
         ${RECVX_SRC}/ps2/veronica/prog/en01.c
+        # Enemy AI: bhEne03 (last of the 34). Zero PS2 asm, 6671 lines,
+        # fully self-contained (no external calls besides scePrintf).
+        # Its bhEne03_Collision is UNIMPLEMENTED in the original decomp
+        # (scePrintf + no return) — same dead-code shape already noted
+        # for en08.c's dependency on it.
+        ${RECVX_SRC}/ps2/veronica/prog/en03.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so

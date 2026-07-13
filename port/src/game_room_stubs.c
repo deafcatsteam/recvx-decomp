@@ -17,7 +17,7 @@
 /* ---- enemy AI handlers (eneset.c bhJumpEnemy dispatch table) -------- */
 /* bhEne01 now real (en01.c). */
 /* bhEne02 now real (en02.c). */
-void bhEne03(BH_PWORK* epw) { (void)epw; }
+/* bhEne03 now real (en03.c). */
 /* bhEne04 now real (en04.c). bhEne05 now real (en05.c). bhEne06 now
  * real (en06.c). bhEne07 now real (en07.c). */
 /* bhEne08 now real (en08.c). */
@@ -49,11 +49,10 @@ void bhEne03(BH_PWORK* epw) { (void)epw; }
  * real (hitchk.c). bhCheckFloorNum/bhCheckL2Wall/bhSetFloorNum/
  * bhCheckClipModel now real (pwksub.c). */
 
-/* bhEne03_Collision (en03.c, gates bhEne08) is UNIMPLEMENTED in the
- * original decomp too (scePrintf + no return, en03.c:5046) — not a
- * placeholder we're skipping, matches the source. Stubbed here rather
- * than pulling in all of en03.c (6671 lines) for one dead function. */
-ATR_WORK* bhEne03_Collision(BH_PWORK* epw) { (void)epw; return NULL; }
+/* bhEne03_Collision now real (en03.c) — it's UNIMPLEMENTED in the
+ * original decomp too (scePrintf + no return, en03.c:5046), same
+ * behavior as the stub that used to live here, just compiled from the
+ * actual source now that en03.c is in the build. */
 
 /* bhEne06_BR00 (en06.c) is fully commented-out in the original decomp
  * (its body is disassembly notes only, en06.c:1727) — same "never
