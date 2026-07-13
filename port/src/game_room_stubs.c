@@ -26,7 +26,7 @@ void bhEne03(BH_PWORK* epw) { (void)epw; }
 /* bhEne11 now real (en11.c). */
 /* bhEne12 now real (en12.c). bhEne13 now real (en13.c). bhEne14 now
  * real (en14.c). */
-void bhEne15(BH_PWORK* epw) { (void)epw; }
+/* bhEne15 now real (en15.c). */
 /* bhEne16 now real (en16.c). */
 /* bhEne17 now real (en17.c). */
 /* bhEne18 now real (en18.c). */
@@ -39,7 +39,7 @@ void bhEne15(BH_PWORK* epw) { (void)epw; }
 /* bhEne27 now real (en27.c). bhEne28/bhSubpl now real (subpl.c). */
 /* bhEne29 now real (en29.c). */
 /* bhEne30 now real (en30.c). */
-void bhEne53(BH_PWORK* epw) { (void)epw; }
+/* bhEne53 now real (en15.c — shares the file with bhEne15). */
 /* bhEne54/bhEne55 now real (en54.c/en55.c). bhEne71 now real
  * (en71.c). bhEne_InitDamage now real (zonzon1.c). */
 

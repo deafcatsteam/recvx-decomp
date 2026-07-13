@@ -511,6 +511,12 @@ if(RECVX_BUILD_GAME)
         ${RECVX_SRC}/ps2/veronica/prog/en22.c
         ${RECVX_SRC}/ps2/veronica/prog/en23.c
         ${RECVX_SRC}/ps2/veronica/prog/en26.c
+        # Enemy AI: bhEne15, bhEne53 (both dispatch entries live in this
+        # one file). Zero PS2 asm. Uses several unprefixed generic
+        # helper names (Init/Move/Die/Attack/Damage/Chase/Stand/etc,
+        # all non-static) — checked against the whole prog/ and port/src
+        # tree for name collisions before adding: none found.
+        ${RECVX_SRC}/ps2/veronica/prog/en15.c
         # No-op stubs for the gameplay subsystems room.c/eneset.c/objitm.c
         # reference (enemy AI handlers, collision, lights, effects, player
         # weapon/motion) + real npCopyMemory/npSetMemoryL. Game target so
