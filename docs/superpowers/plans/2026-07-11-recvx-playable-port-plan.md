@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 6 real bugs found+fixed via real menu-driven New Game playthrough (first time this port has reached real gameplay through actual menu input rather than gdb shortcuts), one new enemy-motion-linkage crash found and documented, not yet fixed; see this doc's "Phase 4 detail" section | ~58% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 9 real bugs found+fixed across two passes via real menu-driven New Game playthrough (first time this port has reached real gameplay through actual menu input rather than gdb shortcuts); a new architectural bug (overlapping x64 pointer writes at legacy 4-byte-spaced offsets in `en01.c`) found and documented as the next blocker; see this doc's "Phase 4 detail" section | ~60% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1247,7 +1247,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 4.2 — Effects (`effect.c`) | ✅ Done — `effect.c` + all 8 `effsub*.c` (0/1/1b/2/3/4/5/6) compiled real; rendering primitives (`njDraw*3D*`/`Ps2Shadow*`/`njCnkModDrawModel`/particle draw) no-op, see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
-| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 6 real bugs found+fixed (2 memory-card shim bugs, 3 x64 pointer-truncation sites, message-table stale-pointer hazard across 3 call sites); first real menu-driven New Game reached (real Start/Up/cursor input, not a gdb shortcut); one new enemy-motion-linkage crash found, documented, not yet fixed | below |
+| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 9 real bugs found+fixed across two passes (2 memory-card shim bugs, 3+1 x64 pointer-truncation/width sites, message-table stale-pointer hazard across 3 call sites, an undecompiled-enemy-stub crash, a 9-function/11-call-site pointer-array-stride bug in `effect.c`); first real menu-driven New Game reached (real Start/Up/cursor input, not a gdb shortcut); a new architectural bug (overlapping 8-byte writes at 4-byte-spaced legacy offsets in `en01.c`, 10 sites) found and documented as the next blocker | below |
 
 **Investigation done so far (this pass):** grepped every remaining P4 source
 file for `asm`/`__asm__` (the tell for a VU0/EE-asm boundary that needs a
@@ -1791,10 +1791,98 @@ pwksub.c,hitchkl.c,ranking.c,map.c,message.c}`.
   the first attempt, consistent with proximity-based enemy activation.
   This is the concrete next blocker for Task 4.5's "full loop survives"
   bar.
-- [ ] **Step 5:** Once the enemy-motion-linkage crash above is fixed and
-  a full loop (start → fight → save → reload) survives without a
-  `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress overview
-  table at the top of this doc and open P5 scoping.
+- [x] **Step 4b (this pass, 3 more real bugs found+fixed, 1 more found
+  and documented unfixed):** re-ran the same gdb-driven New Game repro
+  (no manual movement this time — these all surfaced from the game's own
+  background enemy processing, which `bhControlEnemy` runs
+  unconditionally every frame regardless of player input) and hit
+  crashes in sequence, each unblocking the next:
+  1. **`bhEne07` (en07.c) — entire enemy type is an undecompiled stub.**
+     `bhEne07_Init`/`_Move`/`_Nage`/`_Damage`/`_Die`/`_CollisionWalls`/
+     `_FloorCollision`/`_PlayerControl` are all bare
+     `scePrintf("...UNIMPLEMENTED!\n")` stubs — none ever populate
+     `epw->exp0`/`exp1`/`mtn_tp`. The wrapper (`bhEne07`, "100%
+     matching") unconditionally dereferences all three every frame.
+     First guarded `exp0`/`exp1` individually — that just moved the
+     crash to the next untouched field (`mtn_tp`, via `bhSetMotion` →
+     `SetMtnFast`, `Motion.c:357`). Recognized the whack-a-mole and
+     replaced both guards with one root-level early return right after
+     the (no-op) `Mode0` dispatch, `#ifdef RECVX_PC_PORT`-gated, leaving
+     the original decompiled logic untouched for a future real port of
+     this enemy.
+  2. **`en01.c:3078` — read narrower than its own write.** Line 2929
+     stores a linked-enemy pointer with `*(void**)(epw->exp0 + 0x14) =
+     epp;` (correct, full pointer width); line 3078 read it back with
+     `*(int*)(...)` (4 bytes only). Fixed the read to match the write's
+     width (`*(void**)`). Real, necessary, and correct — but not
+     sufficient alone (see finding 3 below).
+  3. **`effect.c` — 9 draw functions read pointer arrays at the wrong
+     stride.** `bhDrawPolEffect`/`MdfEffect`/`LinEffect`/`NtxEffect3D`/
+     `TrsEffect3D`/`OpqEffect3D`/`ThlEffect3D`/`NtxEffect2D`/`TrsEffect2D`
+     all took `unsigned int* owp` and did `op = (O_WRK*)*owp++;` over
+     arrays declared `O_WRK* ef_xxx[512]` in `types.h` — real 8-byte
+     pointers walked with a 4-byte stride/read. Harmless on PS2 (pointer
+     == unsigned int width there) but on x64 either truncates every
+     entry to its low 32 bits or reads two entries per real one,
+     corrupting the walk. Crashed in `bhDrawTrsEffect3D` the first time
+     any transparent effect (`ef_trs`) was queued. Fixed at the type
+     level: all 9 signatures (header + definitions) changed to
+     `O_WRK** owp`, all 11 call sites' now-redundant `(unsigned int*)`
+     casts dropped — zero changes to the "100% matching" function
+     bodies, since `*owp++` already does the right thing once `owp` has
+     the right type.
+  4. **`en01.c` — NEW, unfixed, architectural: overlapping 8-byte writes
+     at 4-byte-spaced legacy offsets.** Once the read-width fix above
+     was in place, the *same* crash site (line 3078/3083) still faulted,
+     now on a garbage-but-non-NULL `epp`. Root cause: `bhEne01_Init`
+     stores SIX linked-enemy pointers via `*(void**)(epw->exp0 + N)` at
+     `N = 0x0, 0x4, 0x8, 0xc, 0x10, 0x14` — offsets only 4 bytes apart,
+     sized correctly for 32-bit PS2 pointers packed tightly, but each
+     `void**` store on x64 writes a full 8 bytes. Every write's upper 4
+     bytes stomp the *next* slot's lower 4 bytes: the write at `0x10`
+     spans bytes `0x10`-`0x17`, so by the time code reads `0x14` back,
+     it gets the high 32 bits of whatever pointer was stored at `0x10`
+     instead of the intended (usually-unwritten, should-be-zero) value.
+     Confirmed by direct memory inspection: the "garbage" pointer read
+     was exactly `0x0000573b` — the upper 32 bits of this run's ASLR
+     base, i.e. the high half of the `0x10` slot's real pointer, exactly
+     as the overlap theory predicts. This is contained to `en01.c` (10
+     occurrences of the pattern, all in one function), but fixing it
+     properly means widening every slot to 8-byte spacing and updating
+     every hardcoded offset (and any `EXP0_I(N)` reader elsewhere that
+     assumes the old 4-byte packing) consistently — a real restructuring
+     job, not a one-line guard. Left unfixed and documented rather than
+     patched with a guess, per the same "root cause first" standard as
+     the rest of this task; **this is now the concrete next blocker**
+     (the previous blocker, item below, is superseded — this session's
+     repro never reached the point of retriggering it, since these three
+     bugs crash the game earlier in the same automatic enemy-processing
+     path).
+- [ ] **Step 5:** Once the `en01.c` packed-offset corruption above is
+  fixed (or the enemy types that hit it are confirmed unreachable on the
+  tested path) and a full loop (start → fight → save → reload) survives
+  without a `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress
+  overview table at the top of this doc and open P5 scoping.
+
+**Previous blocker (Step 4 finding, not retested this pass):** walking
+with `Up`+`Left` previously triggered a distinct SIGSEGV in
+`SetMtnNormal` (`Motion.c:156`) via `em60_init`/`subpl.c` — this pass's
+repro used only the `Start`-button gdb harness (no manual movement), so
+this specific path was never re-exercised; it may still exist
+independently of the three bugs above.
+```
+SetMtnNormal (ewP=<ene>, datP=<NormalTbl>, mode=32) at Motion.c:156
+156:            if (md2P->p[0] != NULL)
+#1 bhSetMotion (...) at Motion.c:56
+#2 em60_init (epw=<ene>) at subpl.c:127
+#3 init_subpl (epw=<ene>) at subpl.c:91
+#4 bhSubpl (epw=<ene>) at subpl.c:81
+#5 bhControlEnemy () at eneset.c:388
+#6 bhMainSequence () at game.c:48
+```
+`md2P` and `obj_no` both held garbage at the time, consistent with the
+established `ewk_n > rom->ene_n` enemy-linkage bug shape from P2, but not
+confirmed to share the exact root cause.
 
 **Separate finding, out of scope for this pass:** a broad grep for the
 `(int)ptr + offset)` x64-truncation pattern turned up roughly two dozen

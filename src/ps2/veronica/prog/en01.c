@@ -3075,7 +3075,10 @@ void bhEne01_Init(BH_PWORK* epw)
             epw->mdflg &= ~0x400;
             EXP0_I(0x3C) = 0xFFB2B2B2;
             npSetAllMatColor(epw->mlwP->objP, epw->mlwP->obj_num, EXP0_I(0x3C));
-            epp = (BH_PWORK*)*(int*)((char*)epw->exp0 + 0x14);
+            /* Read must match the pointer width used by the store at line
+             * 2929 (`*(void**)(epw->exp0 + 0x14) = epp;`) — reading only 4
+             * bytes here truncates the real 8-byte pointer on x64. */
+            epp = (BH_PWORK*)*(void**)((char*)epw->exp0 + 0x14);
             if (epp != NULL){
                 epp->mdflg &= ~0x400;
                 npSetAllMatColor(epp->mlwP->objP, epp->mlwP->obj_num, EXP0_I(0x3C));

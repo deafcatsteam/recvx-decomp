@@ -1290,30 +1290,44 @@ BH_PWORK ene[0];*/
 void bhEne07(BH_PWORK* epw)
 {
     bhEne07_Mode0[epw->mode0](epw);
-    
+
+#ifdef RECVX_PC_PORT
+    /* bhEne07_Init/_Move/_Nage/_Damage/_Die (dispatched via bhEne07_Mode0
+     * above), plus _CollisionWalls/_FloorCollision/_PlayerControl below, are
+     * all unimplemented decompilation stubs (each just prints "...
+     * UNIMPLEMENTED!" and returns) — unlike every other enemy type's real
+     * Init, none of them ever populate epw->exp0/exp1/mtn_tp. Every field
+     * this wrapper touches past this point is therefore permanently
+     * NULL/garbage for this enemy type, so guarding one crash site at a
+     * time here is whack-a-mole (already tried twice: exp0/exp1 NULL checks
+     * still left bhSetMotion's mtn_tp dereference to crash next). Bail out
+     * once, at the root, until en07 gets decompiled for real. */
+    return;
+#endif
+
     bhSetMotion(epw, epw->mtn_add, epw->mtn_md, epw->mtn_tp);
-    
+
     epw->ar +=  (((float*)epw->exp0)[15] - epw->ar) / 8.0f;
     epw->car += (((float*)epw->exp0)[16] - epw->car) / 8.0f;
-    
+
     bhCheckPlayer(epw);
     bhCheckEnemies(epw);
-    
+
     bhEne07_FloorCollision(epw);
     bhEne07_CollisionWalls(epw);
     bhEne07_FloorCollision(epw);
-    
+
     bhCalcModel(epw);
-    
+
     bhEne_SetWeponAtr(epw, 6, 11, 2.0f);
-    
+
     if (((unsigned char*)epw->exp1)[6] == sys->enow)
     {
-        if (plp->mode0 == 4) 
+        if (plp->mode0 == 4)
         {
             bhEne07_PlayerControl(epw);
         }
-        
+
         if (((unsigned char*)epw->exp1)[7] != 0)
         {
             ((unsigned char*)epw->exp1)[7]--;

@@ -858,67 +858,67 @@ void bhDrawEffect()
     
     if (sys->ef_poln != 0) 
     {
-        bhDrawPolEffect((unsigned int*)sys->ef_pol, sys->ef_poln);
+        bhDrawPolEffect(sys->ef_pol, sys->ef_poln);
     }
     
     njControl3D(0x2400);
     
     if (sys->ef_mdfn != 0) 
     {
-        bhDrawMdfEffect((unsigned int*)sys->ef_mdf, sys->ef_mdfn);
+        bhDrawMdfEffect(sys->ef_mdf, sys->ef_mdfn);
     }
     
     njControl3D(0x100);
     
     if (sys->ef_linn != 0) 
     {
-        bhDrawLinEffect((unsigned int*)sys->ef_lin, sys->ef_linn);
+        bhDrawLinEffect(sys->ef_lin, sys->ef_linn);
     }
     
     if (sys->ef_ntxn != 0) 
     {
-        bhDrawNtxEffect3D((unsigned int*)sys->ef_ntx, sys->ef_ntxn);
+        bhDrawNtxEffect3D(sys->ef_ntx, sys->ef_ntxn);
     }
     
     if (sys->ef_trsn != 0) 
     {
-        bhDrawTrsEffect3D((unsigned int*)sys->ef_trs, sys->ef_trsn);
+        bhDrawTrsEffect3D(sys->ef_trs, sys->ef_trsn);
     }
     
     njControl3D(0x4000);
     
     if (sys->ef_pncn != 0) 
     {
-        bhDrawTrsEffect3D((unsigned int*)sys->ef_pnc, sys->ef_pncn);
+        bhDrawTrsEffect3D(sys->ef_pnc, sys->ef_pncn);
     }
     
     njControl3D(0);
     
     if (sys->ef_opqn != 0) 
     {
-        bhDrawOpqEffect3D((unsigned int*)sys->ef_opq, sys->ef_opqn);
+        bhDrawOpqEffect3D(sys->ef_opq, sys->ef_opqn);
     }
     
     if (sys->ef_thln != 0) 
     {
-        bhDrawThlEffect3D((unsigned int*)sys->ef_thl, sys->ef_thln);
+        bhDrawThlEffect3D(sys->ef_thl, sys->ef_thln);
     }
     
     if (sys->ef_ntx2dn != 0) 
     {
-        bhDrawNtxEffect2D((unsigned int*)sys->ef_ntx2d, sys->ef_ntx2dn);
+        bhDrawNtxEffect2D(sys->ef_ntx2d, sys->ef_ntx2dn);
     }
     
     if (sys->ef_trs2dn != 0) 
     {
-        bhDrawTrsEffect2D((unsigned int*)sys->ef_trs2d, sys->ef_trs2dn);
+        bhDrawTrsEffect2D(sys->ef_trs2d, sys->ef_trs2dn);
     }
     
     njControl3D(0x4000);
     
     if (sys->ef_pnc2dn != 0) 
     {
-        bhDrawTrsEffect2D((unsigned int*)sys->ef_pnc2d, sys->ef_pnc2dn);
+        bhDrawTrsEffect2D(sys->ef_pnc2d, sys->ef_pnc2dn);
     }
     
     njControl3D(0);
@@ -948,7 +948,7 @@ void bhDrawEffect()
 }
 
 // 99.84% matching
-void bhDrawPolEffect(unsigned int* owp, int ct)
+void bhDrawPolEffect(O_WRK** owp, int ct)
 {
     NJS_TEXNAME* tnp; 
     ML_WORK* mlp;     
@@ -1033,7 +1033,7 @@ void bhDrawPolEffect(unsigned int* owp, int ct)
 }
 
 // 100% matching!
-void bhDrawMdfEffect(unsigned int* owp, int ct) 
+void bhDrawMdfEffect(O_WRK** owp, int ct) 
 {
     ML_WORK* mlp;
     O_WRK* op;
@@ -1100,7 +1100,7 @@ void bhDrawMdfEffect(unsigned int* owp, int ct)
 }
 
 // 100% matching!
-void bhDrawLinEffect(unsigned int* owp, int ct)
+void bhDrawLinEffect(O_WRK** owp, int ct)
 {
     NJS_POINT3COL p3c; 
     NJS_POINT3 pos[2]; 
@@ -1164,7 +1164,7 @@ void bhDrawLinEffect(unsigned int* owp, int ct)
 }
 
 // 100% matching!
-void bhDrawNtxEffect3D(unsigned int* owp, int ct)
+void bhDrawNtxEffect3D(O_WRK** owp, int ct)
 {
     O_WRK* op;      
     NJS_POINT3 pa;  
@@ -1286,7 +1286,7 @@ label:
 }
 
 // 100% matching!
-void bhDrawTrsEffect3D(unsigned int* owp, int ct) 
+void bhDrawTrsEffect3D(O_WRK** owp, int ct)
 {
     O_WRK* op;      
     NJS_POINT3 pa;  
@@ -1426,7 +1426,7 @@ label:
 }
 
 // 100% matching!
-void bhDrawOpqEffect3D(unsigned int* owp, int ct)
+void bhDrawOpqEffect3D(O_WRK** owp, int ct)
 {
     O_WRK* op;      
     NJS_POINT3 pa;  
@@ -1561,7 +1561,7 @@ label:
 }
 
 // 100% matching!
-void bhDrawThlEffect3D(unsigned int* owp, int ct)
+void bhDrawThlEffect3D(O_WRK** owp, int ct)
 {
     NJS_TEXTUREH_VTX* tvp; 
     O_WRK* op;             
@@ -1727,7 +1727,7 @@ label:
 }
 
 // 100% matching!
-void bhDrawNtxEffect2D(unsigned int* owp, int ct)
+void bhDrawNtxEffect2D(O_WRK** owp, int ct)
 {
     O_WRK* op;
     
@@ -1743,7 +1743,7 @@ void bhDrawNtxEffect2D(unsigned int* owp, int ct)
 } 
 
 // 100% matching!
-void bhDrawTrsEffect2D(unsigned int* owp, int ct)
+void bhDrawTrsEffect2D(O_WRK** owp, int ct)
 {
     O_WRK* op;
     

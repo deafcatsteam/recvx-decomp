@@ -28,15 +28,15 @@ int bhSetShadow(char* jtb, unsigned char* lkp, int lkono, float sx, float sy, fl
 void bhLinkBlood();
 void bhControlEffect();
 void bhDrawEffect();
-void bhDrawPolEffect(unsigned int* owp, int ct);
-void bhDrawMdfEffect(unsigned int* owp, int ct);
-void bhDrawLinEffect(unsigned int* owp, int ct);
-void bhDrawNtxEffect3D(unsigned int* owp, int ct);
-void bhDrawTrsEffect3D(unsigned int* owp, int ct);
-void bhDrawOpqEffect3D(unsigned int* owp, int ct);
-void bhDrawThlEffect3D(unsigned int* owp, int ct);
-void bhDrawNtxEffect2D(unsigned int* owp, int ct);
-void bhDrawTrsEffect2D(unsigned int* owp, int ct);
+void bhDrawPolEffect(O_WRK** owp, int ct);
+void bhDrawMdfEffect(O_WRK** owp, int ct);
+void bhDrawLinEffect(O_WRK** owp, int ct);
+void bhDrawNtxEffect3D(O_WRK** owp, int ct);
+void bhDrawTrsEffect3D(O_WRK** owp, int ct);
+void bhDrawOpqEffect3D(O_WRK** owp, int ct);
+void bhDrawThlEffect3D(O_WRK** owp, int ct);
+void bhDrawNtxEffect2D(O_WRK** owp, int ct);
+void bhDrawTrsEffect2D(O_WRK** owp, int ct);
 
 extern O_WORK* ef_Zanzo[6];
 
