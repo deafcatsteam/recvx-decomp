@@ -2926,7 +2926,17 @@ void bhEne01_Init(BH_PWORK* epw)
 				} else {
 					epp->mdl[0] = epw->mdl[2];
 				}
-				*(void**)(epw->exp0 + 0x14) = epp;
+				/* Stored at 0x90, not 0x14: the write below at 0x18 (which
+				 * also fires when mdlver==22, since both conditions overlap
+				 * on that value) is 8 bytes wide on x64 and clobbers bytes
+				 * 0x18-0x1B — the upper half of an 8-byte pointer stored at
+				 * 0x14. 0x14 itself is otherwise never read back, so only
+				 * this slot needed to move; the other packed 4-byte-spaced
+				 * pointer slots (0x0/0x4/0x8/0xc/0x10/0x18/0x1c/0x20) are
+				 * write-only and their overlap is harmless. 0x90 is well
+				 * past the highest other exp0 offset in this file (0x54)
+				 * and inside the 0xb0-byte allocation. */
+				*(void**)(epw->exp0 + 0x90) = epp;
 				bhEne_SetCallFunc(bhEne01Cap, 0x22);
 			}
 			if (epw->mdlver == 21 || epw->mdlver == 22) {
@@ -3075,10 +3085,10 @@ void bhEne01_Init(BH_PWORK* epw)
             epw->mdflg &= ~0x400;
             EXP0_I(0x3C) = 0xFFB2B2B2;
             npSetAllMatColor(epw->mlwP->objP, epw->mlwP->obj_num, EXP0_I(0x3C));
-            /* Read must match the pointer width used by the store at line
-             * 2929 (`*(void**)(epw->exp0 + 0x14) = epp;`) — reading only 4
-             * bytes here truncates the real 8-byte pointer on x64. */
-            epp = (BH_PWORK*)*(void**)((char*)epw->exp0 + 0x14);
+            /* Must read the same offset (0x90) the cap-model pointer is
+             * stored at — see the write site's comment for why it isn't
+             * 0x14 anymore (x64 overlapping-write corruption). */
+            epp = (BH_PWORK*)*(void**)((char*)epw->exp0 + 0x90);
             if (epp != NULL){
                 epp->mdflg &= ~0x400;
                 npSetAllMatColor(epp->mlwP->objP, epp->mlwP->obj_num, EXP0_I(0x3C));
