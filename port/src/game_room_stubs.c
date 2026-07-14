@@ -12,6 +12,8 @@
 
 #include "ninja.h"
 #include "types.h"
+#include "main.h"
+#include "sub1.h"
 #include <string.h>
 
 /* ---- enemy AI handlers (eneset.c bhJumpEnemy dispatch table) -------- */
@@ -278,6 +280,20 @@ int  ChechPlayEnemySe(int EnemyNo, int SeNo) { (void)EnemyNo;(void)SeNo; return 
  * bhCPM2_act_suw_pch/bhCPM2_act_wsc_pch now real (playpch.c). */
 void bhCPM0_event(void) {}
 void bhCPM2_act_scp(void) {}
+
+/* event.c (the whole Event task -- scripts, dialogue, camera cuts) isn't
+ * compiled in yet, so bhInitEvent used to be a plain no-op in stub_game.c.
+ * But its swork.pip assignment is load-bearing outside Event: weapon.c's
+ * bhCheckBullet/bhCountBullet (already compiled, called every attack)
+ * dereference swork.pip unconditionally. As a no-op, pip stayed NULL/stale
+ * BSS garbage and attacking segfaulted. Set just that one field, matching
+ * event.c:365's bhInitEvent; the rest of the real function (scenario
+ * scripts, event scheduler) has no observable effect since the Event task
+ * itself is still stubbed out (bhControlEvent, stub_game.c). Lives here
+ * instead of stub_game.c because it needs real KATANA struct layouts
+ * (SYS_WORK, S_WORK) that stub_game.c deliberately doesn't see (see its
+ * file header). */
+void bhInitEvent(void) { swork.pip = &sys->itm[sys->ply_id * 16]; }
 /* bhCalcFixOffset/bhFixPosition/bhGetObjMotion now real (Motion.c).
  * bhAddSpeed/bhCalcLockEneYR/bhSearchNearEnemy/bhSearchNearEnemy2/
  * bhSearchNearEnemyB/bhSearchNextEnemy/bhSetGunFire/bhSetMagazine/

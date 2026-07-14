@@ -98,7 +98,10 @@ int  bhReadDoorData(void)    { return 0; }
  * Task 4.2). */
 /* bhInitCamera now real (camera.c). */
 /* bhInitPlayer / bhResetPlayer / bhStandPlayerMotion now real (player.c). */
-void bhInitEvent(void)       {}
+/* bhInitEvent moved to game_room_stubs.c — its swork.pip assignment is
+ * load-bearing for already-compiled code (weapon.c's bhCheckBullet) and
+ * needs real KATANA struct layouts this file deliberately doesn't see
+ * (see file header comment). */
 /* bhReadPlayerData / bhReadWeaponData now real (dread.c). */
 /* bhSetRDT / bhInitReadRDT / bhFinishRoom / bhPushGameData now come from
  * the real room.c (in RECVX_GAME_SOURCES). */
