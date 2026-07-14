@@ -219,6 +219,19 @@ void npCopyMemory(unsigned char* dst, unsigned char* src, unsigned int size)
 {
     if (dst && src) memcpy(dst, src, size);
 }
+/* Byte-granularity sibling of npSetMemoryL below — was left as a no-op
+ * stub in stub_sg.c because it got swept up in njplus.c's file-wide
+ * exclusion (that file has 12 VU0 asm blocks elsewhere), even though this
+ * function itself is a plain byte-fill loop with zero PS2 asm dependency.
+ * Callers (e.g. bhFinishRoom's per-room MN_WORK buffer allocation) rely on
+ * this to zero freshly bump-allocated memory; as a no-op it left those
+ * buffers holding stale data from whatever previously occupied that heap
+ * region, which read back as bogus pointers/counts and crashed. */
+void npSetMemory(unsigned char* memp, unsigned int size, char dat)
+{
+    if (!memp) return;
+    memset(memp, dat, size);
+}
 void npSetMemoryL(unsigned int* memp, unsigned int size, int dat)
 {
     if (!memp) return;

@@ -9,7 +9,8 @@
 void pdSetMode(int m)                                 { (void)m; }
 
 /* print/font */
-void npSetMemory(void* p, unsigned int sz, int flag)  { (void)p; (void)sz; (void)flag; }
+/* npSetMemory moved to game_room_stubs.c — it's a real byte-fill op,
+ * not a phase-0 no-op (see comment there). */
 void npPlusInit(void)                                 {}
 
 /* backup ram */

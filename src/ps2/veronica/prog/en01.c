@@ -3039,7 +3039,19 @@ void bhEne01_Init(BH_PWORK* epw)
         epw->mtn_tp = (unsigned char*)en01_flipTree2;
         
         
+#ifdef RECVX_PC_PORT
+        /* Original reads the link-parent pointer via its raw PS2 struct
+         * offset (0x2EC, a 4-byte field there — see types.h's lkwkp
+         * comment). On x64 every pointer field ahead of lkwkp in BH_PWORK
+         * is 8 bytes instead of 4, so lkwkp no longer sits at 0x2EC and
+         * this read pulls a truncated/garbage 32-bit value, which then
+         * gets dereferenced as a pointer below and segfaults. Use the
+         * named field (set by bhEne01_SetLinkEnemy's epp->lkwkp = epw)
+         * instead of the stale hardcoded offset. */
+        epp = (BH_PWORK*)epw->lkwkp;
+#else
         epp = (BH_PWORK*)*(int*)((char*)epw + 0x2EC);
+#endif
         epw->type = epp->type;
         epw->hp = epp->hp;
         epw->px = epp->px;

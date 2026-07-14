@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 11 real bugs found+fixed across four passes, first pass to use real movement input (not just the Start-button gdb shortcut); the `en01.c` overlapping-write bug and a missing-`return` UB bug (`bhEne01_SetLinkEnemy`) are fixed; current blocker is a deeper one — `ene[]`/`sys->memp`-derived motion data going stale for dynamically-spawned linked enemies, mechanism now identified (they bypass `bhFinishRoom`'s population loop and inherit `mnwP` from their parent) but the actual corruption not yet pinned down live; a concrete remediation plan (deterministic repro + targeted watchpoint trace) is written up but not yet executed; see this doc's "Phase 4 detail" section | ~64% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 13 real bugs found+fixed across five passes; the linked-enemy `mnwP` blocker (`en01.c`/`stg3-rom17` zombie-with-head repro) is **resolved** — root causes were a no-op `npSetMemory` stub (`stub_sg.c`, swept up in `njplus.c`'s whole-file VU0-asm exclusion, silently leaving every "zeroed" buffer full of stale heap data) and a second x64 pointer-width bug one level up (`en01.c:3042`, raw PS2 struct-offset read of `lkwkp` instead of the named field); both fixed and verified clean across two independent repro runs; a new, separate, reproducible crash surfaced right after (`bhCheckBullet`, `weapon.c:426`, via player attack) — this is the new current blocker; see this doc's "Phase 4 detail" section | ~66% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1247,7 +1247,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 4.2 — Effects (`effect.c`) | ✅ Done — `effect.c` + all 8 `effsub*.c` (0/1/1b/2/3/4/5/6) compiled real; rendering primitives (`njDraw*3D*`/`Ps2Shadow*`/`njCnkModDrawModel`/particle draw) no-op, see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
-| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 11 real bugs found+fixed across four passes (2 memory-card shim bugs, 3+1 x64 pointer-truncation/width sites, message-table stale-pointer hazard across 3 call sites, an undecompiled-enemy-stub crash, a 9-function/11-call-site pointer-array-stride bug in `effect.c`, an overlapping-write bug in `en01.c`, a missing-`return` UB bug in `bhEne01_SetLinkEnemy`); first real movement input tested (`Up`+`Left` via `xdotool`, not just Start-button); current blocker is dynamically-spawned linked-enemy `mnwP` data going stale — mechanism identified (bypasses `bhFinishRoom`'s population loop, inherits from parent by pointer copy) but the actual corruption point not yet pinned down live; needs a deterministic room repro + targeted watchpoint trace, not a local patch | below |
+| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 13 real bugs found+fixed across five passes (2 memory-card shim bugs, 3+1 x64 pointer-truncation/width sites, message-table stale-pointer hazard across 3 call sites, an undecompiled-enemy-stub crash, a 9-function/11-call-site pointer-array-stride bug in `effect.c`, an overlapping-write bug in `en01.c`, a missing-`return` UB bug in `bhEne01_SetLinkEnemy`, a no-op `npSetMemory` stub, a second x64 pointer-width bug in `bhEne01_Init`'s linked-enemy branch); deterministic repro built (`Start` + fixed movement sequence reliably reaches `stg3/rom17`); linked-enemy `mnwP` blocker resolved and verified clean twice; new blocker found right after — `bhCheckBullet` crash (`weapon.c:426`) via player attack, not yet root-caused | below |
 
 **Investigation done so far (this pass):** grepped every remaining P4 source
 file for `asm`/`__asm__` (the tell for a VU0/EE-asm boundary that needs a
@@ -2052,12 +2052,101 @@ pwksub.c,hitchkl.c,ranking.c,map.c,message.c}`.
     (even though it didn't fire cleanly on the full TU here, an isolated
     per-function check does) before trusting an optimized build's
     behavior to match the current `-O0` one.
-- [ ] **Step 5:** Once the `ene[]`/`sys->memp` cross-room-transition
-  staleness above is root-caused and fixed (or the enemy types/paths that
-  hit it are confirmed unreachable) and a full loop (start → fight →
-  save → reload) survives without a `RECVX_BUILD_GAME`-only crash, mark
-  P4 done in the Progress overview table at the top of this doc and open
-  P5 scoping.
+- [x] **Step 4e (this pass — Step 4d's remediation plan executed,
+  root cause found and fixed, blocker resolved):** followed remediation
+  item 1: found the exact deterministic repro instead of relying on blind
+  movement. `Start` (single press, no repeats — a second manual `Return`
+  press was tried first and mis-selected a different menu path, a
+  self-inflicted dead end, documented and abandoned) then `Up` 4s → `Left`
+  2s → `Up` 4s → `Up` 5s → `Left` 3s → `Up` 5s reaches `stg_no=3,
+  rom_no=17` every time and reliably reproduces the Step 4c/4d crash. This
+  repro (rooms visited: `stg0/rom13` → `stg0/rom10` → `stg3/rom17`) is now
+  the standing reference sequence for this enemy.
+  1. **Root cause #1 — `npSetMemory` is a no-op stub, so
+     "freshly-zeroed" buffers were never actually zeroed.**
+     Instrumented `bhFinishRoom`'s fresh-allocate branch (`room.c:461-474`)
+     to print the enemy's `mnwP` buffer immediately after the
+     `npSetMemory(ptr, size, 0)` zero-fill call. It read back **non-zero**
+     — proving the corruption predates `bhEne01_SetLinkEnemy`'s copy
+     entirely (confirmed separately: a watchpoint armed at spawn time
+     never fired between spawn and crash, and slot content was
+     byte-for-byte identical at both points). Traced to
+     `port/src/stubs/stub_sg.c:12`: `void npSetMemory(void* p, unsigned
+     int sz, int flag) { (void)p; (void)sz; (void)flag; }` — a complete
+     no-op. The real implementation (`njplus.c:943`, "100% matching!",
+     a plain byte-fill loop with zero PS2 asm) was swept into the
+     port build's whole-file exclusion of `njplus.c` (excluded because
+     that file has 12 unrelated VU0 asm blocks elsewhere — see
+     `port/CMakeLists.txt`'s `njplus_coli.c` extraction comment) and
+     never got individually re-extracted like its siblings
+     `npCopyMemory`/`npSetMemoryL` were. Every caller across the whole
+     game that expects `npSetMemory(ptr, size, 0)` to zero a buffer was
+     silently getting stale leftover heap content instead — this is a
+     systemic bug, not enemy/room-specific, though this crash is the
+     first confirmed live manifestation. **Fixed:** moved a real
+     `memset`-based implementation into `game_room_stubs.c` next to its
+     already-correct siblings, removed the no-op from `stub_sg.c`
+     (`port/src/game_room_stubs.c`, `port/src/stubs/stub_sg.c`).
+  2. **Root cause #2 — a second, independent x64 pointer-width bug one
+     level up, surfaced only once bug #1 was fixed.** Rebuilt and
+     re-ran the deterministic repro: original crash gone (no `MTN CHECK`
+     line ever fires — `mtn_no` never reaches the crashing value), but a
+     **new** crash appeared in `bhEne01_Init` itself
+     (`en01.c:3043`, `epw->type = epp->type;` dereferencing a bad
+     `epp`). Root cause: `en01.c:3042`,
+     `epp = (BH_PWORK*)*(int*)((char*)epw + 0x2EC);` — reads the
+     link-parent pointer via its raw PS2 struct byte offset (`0x2EC`,
+     annotated in `types.h:137` as `unsigned char* lkwkp; // offset
+     0x2EC, size 0x4`, i.e. a 4-byte pointer field on PS2). On x64 every
+     pointer field ahead of `lkwkp` in `BH_PWORK` is 8 bytes instead of
+     4, so `lkwkp` no longer sits at `0x2EC` — the read pulls a
+     truncated/garbage 32-bit value from an unrelated struct field,
+     cast directly to a pointer. Same bug class as the `exp0` offset fix
+     from Step 4c and the general x64-pointer-width category, just in a
+     different branch (`epw->flg & 0x80`, the *secondary/linked-enemy*
+     path of `bhEne01_Init`, not the root-parent path touched by earlier
+     fixes). **Fixed:** replaced the raw offset read with the named field
+     access `epp = (BH_PWORK*)epw->lkwkp;` (the same field
+     `bhEne01_SetLinkEnemy` already writes by name at spawn time), gated
+     `#ifdef RECVX_PC_PORT` matching this file's established convention
+     (`src/ps2/veronica/prog/en01.c:3030-3053`).
+  3. **Verified clean, twice.** Rebuilt after both fixes; re-ran the
+     deterministic repro twice independently. Neither the original
+     `SetMtnNormal`/`mnwP` crash nor the `bhEne01_Init:3043` crash
+     recurred in either run — the room (`stg3/rom17`, 2× linked zombie
+     head-enemies, 4 spawn events total) now loads and runs without
+     crashing on this path. **The Step 4c/4d blocker is resolved.**
+  4. **New, separate, unrelated crash surfaced — logged, not yet
+     fixed.** Both clean verification runs, after surviving the room
+     load, crashed a few seconds later on `bhCheckBullet`
+     (`weapon.c:426`, `iw = swork.pip[0];`) reached via a player attack
+     action (`bhCPM2_act_suw` → `bhCPM1_act_atk` → `bhCPM0_action` →
+     `bhControlPlayer`). Reproduced identically both times in the same
+     room, so it is a real, reproducible bug — but it is in the weapon/
+     bullet system, entirely unrelated to the enemy-motion-table chain
+     just fixed. Not investigated further this pass (targeted/on-demand
+     scope — see below); root cause unknown, `swork.pip[0]` read itself
+     faulting suggests either a struct-layout/offset issue in `swork`
+     similar in spirit to items 1-2 above, or an uninitialized/stale
+     `swork` state on this specific path. **This is the next crash-sweep
+     target.**
+- [x] **Scope-fit check (this pass, in response to a direct question):**
+  confirmed with the project owner that targeted/on-demand decompilation
+  (only decompiling what a normal playthrough actually reaches) fits the
+  stated top-level goal — play the complete game on PC, ship a Linux+
+  Windows port, do improvements after — better than a blanket
+  full-decomp-first approach would. Full decomp is a separate,
+  specialized, weeks-scale MIPS reverse-engineering effort (66.8%
+  functions / 46.1% code matched project-wide per `report.json`, 21/200
+  units at 0%, `elf/main.elf` not even present in this checkout) that
+  isn't required to make normal play work. This crash sweep continues
+  under that mandate: fix what a normal playthrough actually hits, leave
+  unreached code stubbed.
+- [ ] **Step 5:** Once `bhCheckBullet` (item 4 above) is root-caused and
+  fixed (or confirmed unreachable in normal play) and a full loop
+  (start → fight → save → reload) survives without a
+  `RECVX_BUILD_GAME`-only crash, mark P4 done in the Progress overview
+  table at the top of this doc and open P5 scoping.
 
 **Previous blocker (Step 4 finding — now superseded by Step 4c item 2
 above, which reaches the same `SetMtnNormal`/`md2P` crash via a
