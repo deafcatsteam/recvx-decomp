@@ -3145,6 +3145,18 @@ BH_PWORK* bhEne01_SetLinkEnemy(BH_PWORK* epw, int lkono, short id)
 	epp->mlwP = epw->mdl;
 	epp->mnwP = epw->mnwP;
 	epp->id = id;
+
+#ifdef RECVX_PC_PORT
+	/* Decompiled body has no return statement — on the original MIPS
+	 * build the last-used register happened to hold epp at function
+	 * exit, so callers got the right value "for free". That's C
+	 * undefined behavior on x86-64: currently -O0 codegen still
+	 * leaves epp in %rax by coincidence (verified via objdump), but
+	 * it is not guaranteed under a different optimization level or
+	 * compiler. Every caller treats the result as BH_PWORK*, so make
+	 * it explicit. */
+	return epp;
+#endif
 }
 
 // 100% matching!

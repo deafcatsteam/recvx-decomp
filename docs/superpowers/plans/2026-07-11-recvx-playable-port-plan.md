@@ -35,7 +35,7 @@ triplets), GCC 12 (Linux devcontainer) / MSVC (Windows), SDL2, FFmpeg.
 | **P1** | `RECVX_BUILD_GAME=ON` compiles & links on Linux | ✅ Done | 100% |
 | **P2** | Game actually boots to title/gameplay on Linux (real input, real room load) | ✅ Done | 100% — both movie-to-room texture-handoff SIGSEGVs fixed, and confirmed real player movement: `bhAddSpeed` (the function every `bhCPM2_act_*` motion handler calls to integrate `plp->px/pz` from speed+heading) was a second shadowed no-op stub, same bug class as `njInitTexture`. Fixed; forced analog input now moves the player continuously frame over frame. Room lighting (`njCnkSetEasyLight*`) and collision (`hitchk.c`) remain stubbed — tracked as P4 scope (full traversal/combat), not P2 |
 | **P3** | Windows parity pass (MSVC build of the same `RECVX_BUILD_GAME=ON` config) | 🟠 Paused — 3 real bugs fixed, blocked on KATANA-shadow-header/MSVC include tangle | ~40% |
-| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 10 real bugs found+fixed across three passes, first pass to use real movement input (not just the Start-button gdb shortcut); the `en01.c` overlapping-write bug found last pass is fixed; current blocker is a deeper one — `ene[]`/`sys->memp` motion-table data going stale across room transitions, root-caused via live watchpoints but not yet fixed; see this doc's "Phase 4 detail" section | ~62% |
+| **P4** | "Playable" gate: full room traversal, combat, save/load, no `RECVX_BUILD_GAME`-only crashes | 🟡 In progress — collision + lighting done; combat core (`weapon.c`/`playpch.c`/`pwksub.c`) done; effects (`effect.c` + all 8 `effsub*.c`) done (state real, rendering primitives deferred no-op); enemy AI roster **34/34 done**; save/load done (real `sceMc*`/`gdFsOpen` PC shim); crash sweep (Task 4.5) in progress — 11 real bugs found+fixed across four passes, first pass to use real movement input (not just the Start-button gdb shortcut); the `en01.c` overlapping-write bug and a missing-`return` UB bug (`bhEne01_SetLinkEnemy`) are fixed; current blocker is a deeper one — `ene[]`/`sys->memp`-derived motion data going stale for dynamically-spawned linked enemies, mechanism now identified (they bypass `bhFinishRoom`'s population loop and inherit `mnwP` from their parent) but the actual corruption not yet pinned down live; a concrete remediation plan (deterministic repro + targeted watchpoint trace) is written up but not yet executed; see this doc's "Phase 4 detail" section | ~64% |
 | **P5** | Post-playable improvements (network Battle Mode, HD assets, graphics) | ⬜ Not scoped yet | 0% |
 
 This document details **P1** and **P3** task-by-task (concrete, plannable now).
@@ -1247,7 +1247,7 @@ detailed plan doc are linked, not duplicated, below.
 | Task 4.2 — Effects (`effect.c`) | ✅ Done — `effect.c` + all 8 `effsub*.c` (0/1/1b/2/3/4/5/6) compiled real; rendering primitives (`njDraw*3D*`/`Ps2Shadow*`/`njCnkModDrawModel`/particle draw) no-op, see finding below | below |
 | Task 4.3 — Enemy AI roster (`eneset.c` dispatch + `en*.c`) | ✅ Done — all 34/34 enemies real, plus shared helper libraries `zonzon.c`/`zonzon1.c`/`hitchkl.c`/`en01sub.c`/`en01b.c` | below |
 | Task 4.4 — Save/load (8 files: `ps2_MemoryCard..c`/`ps2_sg_bup.c`/`ps2_McSaveFile.c`/`ps2_SaveScreen.c`/`ps2_LoadScreen.c`/`ps2_SystemSaveScreen.c`/`ps2_SystemLoadScreen.c`/`bup_00.c`) | ✅ Done — real `sceMc*`/`gdFsOpen` PC reimplementation in new `save_mc_shim.c`, shim-tested standalone | below |
-| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 10 real bugs found+fixed across three passes (2 memory-card shim bugs, 3+1 x64 pointer-truncation/width sites, message-table stale-pointer hazard across 3 call sites, an undecompiled-enemy-stub crash, a 9-function/11-call-site pointer-array-stride bug in `effect.c`, an overlapping-write bug in `en01.c`); first real movement input tested (`Up`+`Left` via `xdotool`, not just Start-button); current blocker is `ene[]`/`sys->memp` motion-table data going stale across room transitions — root-caused via live gdb watchpoints (ruled out the `ewk_n>rom->ene_n` and pointer-width hypotheses) but not yet fixed, since it needs a room-transition-lifetime design decision, not a local patch | below |
+| Task 4.5 — Full-playthrough crash sweep | 🟡 In progress — 11 real bugs found+fixed across four passes (2 memory-card shim bugs, 3+1 x64 pointer-truncation/width sites, message-table stale-pointer hazard across 3 call sites, an undecompiled-enemy-stub crash, a 9-function/11-call-site pointer-array-stride bug in `effect.c`, an overlapping-write bug in `en01.c`, a missing-`return` UB bug in `bhEne01_SetLinkEnemy`); first real movement input tested (`Up`+`Left` via `xdotool`, not just Start-button); current blocker is dynamically-spawned linked-enemy `mnwP` data going stale — mechanism identified (bypasses `bhFinishRoom`'s population loop, inherits from parent by pointer copy) but the actual corruption point not yet pinned down live; needs a deterministic room repro + targeted watchpoint trace, not a local patch | below |
 
 **Investigation done so far (this pass):** grepped every remaining P4 source
 file for `asm`/`__asm__` (the tell for a VU0/EE-asm boundary that needs a
@@ -1933,6 +1933,125 @@ pwksub.c,hitchkl.c,ranking.c,map.c,message.c}`.
        blocker.**
   Verified no regression from the `en01.c` fix: standard 8s smoke test
   still exits clean (`[boot] clean exit`).
+- [x] **Step 4d (this pass — mechanism for the Step 4c blocker identified,
+  one more real bug found+fixed, remediation plan below):** followed the
+  `bhEne01_SetLinkEnemy(epw, 1, 1)` call site (`en01.c:2908` — the exact
+  `id=1` match for the crashing enemy) as the concrete spawn path for
+  `ene[5]`, instead of only working from the `bhFinishRoom` side.
+  1. **Root mechanism confirmed (static read, matches every live
+     symptom):** `bhFinishRoom` (`room.c:417-478`) only populates `mnwP`
+     for the *original* room enemies, `[0, rom->ene_n)`, once at room
+     load. Enemies spawned dynamically mid-room via
+     `bhEne01_SetLinkEnemy` (head/arm/leg/cap/worm/bomb/scope link-model
+     children — `en01.c:2908-2984`, called from inside the parent's own
+     `bhEne01_Init`) never go through that loop; they inherit `mnwP` by
+     direct pointer copy from the parent (`epp->mnwP = epw->mnwP;`,
+     `en01.c:3146`). This is why both `bhFinishRoom` watchpoints
+     (`room.c:473`/`room.c:750`) never fired in Step 4c — this enemy's
+     `mnwP` was never independently allocated, by design. The remaining
+     open question is *why* the inherited pointer itself reads back
+     garbage when the child's own `bhEne01_Init` later calls
+     `bhSetMotion` on it — the parent's own `mnwP` should already be
+     valid at spawn time (set by `bhFinishRoom` before any per-frame
+     `Init` dispatch runs). Not yet proven live; see remediation plan
+     below.
+  2. **Real bug found and fixed while tracing this: `bhEne01_SetLinkEnemy`
+     had no `return` statement.** `BH_PWORK* bhEne01_SetLinkEnemy(...)`
+     (`en01.c:3133-3148`) sets every field on `epp` and falls off the end
+     without returning it — undefined behavior in C (the original MIPS
+     build "worked" only because the decompiled register `epp` happened
+     to still be live in the return-value register at function exit).
+     Verified three ways: (a) an isolated minimal repro with the same
+     struct/body shape reliably triggers GCC's `-Wreturn-type` ("control
+     reaches end of non-void function"); (b) the same warning does not
+     surface when compiling the real 8600-line `en01.c` translation unit
+     — cause not resolved, not important (GCC quirk on a huge TU, not a
+     safety net to rely on); (c) `objdump` on the actual built object
+     confirms that at current `-O0` the last store before `ret` happens
+     to leave `epp` in `%rax` by coincidence, so this build currently
+     "works" — but it is not guaranteed under a different optimization
+     level or compiler version, and every one of its 11 call sites
+     (`en01.c:2908-2984`) treats the result as a live `BH_PWORK*`,
+     several through the same packed-`exp0`-offset pattern already fixed
+     once in Step 4c. Fixed with a one-line `return epp;` (gated
+     `#ifdef RECVX_PC_PORT`, matching this file's established
+     convention for port-only corrections to decompiled bodies).
+     Rebuilt clean; 8s headless smoke test still exits clean.
+  3. **Project-wide sweep for the same silent pattern — clean.** Wrote a
+     one-off script (not committed — ad hoc, scratchpad-only) to find
+     every function in `src/ps2/veronica/prog/*.c` returning a
+     pointer/int type whose body contains no `return` statement anywhere
+     (after stripping comments). 17 candidates surfaced; every one
+     manually checked resolved to an *already-known, already-logged*
+     category — either explicit `scePrintf("... - UNIMPLEMENTED!\n");`
+     stubs (undecompiled functions, visible at runtime via `[sce] ...
+     UNIMPLEMENTED!` log lines, e.g. `bhEne07_Init`,
+     `njCheckPlane4AndLine` seen live this pass) or dead code inside a
+     `/* ... */` block (never compiled at all, e.g. `en17.c`'s
+     `bhEne17_SetLinkWork`, `en03.c`'s `bhEne03_Collision2`).
+     `bhEne01_SetLinkEnemy` was the *only* instance of real, live,
+     genuinely-compiled logic silently falling off the end — this is not
+     a systemic pattern needing a broad sweep, it was a one-off.
+  4. **Live re-verification attempted, inconclusive — needs a
+     deterministic repro, not blind movement.** Rebuilt with the fix,
+     re-ran the `Start`+`Up`/`Left` movement harness (same technique as
+     Step 4c). Reached deeper gameplay (different room/enemy set this
+     run — `bhEne07_Init`/`njCheckPlane4AndLine` UNIMPLEMENTED stubs hit
+     repeatedly, no crash) but did not re-encounter the specific
+     `en01`-zombie-with-cap-model room from Step 4c before the test was
+     stopped; random movement doesn't reliably reach the same room twice.
+     **Remediation plan (next session's concrete next steps, in order):**
+     1. Build a *deterministic* repro instead of blind movement: find
+        which room/`stg_no`/`rom_no` Step 4c's crash happened in (grep
+        the Step 4c gdb log for the room-load trace right before the
+        crash, or add a `sys->stg_no`/`sys->rom_no` print to the
+        `CheckButton`-forced-cursor breakpoint), then either warp/force
+        that room directly (`sys->stg_no`/`sys->rom_no`/`sys->pos_no`
+        set via gdb before the room-load state machine reads them, if
+        the codebase's room-select mechanism allows it) or script the
+        exact movement sequence that reached it.
+     2. Re-run the Step 4c watchpoint script (`mnwp_watch2.gdb`-style:
+        watch the crashing `mnwP` slot's memory from the moment the
+        parent's own `mnwP` is set by `bhFinishRoom`, through the
+        `bhEne01_SetLinkEnemy` copy at spawn, through to the crash) to
+        find the exact write that corrupts it — this pins down whether
+        the corruption happens *before* the copy (parent's `mnwP` itself
+        already bad) or *after* (something rewinds/reuses the memory
+        the copy points to between spawn and use).
+     3. If the parent's `mnwP` is already bad at spawn time: the parent
+        enemy itself is likely *also* a dynamically-spawned link-enemy
+        (nested linking — a cap-of-a-cap or similar), meaning the bug is
+        one level further up the same `bhEne01_SetLinkEnemy` chain, not
+        the `bhFinishRoom` boundary. Trace one level further up with the
+        same technique.
+     4. If the copy is fine but the memory gets reused afterward: the
+        `sys->memp` bump allocator is being advanced/rewound by
+        something between the parent's spawn and the child's first
+        `bhSetMotion` call within the *same* room — look for any
+        `sys->memp = ...` write between those two points on the call
+        path (effects, other enemy inits, item pickups — anything
+        sharing the room's frame-local allocator).
+  **Anticipated next problems (from this pass's research, not yet hit
+  live):**
+  - The already-logged ~2 dozen x64 pointer-truncation sites outside
+    en01.c (`binfunc.c`, `door.c`, `adv.c`, `ps2_loadtim2.c`,
+    `ps2_sg_sd.c`, `ps2_dummy.c`, `ps2_NaTextureFunction.c`,
+    `ps2_sg_gd.c`, `event.c`, `njplus.c`) remain a plausible source of
+    further crash-sweep bugs; same triage procedure as every fix this
+    task (read narrower than write, or vice versa).
+  - Any `UNIMPLEMENTED!` stub whose return value is *dereferenced* by a
+    caller (not just stored/ignored) is a latent crash exactly like the
+    ones already fixed this task — when a future crash sweep hits a
+    `[sce] ... UNIMPLEMENTED!` log line immediately before a SIGSEGV,
+    check the caller's use of that function's return value first before
+    assuming a new bug class.
+  - The missing-`return` UB class ("works by accident at -O0") means
+    this project's correctness currently depends on never turning on
+    optimization for `recvx_game`. If P3 or any future work enables
+    `-O2`/Release builds, re-run the same `-Wreturn-type` sweep technique
+    (even though it didn't fire cleanly on the full TU here, an isolated
+    per-function check does) before trusting an optimized build's
+    behavior to match the current `-O0` one.
 - [ ] **Step 5:** Once the `ene[]`/`sys->memp` cross-room-transition
   staleness above is root-caused and fixed (or the enemy types/paths that
   hit it are confirmed unreachable) and a full loop (start → fight →
