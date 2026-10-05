@@ -143,8 +143,6 @@ CHUNK_HEAD* njCnkCsUvn(CHUNK_HEAD* pCnk)
     return (CHUNK_HEAD*)&((unsigned short*)(pCnk + 1))[pCnk->usSize];
 }
 
-void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim) {}
-void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num) {}
 void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num) {}
 
 /* GIF transfers complete immediately on PC: nothing to wait for. */

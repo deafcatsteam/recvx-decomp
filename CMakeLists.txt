@@ -137,6 +137,10 @@ add_executable(test_math port/tests/test_math.c)
 target_link_libraries(test_math PRIVATE cvx_game cvx_game_env m)
 add_test(NAME math COMMAND test_math)
 
+add_executable(test_ot port/tests/test_ot.c)
+target_link_libraries(test_ot PRIVATE cvx_game cvx_game_env m)
+add_test(NAME ordering_table COMMAND test_ot)
+
 # The game's main() becomes cvx_main(), called by the port's entry point.
 set_source_files_properties(${GAME_DIR}/njloop.c PROPERTIES COMPILE_DEFINITIONS main=cvx_main)
 

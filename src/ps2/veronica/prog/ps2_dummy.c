@@ -483,7 +483,151 @@ void Ps2AddPrim2D(unsigned long prim, void* dp, unsigned int num)
 }
 
 // 100% matching!
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/* VU0 vftoi4: float to 12.4 fixed point, truncated and saturated. */
+static int pc_ftoi4(float f)
+{
+    float v = f * 16.0f;
+
+    if (v != v)
+        return 0;
+    if (v >= 2147483647.0f)
+        return 0x7FFFFFFF;
+    if (v <= -2147483648.0f)
+        return (int)0x80000000;
+    return (int)v;
+}
+
+/* The VU0 loop of the original, in C: for each vertex (ST, RGBAQ, XYZF
+ * qwords), the depth becomes the Z-buffer value, the position goes to 12.4
+ * fixed point, and the vertex gets the ADC flag (no drawing kick) when one of
+ * the last three vertices is outside the guard band. */
+void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num)
+{
+    unsigned long* p;
+    TIM2_PICTUREHEADER_EX* timp;
+    const float* src;
+    unsigned int* dst;
+    unsigned int i;
+    unsigned int clip;
+    float zsum;
+
+    if ((prim & 0x8000000000000))
+    {
+        if (Ps2_now_tex == NULL)
+        {
+            return;
+        }
+
+        if ((prim & 0x20000000000000))
+        {
+            if (Ps2_use_pt_flag != 0)
+            {
+                prim &= ~SCE_GIF_SET_TAG(0, 0, 0, SCE_GS_SET_PRIM(0, 0, 0, 0, 1, 0, 0, 0, 0), 0, 0);
+            }
+        }
+
+        if (!(prim & 0x20000000000000))
+        {
+            timp = (TIM2_PICTUREHEADER_EX*)Ps2_now_tex->texinfo.texsurface.pSurface;
+
+            if (timp->TpFlag != 0)
+            {
+                Ps2_tex_load_tp_cancel = 1;
+
+                Ps2TexLoad(Ps2_now_tex);
+
+                Ps2_tex_load_tp_cancel = 0;
+            }
+        }
+    }
+
+    p = (unsigned long*)WORKBASE;
+
+    D2_SyncTag();
+
+    *p++ = ((num * 3) + 3) | 0x70000000;
+    *p++ = 0;
+
+    *p++ = SCE_GIF_SET_TAG(1, 0, SCE_GIF_PACKED, 0, 0, 1);
+    *p++ = SCE_GIF_PACKED_AD;
+
+    *p++ = Ps2_gs_save.TEST = SCE_GS_SET_TEST_1(1, SCE_GS_ALPHA_GREATER, 0, SCE_GS_AFAIL_KEEP, 0, 0, 1, SCE_GS_DEPTH_GEQUAL);
+    *p++ = SCE_GS_TEST_1;
+
+    *p++ = (SCE_GIF_SET_TAG(0, 1, SCE_GIF_REGLIST, 0, 0, 3) | prim) | num;
+    *p++ = GIF_REGLIST(SCE_GS_ST, SCE_GS_RGBAQ, SCE_GS_XYZF2);
+
+    src = (const float*)dp;
+    dst = (unsigned int*)p;
+    clip = 0;
+    zsum = 0;
+
+    for (i = 0; i < num; i++, src += 12, dst += 12)
+    {
+        unsigned int flags;
+        unsigned int cflags = 0;
+        float cx = src[8] - 2048.0f;
+        float cy = src[9] - 2048.0f;
+        float cz = (src[10] - 2048.0625f) + (src[10] * 0.062501907f);
+        float sz;
+        int w;
+
+        memcpy(&flags, &src[3], 4);
+        flags &= 0xFFFF;
+
+        /* vclipw.xyz against 2047 */
+        if (cx > 2047.0f) cflags |= 0x1;
+        if (cx < -2047.0f) cflags |= 0x2;
+        if (cy > 2047.0f) cflags |= 0x4;
+        if (cy < -2047.0f) cflags |= 0x8;
+        if (cz > 2047.0f) cflags |= 0x10;
+        if (cz < -2047.0f) cflags |= 0x20;
+        clip = ((clip << 6) | cflags) & 0xFFFFFF;
+
+        sz = -Ps2_zbuff_a + (src[2] * -Ps2_zbuff_b);
+
+        if (sz < 0)
+        {
+            sz = 0;
+        }
+
+        if (sz > 65534.0f)
+        {
+            sz = 65534.0f;
+        }
+
+        zsum += sz;
+
+        if ((clip & 0x3FFFF))
+        {
+            flags |= 0x8000;
+        }
+
+        w = (short)((pc_ftoi4(src[11]) & 0xFFFF) | flags);
+
+        memcpy(dst, src, 32);
+        dst[8] = pc_ftoi4(src[8]);
+        dst[9] = pc_ftoi4(src[9]);
+        dst[10] = pc_ftoi4(sz);
+        dst[11] = w;
+    }
+
+    /* Average depth, for sorting. */
+    ((float*)dst)[3] = zsum * (1.0f / (float)num);
+
+    if ((prim & 0x20000000000000))
+    {
+        Ps2AddOT((void*)WORKBASE, num, ((float*)p)[(12 * num) + 3], prim);
+    }
+    else
+    {
+        SyncPath();
+
+        loadImage((void*)0xF0000000);
+    }
+}
+#else
 void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;             
@@ -1160,7 +1304,11 @@ void Ps2ClearOT()
     
     Ps2_ot_list_no = 0;
     
+#ifdef PLATFORM_PC
+    Ps2_PP = (void*)&Ps2_PBUFF; /* no uncached-accelerated alias on PC */
+#else
     Ps2_PP = (void*)((int)&Ps2_PBUFF | 0x30000000); 
+#endif
     
     for (i = 0; i < 4096; i++) 
     {
@@ -1169,7 +1317,109 @@ void Ps2ClearOT()
 }
 
 // 100% matching!
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/* Adds a primitive packet (built at p like Ps2AddPrim does) to the ordering
+ * table, at the depth z, as a DMA "next" block in Ps2_PBUFF. */
+void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim)
+{
+    unsigned long* pp;
+    unsigned int otz;
+    unsigned int id;
+    int iz;
+
+    if (Ps2_ot_list_no >= 8192)
+    {
+        return;
+    }
+
+    /* cvt.w.s: truncation, saturated */
+    if (z != z)
+    {
+        iz = 0;
+    }
+    else if (z >= 2147483647.0f)
+    {
+        iz = 0x7FFFFFFF;
+    }
+    else if (z <= -2147483648.0f)
+    {
+        iz = (int)0x80000000;
+    }
+    else
+    {
+        iz = (int)z;
+    }
+
+    otz = (unsigned int)iz >> 4;
+
+    if (Ps2_ice_flag != 0)
+    {
+        id = Ps2_now_tex->globalIndex & 0xFFFFF;
+
+        if (((id >= 26510) && (id <= 26614)) || (id == 107170))
+        {
+            otz = (unsigned int)iz >> 12;
+        }
+    }
+
+    if (otz > 4095)
+    {
+        otz = 4095;
+    }
+
+    if (Ps2_OT[otz][0] != NULL)
+    {
+        Ps2_OT[otz][1]->op = (void*)&Ps2_ot_list[Ps2_ot_list_no];
+
+        Ps2_OT[otz][1] = &Ps2_ot_list[Ps2_ot_list_no];
+
+        Ps2_OT[otz][1]->op = NULL;
+    }
+    else
+    {
+        Ps2_OT[otz][0] = Ps2_OT[otz][1] = &Ps2_ot_list[Ps2_ot_list_no];
+
+        Ps2_OT[otz][1]->op = NULL;
+    }
+
+    if ((prim & 0x8000000000000))
+    {
+        Ps2_ot_list[Ps2_ot_list_no].tp = Ps2_now_tex;
+        Ps2_ot_list[Ps2_ot_list_no].bank = Ps2_now_bank;
+    }
+    else
+    {
+        Ps2_ot_list[Ps2_ot_list_no].tp = (void*)-1;
+    }
+
+    Ps2_ot_list[Ps2_ot_list_no].p = Ps2_PP;
+
+    Ps2_ot_list[Ps2_ot_list_no].TEX0 = Ps2_gs_save.TEX0 & 0xE0F8001FFFFFC000;
+    Ps2_ot_list[Ps2_ot_list_no].TEX0_NEXT = Ps2_gs_save.TEX0_NEXT & 0xE0F8001FFFFFC000;
+
+    Ps2_ot_list[Ps2_ot_list_no].ALPHA = Ps2_gs_save.ALPHA;
+
+    num = (num * 3) + 1;
+
+    /* The first qword is left for the texture reference of Ps2DrawOTagSub. */
+    pp = (unsigned long*)((char*)Ps2_PP + 16);
+
+    pp[0] = DMAnext | ((*(unsigned long*)p) & 0xFFFFFFF);
+    pp[1] = 0;
+
+    pp[2] = SCE_GIF_SET_TAG(1, 0, 0, 0, 0, 1);
+    pp[3] = SCE_GIF_PACKED_AD;
+
+    pp[4] = Ps2_gs_save.ALPHA;
+    pp[5] = SCE_GS_ALPHA_1;
+
+    memcpy(&pp[6], (char*)p + 48, num * 16);
+
+    Ps2_PP = (char*)&pp[6] + (num * 16);
+
+    Ps2_ot_list_no++;
+}
+#else
 void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim)
 {
     unsigned int i; 
