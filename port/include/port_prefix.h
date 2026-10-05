@@ -12,6 +12,20 @@
 
 #define PLATFORM_PC 1
 
+/*
+ * CodeWarrior's prefix file made the C library visible everywhere; several
+ * game files call memcpy/atan2f/... without including anything. Without a
+ * prototype, a float-returning function would be read back as an int.
+ */
+/* glibc's <sys/types.h> defines a 4-byte u_long; the EE's is 8 bytes. */
+#define u_long port_libc_u_long
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <unistd.h>
+#undef u_long
+
 /* 128-bit "quadword": only ever used to move 16 bytes at once. */
 typedef struct port_u128 {
     unsigned int w[4];

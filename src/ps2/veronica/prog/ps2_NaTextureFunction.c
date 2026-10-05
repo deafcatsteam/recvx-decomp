@@ -7,7 +7,9 @@
 NJS_TEXMEMLIST* Ps2_tex_info __attribute__((aligned(64)));
 unsigned int Ps2_texmemlist_num;
 void* Ps2_tex_buff;
+#ifndef PLATFORM_PC /* already declared by the host libc */
 char* index(char*, int);
+#endif
 NJS_TEXLIST* Ps2_current_texlist;
 unsigned int Ps2_current_texno;
 unsigned int Ps2_current_texbreak;
