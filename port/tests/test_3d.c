@@ -5,10 +5,13 @@
  * scissoring, 3D primitive packing) into the software GS, and checks pixels.
  */
 #include "ps2_NaDraw2D.h"
+#include "ps2_NaMath.h"
 #include "ps2_NaMatrix.h"
 #include "ps2_NaView.h"
 #include "ps2_NinjaCnk.h"
 #include "ps2_dummy.h"
+#include "main.h"
+#include "njplus.h"
 
 #include "../src/gs/gs.h"
 #include "../src/gs/gs_mem.h"
@@ -132,6 +135,56 @@ static void draw(void)
     njCnkDrawModelLocal(&model);
 }
 
+/* npCalcSkin: one object whose world matrix is a translation, one vertex
+ * on bone 0 with full weight and one with half weight. */
+static void test_skin(void)
+{
+    static unsigned char work[1 << 18] __attribute__((aligned(64)));
+    static float vl[16 + 16] __attribute__((aligned(16)));
+    static BH_PWORK pw;
+    static ML_WORK ml;
+    static O_WORK ow;
+    static NJS_CNK_OBJECT obj;
+    static NJS_CNK_MODEL mdl;
+    int skin[] = { 2, 0, 2, (0 << 24) | (9 << 16), (0 << 24) | (4 << 16) };
+    float* out;
+
+    njpmemp = work;
+    npPlusInit();
+
+    memset(vl, 0, sizeof(vl));
+    ((unsigned char*)vl)[0] = 51;
+    ((unsigned short*)vl)[3] = 2;
+    vl[16] = 1; vl[17] = 2; vl[18] = 3;   /* position */
+    vl[21] = 1;                           /* normal (0, 1, 0) */
+    vl[24] = -1; vl[25] = 0; vl[26] = 5;
+    vl[29] = 1;
+
+    memset(&ow, 0, sizeof(ow));
+    ow.mtx[0] = ow.mtx[5] = ow.mtx[10] = ow.mtx[15] = 1.0f;
+    ow.mtx[12] = 110.0f;                  /* world x 110, model at x 100 */
+    pw.px = 100.0f;
+
+    mdl.vlist = (Sint32*)vl;
+    obj.model = &mdl;
+    ml.objP = &obj;
+    ml.owP = &ow;
+    pw.mlwP = &ml;
+
+    njInitMatrix(matrices, 16, 0);
+    _Make_SinTable();
+    npCalcSkin(&pw, 1, skin);
+
+    out = (float*)mdl.vlist;
+    CHECK(out != vl);
+    CHECK(((unsigned char*)out)[0] == 51 && ((unsigned short*)out)[3] == 2);
+    CHECK(out[16] == 11 && out[17] == 2 && out[18] == 3);
+    CHECK(out[20] == 0 && out[21] == 1 && out[22] == 0);
+    CHECK(fabsf(out[24] - 9) < 1e-3f && fabsf(out[25]) < 1e-3f && fabsf(out[26] - 5) < 1e-3f);
+    CHECK(*(int*)&out[32] == 255);
+    printf("skin: (%g %g %g) (%g %g %g)\n", out[16], out[17], out[18], out[24], out[25], out[26]);
+}
+
 int main(void)
 {
     static const float quad[4][3] = {
@@ -193,6 +246,8 @@ int main(void)
     /* Its visible part is below the centre line (y = 10 is below). */
     CHECK(fb(320, 100) == 0);
     CHECK(fb(320, 300) != 0);
+
+    test_skin();
 
     if (failures == 0)
         printf("test_3d: all checks passed\n");

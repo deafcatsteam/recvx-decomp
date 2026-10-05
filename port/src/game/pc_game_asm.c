@@ -110,7 +110,7 @@ unsigned int Ps2BitCount(register unsigned int value)
     return x != 0 ? 32 - __builtin_clz((unsigned int)x) : 0;
 }
 
-/* ---- Model deformation (needs translating from VU0 code) ---------------- */
+/* ---- Facial animation (needs translating from VU0 code) ----------------- */
 
 /* TODO: facial animation; the faces keep their rest pose for now. */
 void _fmCnkCalcMuscle(MASK_WORK* fm) {}
@@ -118,12 +118,6 @@ void _fmCnkCalcJaw(MASK_WORK* fm) {}
 void _fmCnkCalcEye(MASK_WORK* fm) {}
 void _fmCnkCalcTang(MASK_WORK* fm) {}
 
-/* TODO: vertex morphing between two models. */
-void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float no, int ono) {}
-
-/* TODO: skinning; skinned models keep their bind pose for now. */
-void npCalcSkin(void* pwp, int obj_n, int* sknp) {}
-void npCalcSkinFM(void* pwp, int obj_n, int* sknp) {}
 
 /* ---- Rendering ----------------------------------------------------------- */
 

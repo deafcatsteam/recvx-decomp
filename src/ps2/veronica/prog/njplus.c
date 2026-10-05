@@ -710,7 +710,70 @@ void npCalcMorphing(NJS_CNK_OBJECT* obj_a, NJS_CNK_OBJECT* obj_b, float no, int 
 }
 
 // 99.95% matching
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/* The vertices of srcobj's model blended towards dstobj's by no / 1000, into
+ * the buffer np.vlp2[ono], which becomes srcobj's vertex chunk. */
+void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float no, int ono)
+{
+    int s_nb;
+    NJS_POINT4* dp;
+    NJS_POINT4* fp;
+    NJS_POINT4* sp;
+    HDR_PS* pSrc;
+    HDR_PS* pDst;
+
+    pSrc = (HDR_PS*)srcobj->model->vlist;
+    pDst = (HDR_PS*)dstobj->model->vlist;
+
+    s_nb = pSrc->usIndexMax;
+
+    if (s_nb != pDst->usIndexMax)
+    {
+        return;
+    }
+
+    sp = (NJS_POINT4*)(pSrc + 1);
+    dp = (NJS_POINT4*)(pDst + 1);
+    fp = (NJS_POINT4*)np.vlp2[ono];
+
+    ((HDR_PS*)fp)->ucType = pSrc->ucType;
+    ((HDR_PS*)fp)->ucAttr = pSrc->ucAttr;
+
+    ((HDR_PS*)fp)->usSize = pSrc->usSize;
+
+    ((HDR_PS*)fp)->usIndexOfs = pSrc->usIndexOfs;
+    ((HDR_PS*)fp)->usIndexMax = s_nb;
+
+    no *= 0.001f;
+
+    fp = (NJS_POINT4*)((HDR_PS*)fp + 1);
+
+    for ( ; s_nb != 0; s_nb--, fp += 2, sp += 2, dp += 2)
+    {
+        if ((sp->x != dp->x) || (sp->y != dp->y) || (sp->z != dp->z))
+        {
+            fp[0].x = ((dp[0].x - sp[0].x) * no) + sp[0].x;
+            fp[0].y = ((dp[0].y - sp[0].y) * no) + sp[0].y;
+            fp[0].z = ((dp[0].z - sp[0].z) * no) + sp[0].z;
+            fp[0].w = dp[0].w;
+
+            fp[1].x = ((dp[1].x - sp[1].x) * no) + sp[1].x;
+            fp[1].y = ((dp[1].y - sp[1].y) * no) + sp[1].y;
+            fp[1].z = ((dp[1].z - sp[1].z) * no) + sp[1].z;
+            fp[1].w = dp[1].w;
+        }
+        else
+        {
+            fp[0] = sp[0];
+            fp[1] = sp[1];
+        }
+    }
+
+    ((HDR_PS*)fp)->ucType = 0xFF;
+
+    srcobj->model->vlist = np.vlp2[ono];
+}
+#else
 void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float no, int ono)
 {
     int s_nb;
@@ -1797,7 +1860,90 @@ void npCutSkin(BH_PWORK* epw, int prm1, int prm2, int prm3, float prm4, float pr
 }
 
 // 100% matching!
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/*
+ * For each object of the model: its world matrix moved by -position into
+ * np.mxp[i][1], and the same rotated back by the object's own angles into
+ * np.mxp[i][0]; skinned objects get a vertex buffer in np.vlp. size_extra is
+ * the room after the vertices (32, or 96 for npInitCalcSkinFM), skip_face
+ * leaves out the face objects 11 to 14 (npInitCalcSkinFM).
+ */
+static void pc_init_calc_skin(void* pwp, int obj_n, int* sknp, unsigned int size_extra, int skip_face)
+{
+    O_WORK* owp;
+    NJS_CNK_OBJECT* op;
+    float* pos;
+    float* m;
+    int i;
+    int flg;
+    int nb;
+    int mno;
+    unsigned int ulSize;
+
+    owp = ((BH_PWORK*)pwp)->mlwP->owP;
+
+    np.bp = np.buff + (obj_n * 128);
+
+    njUnitMatrix(NULL);
+
+    np.sknp = sknp;
+
+    op = ((BH_PWORK*)pwp)->mlwP->objP;
+
+    pos = &((BH_PWORK*)pwp)->px;
+
+    for (i = 0; i < obj_n; i++, op++, owp++)
+    {
+        if (skip_face && (i >= 11) && (i <= 14))
+        {
+            continue;
+        }
+
+        flg = *np.sknp++;
+
+        if (flg != 0)
+        {
+            if ((flg & 0x2))
+            {
+                mno = *np.sknp++;
+
+                nb = *np.sknp++;
+
+                np.sknp += nb;
+
+                np.vlp[mno] = (int*)np.bp;
+
+                ulSize = (nb * 32) + size_extra;
+
+                ulSize += 64 - (ulSize & 0x3F);
+
+                np.bp += ulSize;
+            }
+            else
+            {
+                np.sknp++;
+            }
+
+            m = (float*)np.mxp[i][0];
+
+            memcpy(m, owp->mtx, sizeof(NJS_MATRIX));
+
+            m[12] -= pos[0];
+            m[13] -= pos[1];
+            m[14] -= pos[2];
+
+            memcpy(m + 16, m, sizeof(NJS_MATRIX));
+
+            njRotXYZ(np.mxp[i][0], -op->ang[0], -op->ang[1], -op->ang[2]);
+        }
+    }
+}
+
+void npInitCalcSkin(void* pwp, int obj_n, int* sknp)
+{
+    pc_init_calc_skin(pwp, obj_n, sknp, 32, 0);
+}
+#else
 void npInitCalcSkin(void* pwp, int obj_n, int* sknp)
 { 
 	NJS_MATRIX mat;        
@@ -1887,7 +2033,169 @@ void npInitCalcSkin(void* pwp, int obj_n, int* sknp)
 #endif
 
 // 99.93% matching
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/* out = row0 * v.x + row1 * v.y + row2 * v.z (+ row3 for a point) */
+static void pc_skin_mul(const float* m, const float* v, int point, float* out)
+{
+    int j;
+
+    for (j = 0; j < 3; j++)
+    {
+        out[j] = (m[j] * v[0]) + (m[4 + j] * v[1]) + (m[8 + j] * v[2]);
+
+        if (point)
+        {
+            out[j] += m[12 + j];
+        }
+    }
+}
+
+/*
+ * The skinned objects get new vertex chunks in np.vlp: each vertex (a
+ * position and a normal) is moved by the matrices of its bone, blended
+ * between np.mxp[bone][0] and np.mxp[bone][1] by its level. face_fm is set
+ * for npCalcSkinFM, which leaves out the face objects 11 to 14.
+ */
+static void pc_calc_skin(void* pwp, int obj_n, int* sknp, int face_fm)
+{
+    static float level[10] = { 0.1000000015f, 0.200000003f, 0.3000000119f, 0.400000006f, 0.5f, 0.6000000238f, 0.6999999881f, 0.8000000119f, 0.8999999762f, 1.0f };
+    NJS_POINT4* p0;
+    NJS_CNK_OBJECT* op;
+    float lv;
+    float* p1;
+    int i;
+    int j;
+    int flg;
+    int rg0;
+    int nb;
+    HDR_PS* pHdr0;
+    HDR_PS* pHdr1;
+
+    if (sknp == NULL)
+    {
+        return;
+    }
+
+    njPushMatrixEx();
+
+    if (face_fm)
+    {
+        npInitCalcSkinFM(pwp, obj_n, sknp);
+    }
+    else
+    {
+        npInitCalcSkin(pwp, obj_n, sknp);
+    }
+
+    np.sknp = sknp;
+
+    op = (NJS_CNK_OBJECT*)((O_WRK*)pwp)->mlwP->objP;
+
+    for (i = 0; i < obj_n; i++, op++)
+    {
+        if (face_fm && (i >= 11) && (i <= 14))
+        {
+            continue;
+        }
+
+        flg = *np.sknp++;
+
+        if (flg == 0)
+        {
+            continue;
+        }
+
+        if (!(flg & 0x2))
+        {
+            np.sknp++;
+            continue;
+        }
+
+        pHdr0 = (HDR_PS*)op->model->vlist;
+
+        rg0 = *np.sknp++;
+
+        op->model->vlist = np.vlp[rg0];
+
+        pHdr1 = (HDR_PS*)np.vlp[rg0];
+
+        nb = *np.sknp++;
+
+        pHdr1->ucType = pHdr0->ucType;
+        pHdr1->ucAttr = pHdr0->ucAttr;
+
+        pHdr1->usSize = pHdr0->usSize;
+
+        pHdr1->usIndexOfs = pHdr0->usIndexOfs;
+        pHdr1->usIndexMax = pHdr0->usIndexMax;
+
+        p0 = (NJS_POINT4*)(pHdr0 + 1);
+        p1 = (float*)(pHdr1 + 1);
+
+        for (j = 0; j < nb; j++, p0 += 2, p1 += 8)
+        {
+            const float* m0;
+            const float* m1;
+            float a[3];
+            float b[3];
+            int k;
+
+            rg0 = *np.sknp++;
+
+            lv = level[(rg0 >> 16) & 0xFF];
+
+            rg0 >>= 24;
+
+            if (face_fm && (rg0 > 10))
+            {
+                rg0 += 4;
+            }
+
+            m0 = (const float*)np.mxp[rg0][0];
+            m1 = (const float*)np.mxp[rg0][1];
+
+            if (lv != 1.0f)
+            {
+                pc_skin_mul(m0, &p0[0].x, 1, a);
+                pc_skin_mul(m1, &p0[0].x, 1, b);
+
+                for (k = 0; k < 3; k++)
+                {
+                    p1[k] = a[k] + ((b[k] - a[k]) * lv);
+                }
+
+                pc_skin_mul(m0, &p0[1].x, 0, a);
+                pc_skin_mul(m1, &p0[1].x, 0, b);
+
+                for (k = 0; k < 3; k++)
+                {
+                    p1[4 + k] = a[k] + ((b[k] - a[k]) * lv);
+                }
+
+                p1[3] = m0[11];
+                p1[7] = m0[11];
+            }
+            else
+            {
+                pc_skin_mul(m1, &p0[0].x, 1, p1);
+                pc_skin_mul(m1, &p0[1].x, 0, p1 + 4);
+
+                p1[3] = 0;
+                p1[7] = 0;
+            }
+        }
+
+        *(int*)p1 = 255;
+    }
+
+    njPopMatrixEx();
+}
+
+void npCalcSkin(void* pwp, int obj_n, int* sknp)
+{
+    pc_calc_skin(pwp, obj_n, sknp, 0);
+}
+#else
 void npCalcSkin(void* pwp, int obj_n, int* sknp)
 { 
     NJS_POINT4* p0;
@@ -2098,7 +2406,12 @@ void npCalcSkin(void* pwp, int obj_n, int* sknp)
 #endif
 
 // 100% matching!
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+void npInitCalcSkinFM(void* pwp, int obj_n, int* sknp)
+{
+    pc_init_calc_skin(pwp, obj_n, sknp, 96, 1);
+}
+#else
 void npInitCalcSkinFM(void* pwp, int obj_n, int* sknp)
 { 
 	NJS_MATRIX mat;        
@@ -2191,7 +2504,12 @@ void npInitCalcSkinFM(void* pwp, int obj_n, int* sknp)
 #endif
 
 // 99.93% matching
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+void npCalcSkinFM(void* pwp, int obj_n, int* sknp)
+{
+    pc_calc_skin(pwp, obj_n, sknp, 1);
+}
+#else
 void npCalcSkinFM(void* pwp, int obj_n, int* sknp)
 { 
     NJS_POINT4* p0;
