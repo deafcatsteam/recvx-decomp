@@ -88,6 +88,7 @@ set(PORT_SOURCES
     port/src/audio/pc_adx.c
     port/src/game/pc_game_asm.c
     port/src/game/pc_movie.c
+    port/src/game/pc_render3d.c
 )
 
 # Settings for code that sees the game's headers: the game itself, the port's
@@ -205,3 +206,7 @@ add_test(NAME disc COMMAND test_disc)
 set_tests_properties(disc PROPERTIES
     DEPENDS disc_make_image
     ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_disc.iso)
+
+add_executable(test_3d port/tests/test_3d.c)
+target_link_libraries(test_3d PRIVATE cvx_game cvx_game_env m)
+add_test(NAME render_3d COMMAND test_3d)

@@ -2,9 +2,9 @@
  * PC versions of game functions written in EE/VU0 assembly.
  *
  * The originals stay in the game sources under #ifndef PLATFORM_PC. Functions
- * that only compute data are translated to C here. The ones that feed the
- * PS2 renderer (VU1 packets, GS uploads) or depend on VU0 microprograms are
- * placeholders until the PC renderer exists; each says what it is waiting for.
+ * that only compute data are translated to C here; the 3D drawing ones are in
+ * pc_render3d.c. The model deformations that still need translating are
+ * placeholders; each says what it is waiting for.
  */
 #include "expand.h"
 #include "face.h"
@@ -125,25 +125,9 @@ void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float 
 void npCalcSkin(void* pwp, int obj_n, int* sknp) {}
 void npCalcSkinFM(void* pwp, int obj_n, int* sknp) {}
 
-/* ---- Rendering (replaced by the PC renderer) ---------------------------- */
+/* ---- Rendering ----------------------------------------------------------- */
 
-/* Chunk model drawing: skip the chunk without drawing it. */
-CHUNK_HEAD* njCnkCvVnPs2(CHUNK_HEAD* pCnk)
-{
-    return (CHUNK_HEAD*)&((unsigned int*)(pCnk + 1))[pCnk->usSize];
-}
-
-CHUNK_HEAD* njCnkCsUvh(CHUNK_HEAD* pCnk)
-{
-    return (CHUNK_HEAD*)&((unsigned short*)(pCnk + 1))[pCnk->usSize];
-}
-
-CHUNK_HEAD* njCnkCsUvn(CHUNK_HEAD* pCnk)
-{
-    return (CHUNK_HEAD*)&((unsigned short*)(pCnk + 1))[pCnk->usSize];
-}
-
-void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num) {}
+/* The 3D drawing helpers are in pc_render3d.c. */
 
 /* GIF transfers complete immediately on PC: nothing to wait for. */
 void SyncPath() {}
@@ -155,49 +139,7 @@ void loadImage(void* tags)
     gs_dma_gif_chain((unsigned int)tags);
 }
 
-int _Clip_Screen(float* clip)
-{
-    return 0;
-}
-
-void vu1DrawTriangleStripTransDouble(unsigned long ulType, VU1_STRIP_BUF* pS,
-                                     unsigned short usStripMax, unsigned short usMode) {}
-void vu1DrawTriangleStripTransDoubleI(unsigned long ulType, VU1_STRIP_BUF* pS,
-                                      unsigned short usStripMax, unsigned short usMode) {}
-
 /* VU microprograms, referenced only by address when uploading them. */
 int ps2_vu0sub0;
 int ps2_vu1sub0;
 int ps2_vu1sub1;
-
-void Ps2AddPrim3DEx(unsigned long prim, void* dp, unsigned int num) {}
-void Ps2AddPrim3DEx1P(unsigned long prim, void* dp, unsigned int num) {}
-
-/* Polygon clipping and scissoring done with VU0 on the PS2. */
-void InitNodeArraySet(SCISSOR* scissor) {}
-void InitNodeArraySet2() {}
-void ResetNodeArraySet(SCISSOR* scissor) {}
-void PushTriangleNodeArray(SCISSOR* scissor, NODE* nod) {}
-void ScissorTriangle(SCISSOR* scissor, SCISSOR_PLANE* plane_set) {}
-void DrawScissorPolygonOpaque2(int count, unsigned long ulType) {}
-void DrawScissorPolygonTrans1P(SCISSOR* scissor, unsigned long ulType) {}
-void _Check_ClipViewAll(NJS_POINT4* vec) {}
-int _ClipInter(int mask1, int mask2, int xyzflg, float sin, int work0, int work1, int count) { return 0; }
-int _Clip_ViewVolume(float* clip, float local_clip[4], float* vertex) { return 0; }
-unsigned int _Clip_ViewVolume2(NJS_POINT4* vec) { return 0; }
-unsigned int _Get_ClipViewVolume2() { return 0; }
-int _Get_ClipVolumePlane() { return 0; }
-void _Set_NodeArray(VU1_STRIP_BUF* pS, VU1_PRIM_BUF* pP) {}
-
-/* Vertex lighting done with VU0 on the PS2. */
-void vu1GetVertexColor(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorCM(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorIgnore(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDif(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifAmb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe1(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe2(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe3(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe1Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe2Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}
-void vu1GetVertexColorDifSpe3Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) {}

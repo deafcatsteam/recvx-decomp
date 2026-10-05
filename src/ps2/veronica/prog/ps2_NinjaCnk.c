@@ -162,14 +162,24 @@ VU1_COLOR NaCnkAmbientEs __attribute__((aligned(64))) = { 1.0f, 1.0f, 1.0f, 1.0f
 VU1_COLOR NaCnkAmbientEm __attribute__((aligned(64))) = { 1.0f, 1.0f, 1.0f, 1.0f };
 VU1_COLOR NaCnkAmbientSs __attribute__((aligned(64))) = { 1.0f, 1.0f, 1.0f, 1.0f };
 VU1_COLOR NaCnkAmbientSm = { 1.0f, 1.0f, 1.0f, 1.0f };
+#ifdef PLATFORM_PC
+/* ulState is 1: the initializer below is that bit pattern read as a float,
+   which C converts to 0 (light off). */
+CNK_LIGHT NaCnkLightEs __attribute__((aligned(64))) = { 1, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+#else
 CNK_LIGHT NaCnkLightEs __attribute__((aligned(64))) = { 1.401298464f, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
 CNK_LIGHT NaCnkLightEm[6] = { { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 } };
+#ifdef PLATFORM_PC
+CNK_LIGHT NaCnkLightSs = { 1, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+#else
 CNK_LIGHT NaCnkLightSs = { 1.401298464f, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 };
+#endif
 CNK_LIGHT NaCnkLightSm[6] = { { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
 														   { 0, 0, 1.0f, 10.0f, 1.0f, 1.0f, 1.0f, 1.0f, 0, 0, 0, 0, 0, 0, 0, 0 },
@@ -1277,7 +1287,183 @@ CHUNK_HEAD* njCnkCvVn(CHUNK_HEAD* pCnk)
 }
 
 // 98.11% matching
-#ifndef PLATFORM_PC
+#ifdef PLATFORM_PC
+/*
+ * The VU0 microprogram VU0_CALCPOINT (vsm/ps2_vu0.vsm) in C: each vertex is
+ * moved to view space, projected, and lit by up to four lights (directional
+ * ones scaled by their intensity, point ones by the distance falloff of
+ * njCnkCvVn). Vu0ClipFlag gets the clip flags that all the vertices share.
+ */
+CHUNK_HEAD* njCnkCvVnPs2(CHUNK_HEAD* pCnk)
+{
+    static unsigned int mask[5] = { 0, 0x88, 0xCC, 0xEE, 0xFF };
+    CNK_LIGHT* lp;
+    CNK_LIGHT* light[4];
+    VU1_STRIP_BUF* pBuffer;
+    unsigned int ulIndex;
+    unsigned int bits;
+    unsigned int clipflag;
+    unsigned int n;
+    float* m;
+    float* fpCnk;
+    float fSX, fSY;
+    int lights;
+    int i;
+
+    lp = pNaCnkCrntLighting->pLightTop;
+    lights = pNaCnkCrntLighting->lLightMax;
+
+    if (lights > 4)
+    {
+        lights = 4;
+    }
+
+    bits = 0;
+
+    for (i = 0; i < 4; i++)
+    {
+        light[i] = (i < lights) ? &lp[i] : NULL;
+
+        if (light[i] != NULL)
+        {
+            bits |= (light[i]->ulState << (7 - i)) | (light[i]->ulMode << (3 - i));
+        }
+    }
+
+    bits &= mask[lights];
+
+    pCnk++;
+
+    ulIndex = pCnk->usSize;
+
+    fpCnk = (float*)&pCnk[1] + 14;
+
+    pBuffer = &pNaCnkVerBufTop[*(unsigned short*)&pCnk[0]];
+
+    m = *pNaMatMatrixStuckPtr;
+
+    fSX = fVu1AspectW * fVu1Projection;
+    fSY = fVu1AspectH * fVu1Projection;
+
+    clipflag = 0x3F;
+
+    for (n = 0; n < ulIndex; n++, pBuffer++, fpCnk += 8)
+    {
+        float fX = fpCnk[0], fY = fpCnk[1], fZ = fpCnk[2];
+        float fNX = fpCnk[4], fNY = fpCnk[5], fNZ = fpCnk[6];
+        float fVX, fVY, fVZ, fNSX, fNSY, fNSZ, fIz;
+        float fI[4] = { 0, 0, 0, 0 };
+        float c[4];
+        float v[3];
+
+        fVX = m[0] * fX + m[4] * fY + m[8] * fZ + m[12];
+        fVY = m[1] * fX + m[5] * fY + m[9] * fZ + m[13];
+        fVZ = m[2] * fX + m[6] * fY + m[10] * fZ + m[14];
+
+        fNSX = m[0] * fNX + m[4] * fNY + m[8] * fNZ;
+        fNSY = m[1] * fNX + m[5] * fNY + m[9] * fNZ;
+        fNSZ = m[2] * fNX + m[6] * fNY + m[10] * fNZ;
+
+        fIz = 1.0f / fVZ;
+
+        for (i = 0; i < 4; i++)
+        {
+            CNK_LIGHT* l = light[i];
+
+            if (!(bits & (0x80 >> i)))
+            {
+                continue;
+            }
+
+            if (bits & (0x08 >> i))
+            {
+                float fDX = l->fCx - fVX;
+                float fDY = l->fCy - fVY;
+                float fDZ = l->fCz - fVZ;
+                float fDD = (fDX * fDX) + (fDY * fDY) + (fDZ * fDZ);
+                float fDot = (fDX * fNSX) + (fDY * fNSY) + (fDZ * fNSZ);
+
+                if ((fDot < 0) || (fDD > l->fFarRR))
+                {
+                    continue;
+                }
+
+                fI[i] = fDot / sqrtf(fDD);
+
+                if (fDD > l->fNearRR)
+                {
+                    fI[i] *= l->fNearRR / fDD;
+                }
+            }
+            else
+            {
+                fI[i] = l->fI * ((fNSX * l->fCx) + (fNSY * l->fCy) + (fNSZ * l->fCz));
+
+                if (fI[i] < 0)
+                {
+                    fI[i] = 0;
+                }
+            }
+        }
+
+        pBuffer->fIr = 0;
+        pBuffer->fIg = 0;
+        pBuffer->fIb = 0;
+        pBuffer->fA = 0;
+
+        for (i = 0; i < 4; i++)
+        {
+            if (fI[i] != 0)
+            {
+                pBuffer->fIr += light[i]->fR * fI[i];
+                pBuffer->fIg += light[i]->fG * fI[i];
+                pBuffer->fIb += light[i]->fB * fI[i];
+            }
+        }
+
+        pBuffer->fVx = fVX;
+        pBuffer->fVy = fVY;
+        pBuffer->fVz = fVZ;
+        pBuffer->fFog = njCalcFogPowerEx(fIz);
+
+        pBuffer->fSx = fVX * fSX * fIz;
+        pBuffer->fSy = fVY * fSY * fIz;
+        pBuffer->fIz = fIz;
+        pBuffer->fNz = fNSZ;
+
+        v[0] = fVX;
+        v[1] = fVY;
+        v[2] = fVZ;
+
+        for (i = 0; i < 4; i++)
+        {
+            c[i] = ClipMatrix2[0][i] * v[0] + ClipMatrix2[1][i] * v[1] + ClipMatrix2[2][i] * v[2] + ClipMatrix2[3][i];
+        }
+
+        {
+            float w = fabsf(c[3]);
+            unsigned int f = 0;
+
+            if (c[0] > w) f |= 0x01;
+            if (c[0] < -w) f |= 0x02;
+            if (c[1] > w) f |= 0x04;
+            if (c[1] < -w) f |= 0x08;
+            if (c[2] > w) f |= 0x10;
+            if (c[2] < -w) f |= 0x20;
+
+            clipflag &= f;
+        }
+
+        /* Stored after each vertex but the first. */
+        if (n != 0)
+        {
+            Vu0ClipFlag = clipflag;
+        }
+    }
+
+    return (CHUNK_HEAD*)fpCnk;
+}
+#else
 CHUNK_HEAD* njCnkCvVnPs2(CHUNK_HEAD* pCnk)
 {
     VU1_STRIP_BUF* pBuffer;                                    
@@ -1860,6 +2046,147 @@ int _CVV(float* v0)
 }
 #endif
 
+#ifdef PLATFORM_PC
+int _CVV(float* v0);
+
+/*
+ * Textured triangle strips. The PS2 draws most of them with the VU1
+ * microprogram (vsm/ps2_vu1.vsm) and only the "TransDouble" modes with the C
+ * strip functions of ps2_Vu1Strip.c; the port draws them all with those
+ * functions, which do the same lighting, clipping and scissoring on the EE.
+ * Each entry of a strip is a vertex index and its U and V (scaled by uv).
+ */
+static CHUNK_HEAD* pc_cnk_strips_uv(CHUNK_HEAD* pCnk, float uv)
+{
+    unsigned char ucFlag;
+    unsigned long ulType;
+    unsigned short* uspCnk;
+    VU1_STRIP_BUF* pV, *pS;
+    unsigned short usStrip;
+    unsigned short usCnt;
+    unsigned short usMax;
+    unsigned short usNum;
+    unsigned short usClip;
+    unsigned short usColorCalc;
+    void (*pVu1Func)(unsigned long, VU1_STRIP_BUF*, unsigned short, unsigned short);
+    int sExit;
+
+    ulType = SCE_GIF_PRIM(SCE_GS_PRIM_TRISTRIP, 0, SCE_GS_TRUE, SCE_GS_TRUE, 0, 0, 0, 0, 0);
+
+    ucFlag = (ulNaCnkFlagConstAttr != 0) ? ucNaCnkAttr : pCnk->ucHeadBits;
+
+    if ((ucFlag & 0x8))
+    {
+        ulType |= SCE_GIF_PRIM(0, 0, 0, 0, SCE_GS_TRUE, 0, 0, 0, 0);
+    }
+
+    if (!(ucFlag & 0x20))
+    {
+        ulType |= SCE_GIF_PRIM(0, SCE_GS_TRUE, 0, 0, 0, 0, 0, 0, 0);
+    }
+
+    if (ulNaCnkFlagConstMaterial != 0)
+    {
+        vu1SetDiffuseMaterial(&NaCnkConstantMaterial);
+        vu1SetAlphaRatio(fNaCnkConstantA);
+
+        usColorCalc = 1;
+    }
+    else
+    {
+        vu1SetDiffuseMaterial(pNaCnkCrntLighting->pDiffuse);
+        vu1SetSpeculaMaterial(pNaCnkCrntLighting->pSpecula);
+        vu1SetAmbient(pNaCnkCrntLighting->pAmbient);
+        vu1SetAlphaRatio(fNaCnkAlphaMaterial);
+
+        usColorCalc = uspCnkCrntTexColCalcTbl[ucFlag & 0x7];
+    }
+
+    pVu1Func = pCnkCsVu1FuncTbl[(ucFlag & 0x18) | ulCnkCurrentDrawMode];
+
+    /* Modes without a C function went to the VU1 "Double" program. */
+    if (pVu1Func == NULL)
+    {
+        pVu1Func = pCnkCsVu1FuncTbl[ucFlag & 0x18];
+    }
+
+    uspCnk = (unsigned short*)&pCnk[1];
+
+    usStrip = *uspCnk++ & 0x3FFF;
+
+    for (; usStrip; usStrip--)
+    {
+        usClip = *uspCnk & 0x8000;
+
+        usNum = (usClip != 0) ? ~*uspCnk + 1 : *uspCnk;
+
+        uspCnk++;
+
+        sExit = 0;
+
+        while (TRUE)
+        {
+            unsigned int cflag;
+
+            cflag = 0x3F;
+
+            /* The original keeps filling the buffer for long strips. */
+            pS = NaCnkStrBufTop;
+
+            if ((usMax = usNum) > 60)
+            {
+                usNum -= 58;
+
+                usMax = 60;
+            }
+            else
+            {
+                sExit = 1;
+            }
+
+            for (usCnt = usMax; usCnt; usCnt--, pS++)
+            {
+                pV = &pNaCnkVerBufTop[*uspCnk++];
+
+                *(u_long128*)&pS->fVx = *(u_long128*)&pV->fVx;
+                *(u_long128*)&pS->fSx = *(u_long128*)&pV->fSx;
+                *(u_long128*)&pS->fIr = *(u_long128*)&pV->fIr;
+
+                pS->fU = uv * *uspCnk++;
+                pS->fV = uv * *uspCnk++;
+
+                cflag &= _CVV(&pV->fVx);
+            }
+
+            if (cflag == 0)
+            {
+                pVu1Func(ulType, NaCnkStrBufTop, usMax, usClip | usColorCalc);
+            }
+
+            if (sExit == 0)
+            {
+                uspCnk -= 6;
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    return (CHUNK_HEAD*)uspCnk;
+}
+
+CHUNK_HEAD* njCnkCsUvh(CHUNK_HEAD* pCnk)
+{
+    return pc_cnk_strips_uv(pCnk, 0.0009775171f);
+}
+
+CHUNK_HEAD* njCnkCsUvn(CHUNK_HEAD* pCnk)
+{
+    return pc_cnk_strips_uv(pCnk, 0.003921569f);
+}
+#endif
 // 99.22% matching
 #ifndef PLATFORM_PC
 CHUNK_HEAD* njCnkCsUvh(CHUNK_HEAD* pCnk)
