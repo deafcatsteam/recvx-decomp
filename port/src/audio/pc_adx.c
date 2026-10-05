@@ -67,9 +67,11 @@ Sint32 ADXF_LoadPartitionNw(Sint32 ptid, Char8 *fname, void *dir, void *ptinfo)
         fprintf(stderr, "ADXF: partition %d: '%s' not found on the disc\n", (int)ptid, fname);
         return -1;
     }
+    /* CRI only checks the first three bytes: the fourth is not always 0. */
     if (!pc_disc_read_bytes((uint64_t)lsn * PC_DISC_SECTOR, 8, head)
-        || memcmp(head, "AFS", 4) != 0) {
-        fprintf(stderr, "ADXF: '%s' is not an AFS archive\n", fname);
+        || memcmp(head, "AFS", 3) != 0) {
+        fprintf(stderr, "ADXF: '%s' is not an AFS archive (starts with %02x %02x %02x %02x)\n",
+                fname, head[0], head[1], head[2], head[3]);
         return -1;
     }
 

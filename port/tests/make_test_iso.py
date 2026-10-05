@@ -35,7 +35,8 @@ def afs(files):
     for f in files:
         table += struct.pack('<II', off + len(data), len(f))
         data += f + b'\0' * (-len(f) % SECTOR)
-    head = b'AFS\0' + struct.pack('<I', len(files)) + table
+    # The fourth magic byte is not always 0 on the real disc.
+    head = b'AFS ' + struct.pack('<I', len(files)) + table
     return head + b'\0' * (SECTOR - len(head)) + data
 
 
