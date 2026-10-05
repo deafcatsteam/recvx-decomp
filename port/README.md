@@ -12,8 +12,8 @@ Le jeu entier compile et s'assemble en un programme PC (`cvx_pc`, ou
 `cvx_pc.exe` sous Windows) qui lit les données directement dans l'ISO du jeu.
 Avec une fausse image disque, il passe toute l'initialisation du système de
 fichiers et du son ; **avec ta vraie ISO, il n'a encore jamais été lancé.**
-Il ne dessine rien pour l'instant : la fenêtre reste noire, le rendu est la
-prochaine grosse étape.
+Le rendu 2D (menus, textes, images) passe par un GS logiciel qui reproduit la
+carte graphique de la PS2 ; la 3D n'est pas encore dessinée.
 
 - [x] Tout le code C du jeu compile (les fonctions en assembleur sont mises de côté)
 - [x] Maths Ninja (`ps2_NaMath.c`, `ps2_NaMatrix.c`) réécrites en C et testées
@@ -22,7 +22,8 @@ prochaine grosse étape.
 - [x] Noyau, IOP, manette, horloge 60 Hz, SDK Sony : remplacements PC
 - [x] Fenêtre, clavier et manette (SDL2), builds Linux et Windows
 - [ ] **Premier lancement avec la vraie ISO** (à faire chez toi, voir plus bas)
-- [ ] Rendu : remplacer le VU1/GS par un moteur PC (D3D9 pour RTX Remix, ou OpenGL)
+- [x] Rendu 2D : GS logiciel (`src/gs/`), testé sur des paquets de test ; reste à valider sur le jeu
+- [ ] Rendu 3D natif (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
 - [ ] Skinning (`npCalcSkin`), morphing (`npTransform`), visages (`_fmCnkCalc*`)
 - [ ] Son : pilote IOP `TSNDDRV` (effets, musique) et flux ADX (voix, BGM)
 - [ ] Vidéos (`ps2_MovieFunc.c`, MPEG2 via l'IPU) : sautées pour l'instant
@@ -62,6 +63,7 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Retour arrière | Select | | E | △ |
 | Ctrl gauche | R1 (viser) | | Q | L1 |
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
+| | | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
 
 ## Récupérer l'exécutable Windows
 
@@ -112,6 +114,7 @@ une couche « plateforme » écrite pour le PC.
 |---|---|
 | `include/port_prefix.h` | Inclus avant chaque fichier du jeu : `PLATFORM_PC`, libc, `long` sur 8 octets comme sur PS2, types 128 bits |
 | `include/sdk/` | En-têtes de remplacement du SDK PS2 de Sony ; les registres matériels pointent vers de la mémoire ordinaire |
+| `src/gs/` | GS logiciel : mémoire vidéo au format PS2, paquets GIF, DMA, dessin |
 | `src/main/` | Point d'entrée PC (`pc_main.c`) et fenêtre/entrées SDL2 (`pc_window.c`) |
 | `src/platform/pc_disc.c` | Lecture de l'ISO (ISO 9660) secteur par secteur, comme le lecteur DVD |
 | `src/platform/pc_iop.c` | Mémoire et RPC de l'IOP, modèle minimal du pilote son |
