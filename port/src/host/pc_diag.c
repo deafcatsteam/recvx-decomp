@@ -178,6 +178,19 @@ static void install_crash_handler(void)
     SetUnhandledExceptionFilter(crash_handler);
 }
 
+/* Processor time used by the whole program and by the game's thread. */
+static void cpu_times(int64_t *all_ns, int64_t *main_ns)
+{
+    FILETIME created, exited, kernel, user;
+    *all_ns = *main_ns = 0;
+    if (GetProcessTimes(GetCurrentProcess(), &created, &exited, &kernel, &user))
+        *all_ns = ((int64_t)kernel.dwHighDateTime << 32 | kernel.dwLowDateTime) * 100 +
+                  ((int64_t)user.dwHighDateTime << 32 | user.dwLowDateTime) * 100;
+    if (GetThreadTimes(main_thread, &created, &exited, &kernel, &user))
+        *main_ns = ((int64_t)kernel.dwHighDateTime << 32 | kernel.dwLowDateTime) * 100 +
+                   ((int64_t)user.dwHighDateTime << 32 | user.dwLowDateTime) * 100;
+}
+
 #else /* POSIX */
 #include <execinfo.h>
 #include <pthread.h>
@@ -213,6 +226,17 @@ static void install_crash_handler(void)
     signal(SIGILL, crash_handler);
 }
 
+static void cpu_times(int64_t *all_ns, int64_t *main_ns)
+{
+    struct timespec t;
+    clockid_t clock;
+    *all_ns = *main_ns = 0;
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &t) == 0)
+        *all_ns = (int64_t)t.tv_sec * 1000000000 + t.tv_nsec;
+    if (pthread_getcpuclockid(main_thread, &clock) == 0 && clock_gettime(clock, &t) == 0)
+        *main_ns = (int64_t)t.tv_sec * 1000000000 + t.tv_nsec;
+}
+
 static void print_main_stack(void)
 {
     pthread_kill(main_thread, SIGUSR1);
@@ -226,18 +250,26 @@ static void diag_loop(void)
     uint32_t last = pc_diag_vblanks;
     int stalled = 0, seconds = 0, quiet = getenv("CVX_QUIET") != NULL;
     char line[256];
+    int64_t last_all, last_main;
 
+    cpu_times(&last_all, &last_main);
     for (;;) {
         pc_host_sleep_ns(1000000000);
         seconds++;
         uint32_t now = pc_diag_vblanks;
         if (!quiet) {
             int wait_ms = (int)(pc_diag_wait_ns / 1000000), show_ms = (int)(pc_diag_show_ns / 1000000);
+            int64_t all, main;
             pc_diag_wait_ns = 0;
             pc_diag_show_ns = 0;
+            /* Processor time in ms per second: 1000 is one core kept busy. */
+            cpu_times(&all, &main);
+            int cpu_ms = (int)((all - last_all) / 1000000), main_ms = (int)((main - last_main) / 1000000);
+            last_all = all;
+            last_main = main;
             gs_debug_status(line, sizeof(line));
-            fprintf(stderr, "[%3ds] %u frames/s | idle %d ms, window %d ms | %s\n", seconds,
-                    now - last, wait_ms, show_ms, line);
+            fprintf(stderr, "[%3ds] %u frames/s | cpu %d ms (game thread %d) | idle %d ms, window %d ms | %s\n",
+                    seconds, now - last, cpu_ms, main_ms, wait_ms, show_ms, line);
         }
         if (now == last) {
             if (++stalled == STALL_SECONDS) {

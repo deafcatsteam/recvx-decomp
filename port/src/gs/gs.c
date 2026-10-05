@@ -1188,8 +1188,104 @@ static void gif_qword(uint64_t lo, uint64_t hi)
         gif.in_tag = 0;
 }
 
+/* ---- Frame dumps ------------------------------------------------------- */
+
+static const char dump_magic[8] = "CVXGSD1";
+enum { DUMP_END, DUMP_GIF, DUMP_DISPLAY };
+static FILE *dump_file;
+static char dump_path[260];
+
+void gs_dump_frame(const char *path)
+{
+    if (dump_file == NULL && dump_path[0] == 0)
+        snprintf(dump_path, sizeof(dump_path), "%s", path);
+}
+
+static void dump_u32(uint32_t v)
+{
+    fwrite(&v, 4, 1, dump_file);
+}
+
+void gs_dump_vblank(void)
+{
+    /* Two V-blanks: the game may take two of them to draw a frame. */
+    static int vblanks;
+    if (dump_file != NULL && ++vblanks < 2)
+        return;
+    vblanks = 0;
+    if (dump_file != NULL) {
+        dump_u32(DUMP_END);
+        fclose(dump_file);
+        dump_file = NULL;
+        fprintf(stderr, "gs: saved %s\n", dump_path);
+        dump_path[0] = 0;
+    } else if (dump_path[0] != 0) {
+        dump_file = fopen(dump_path, "wb");
+        if (dump_file == NULL) {
+            fprintf(stderr, "gs: cannot write %s\n", dump_path);
+            dump_path[0] = 0;
+            return;
+        }
+        fwrite(dump_magic, 8, 1, dump_file);
+        dump_u32(sizeof(gs));
+        dump_u32(sizeof(trx));
+        dump_u32(sizeof(gif));
+        fwrite(&gs, sizeof(gs), 1, dump_file);
+        fwrite(&trx, sizeof(trx), 1, dump_file);
+        fwrite(&gif, sizeof(gif), 1, dump_file);
+        fwrite(gs_vram, GS_MEM_SIZE, 1, dump_file);
+    }
+}
+
+static void gif_write(const uint64_t *qwords, uint32_t count);
+
+int gs_replay(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    char magic[8];
+    uint32_t sizes[3], type, count;
+    uint64_t *buf = NULL;
+    int ok = 0;
+
+    if (f == NULL)
+        return -1;
+    if (fread(magic, 8, 1, f) == 1 && memcmp(magic, dump_magic, 8) == 0 &&
+        fread(sizes, 4, 3, f) == 3 && sizes[0] == sizeof(gs) && sizes[1] == sizeof(trx) &&
+        sizes[2] == sizeof(gif) && fread(&gs, sizeof(gs), 1, f) == 1 &&
+        fread(&trx, sizeof(trx), 1, f) == 1 && fread(&gif, sizeof(gif), 1, f) == 1 &&
+        fread(gs_vram, GS_MEM_SIZE, 1, f) == 1) {
+        changes++;
+        while (fread(&type, 4, 1, f) == 1) {
+            if (type == DUMP_GIF) {
+                if (fread(&count, 4, 1, f) != 1)
+                    break;
+                buf = realloc(buf, (size_t)count * 16 + 16);
+                if (buf == NULL || fread(buf, 16, count, f) != count)
+                    break;
+                gif_write(buf, count);
+            } else if (type == DUMP_DISPLAY) {
+                uint64_t d[2];
+                if (fread(d, 8, 2, f) != 2)
+                    break;
+                gs_set_display(d[0], d[1]);
+            } else {
+                ok = type == DUMP_END;
+                break;
+            }
+        }
+    }
+    free(buf);
+    fclose(f);
+    return ok ? 0 : -1;
+}
+
 static void gif_write(const uint64_t *qwords, uint32_t count)
 {
+    if (dump_file != NULL) {
+        dump_u32(DUMP_GIF);
+        dump_u32(count);
+        fwrite(qwords, 16, count, dump_file);
+    }
     for (uint32_t i = 0; i < count; i++)
         gif_qword(qwords[i * 2], qwords[i * 2 + 1]);
 }
@@ -1291,6 +1387,11 @@ static void dma_chain(uint32_t tadr)
 
 void gs_set_display(uint64_t dispfb, uint64_t display)
 {
+    if (dump_file != NULL) {
+        uint64_t d[2] = { dispfb, display };
+        dump_u32(DUMP_DISPLAY);
+        fwrite(d, 8, 2, dump_file);
+    }
     gs.dispfb = dispfb;
     gs.display = display;
     changes++;

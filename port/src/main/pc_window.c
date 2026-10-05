@@ -4,7 +4,8 @@
  * Opens the game window, turns keyboard and game controller input into the
  * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and shows the
  * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
- * fullscreen, F12 saves a screenshot, Tab held fast-forwards.
+ * fullscreen, F12 saves a screenshot, F10 dumps a frame of the GS (see
+ * gs_dump_frame), Tab held fast-forwards.
  *
  * Without SDL2, or with CVX_HEADLESS set, the game runs without a window.
  */
@@ -146,6 +147,8 @@ static void frame(void)
 {
     SDL_Event ev;
 
+    gs_dump_vblank();
+
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
         case SDL_QUIT:
@@ -165,6 +168,12 @@ static void frame(void)
         case SDL_KEYDOWN:
             if (ev.key.keysym.scancode == SDL_SCANCODE_F12)
                 save_screenshot();
+            if (ev.key.keysym.scancode == SDL_SCANCODE_F10) {
+                static int dumps;
+                char name[64];
+                snprintf(name, sizeof(name), "cvx_gsdump_%03d.bin", dumps++);
+                gs_dump_frame(name);
+            }
             if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
                 Uint32 full = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
                 SDL_SetWindowFullscreen(window, full ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);

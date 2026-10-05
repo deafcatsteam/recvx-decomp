@@ -72,6 +72,7 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Ctrl gauche | R1 (viser) | | Q | L1 |
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
 | Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
+| | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`) |
 
 ## Récupérer l'exécutable Windows
 

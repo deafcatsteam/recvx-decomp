@@ -247,6 +247,33 @@ static void test_dma_chain(void)
     CHECK(fb(51, 51) == 0x80abcdef);
 }
 
+/* A frame dump drawn again gives the same picture. */
+static void test_dump_replay(void)
+{
+    const char *path = "test_gsdump.bin";
+
+    gs_reset();
+    gs_dump_frame(path);
+    gs_dump_vblank(); /* starts the dump */
+    setup_frame();
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x00, 6);
+    ad(0x01, 0x80405060);
+    ad(0x05, xyz(20, 20));
+    send();
+    tag(1, 1, 0, 1, 0xe);
+    ad(0x05, xyz(24, 24));
+    send();
+    gs_dump_vblank();
+    gs_dump_vblank(); /* ends it */
+    gs_reset();
+    CHECK(fb(21, 21) == 0);
+    CHECK(gs_replay(path) == 0);
+    CHECK(fb(21, 21) == 0x80405060);
+    CHECK(fb(24, 24) != 0x80405060);
+    remove(path);
+}
+
 int main(void)
 {
     gs_reset();
@@ -257,6 +284,7 @@ int main(void)
     test_alpha_blend();
     test_triangle();
     test_dma_chain();
+    test_dump_replay();
     if (failures == 0)
         printf("test_gs: all checks passed\n");
     return failures != 0;

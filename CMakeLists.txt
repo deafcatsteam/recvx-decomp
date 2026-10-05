@@ -192,6 +192,10 @@ add_executable(test_gs port/tests/test_gs.c)
 target_link_libraries(test_gs PRIVATE cvx_host)
 add_test(NAME gs COMMAND test_gs)
 
+# Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
+add_executable(gs_replay port/tools/gs_replay.c)
+target_link_libraries(gs_replay PRIVATE cvx_host)
+
 add_executable(test_disc port/tests/test_disc.c)
 target_link_libraries(test_disc PRIVATE cvx_game cvx_game_env m)
 add_test(NAME disc_make_image

@@ -56,6 +56,15 @@ typedef struct {
 } GsStats;
 extern GsStats gs_stats;
 
+/* Frame dumps, for reproducing a picture away from the game: gs_dump_frame
+ * asks for the next frame to be written to path (the GS state, its memory,
+ * then everything sent to it until the following V-blank); call
+ * gs_dump_vblank at every V-blank. gs_replay draws a dump again and returns
+ * 0, or -1 if the file cannot be read. */
+void gs_dump_frame(const char *path);
+void gs_dump_vblank(void);
+int gs_replay(const char *path);
+
 /* Clock used for busy_ns (nanoseconds); not measured when NULL. */
 extern int64_t (*gs_clock_ns)(void);
 
