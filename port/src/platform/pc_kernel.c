@@ -80,13 +80,18 @@ void pc_wait_vblank(void)
         if (next_ns == 0 || now - next_ns > period_ns * 4)
             next_ns = now; /* first frame, or fell far behind: resync */
         next_ns += period_ns;
-        if (next_ns > now)
+        if (next_ns > now) {
             pc_host_sleep_ns(next_ns - now);
+            pc_diag_wait_ns += pc_host_time_ns() - now;
+        }
     }
 
     pc_diag_vblanks++;
-    if (pc_frame_hook != NULL)
+    if (pc_frame_hook != NULL) {
+        int64_t start = pc_host_time_ns();
         pc_frame_hook();
+        pc_diag_show_ns += pc_host_time_ns() - start;
+    }
     pc_vblank();
 }
 

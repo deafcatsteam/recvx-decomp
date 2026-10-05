@@ -69,10 +69,10 @@ static inline uint32_t gs_addr4(uint32_t bp, uint32_t bw, int x, int y)
     return ((bp + page * 32) * 512 + gs_page4[(y & 127) * 128 + (x & 127)]) & (GS_MEM_SIZE * 2 - 1);
 }
 
-static inline uint32_t gs_rd32(uint32_t a) { uint32_t v; memcpy(&v, gs_vram + a, 4); return v; }
-static inline void gs_wr32(uint32_t a, uint32_t v) { memcpy(gs_vram + a, &v, 4); }
-static inline uint32_t gs_rd16(uint32_t a) { uint16_t v; memcpy(&v, gs_vram + a, 2); return v; }
-static inline void gs_wr16(uint32_t a, uint32_t v) { uint16_t h = (uint16_t)v; memcpy(gs_vram + a, &h, 2); }
+static inline uint32_t gs_rd32(uint32_t a) { uint32_t v; __builtin_memcpy(&v, gs_vram + a, 4); return v; }
+static inline void gs_wr32(uint32_t a, uint32_t v) { __builtin_memcpy(gs_vram + a, &v, 4); }
+static inline uint32_t gs_rd16(uint32_t a) { uint16_t v; __builtin_memcpy(&v, gs_vram + a, 2); return v; }
+static inline void gs_wr16(uint32_t a, uint32_t v) { uint16_t h = (uint16_t)v; __builtin_memcpy(gs_vram + a, &h, 2); }
 
 /* Raw pixel value of format psm at (x, y) of the buffer at bp/bw. 24-bit
  * formats return the low 24 bits, the 4/8-bit "H" formats the index. */

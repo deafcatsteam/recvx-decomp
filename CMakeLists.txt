@@ -38,6 +38,10 @@ else()
     add_link_options(-no-pie)
 endif()
 
+# Floating point in SSE registers: single precision like the PS2, and much
+# faster float/int conversions than the x87 default of 32-bit x86.
+add_compile_options(-msse2 -mfpmath=sse)
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(GAME_DIR ${CMAKE_SOURCE_DIR}/src/ps2/veronica/prog)

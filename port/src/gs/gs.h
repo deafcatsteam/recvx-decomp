@@ -52,8 +52,12 @@ typedef struct {
     uint32_t pixels;
     uint32_t uploads;
     uint32_t chains;
+    int64_t busy_ns; /* time spent in GIF transfers and drawing */
 } GsStats;
 extern GsStats gs_stats;
+
+/* Clock used for busy_ns (nanoseconds); not measured when NULL. */
+extern int64_t (*gs_clock_ns)(void);
 
 /* One-line summary of the GS activity since the last call (counters are then
  * reset) and of what the display shows. */

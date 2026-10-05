@@ -19,6 +19,10 @@ void pc_diag_start(void);
 /* Counts V-blanks reached by the game, for the diagnostics. */
 extern volatile uint32_t pc_diag_vblanks;
 
+/* Time spent waiting for the next V-blank and showing frames, for the
+ * diagnostics (reset every second). */
+extern volatile int64_t pc_diag_wait_ns, pc_diag_show_ns;
+
 /* Copies the console output into cvx_log.txt and keeps the console open when
  * the program ends unexpectedly (see pc_log.c). Call first in main(). */
 void pc_log_start(void);

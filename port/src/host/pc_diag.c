@@ -16,6 +16,7 @@
 #include <string.h>
 
 volatile uint32_t pc_diag_vblanks;
+volatile int64_t pc_diag_wait_ns, pc_diag_show_ns;
 
 #define STALL_SECONDS 3
 #define MAX_FRAMES 12
@@ -231,8 +232,12 @@ static void diag_loop(void)
         seconds++;
         uint32_t now = pc_diag_vblanks;
         if (!quiet) {
+            int wait_ms = (int)(pc_diag_wait_ns / 1000000), show_ms = (int)(pc_diag_show_ns / 1000000);
+            pc_diag_wait_ns = 0;
+            pc_diag_show_ns = 0;
             gs_debug_status(line, sizeof(line));
-            fprintf(stderr, "[%3ds] %u frames/s | %s\n", seconds, now - last, line);
+            fprintf(stderr, "[%3ds] %u frames/s | idle %d ms, window %d ms | %s\n", seconds,
+                    now - last, wait_ms, show_ms, line);
         }
         if (now == last) {
             if (++stalled == STALL_SECONDS) {
@@ -265,6 +270,7 @@ static void *diag_thread(void *arg)
 
 void pc_diag_start(void)
 {
+    gs_clock_ns = pc_host_time_ns;
     install_crash_handler();
 #ifdef _WIN32
     DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &main_thread,

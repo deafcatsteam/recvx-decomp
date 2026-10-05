@@ -13,6 +13,7 @@
 #include <string.h>
 
 GsStats gs_stats;
+int64_t (*gs_clock_ns)(void);
 
 /* Extracts bits [lo, lo+n) of v. */
 #define BITS(v, lo, n) ((uint32_t)(((v) >> (lo)) & ((1ull << (n)) - 1)))
@@ -265,6 +266,7 @@ typedef struct {
 
     /* Blending: (A - B) * C >> 7 + D */
     int sa, sb, sc, sd, fix;
+    int blend_mix; /* (Cs - Cd) * As + Cd */
 
     /* Texture */
     int tpsm, cpsm, csa, bilinear;
@@ -274,7 +276,16 @@ typedef struct {
     int ta0, ta1, aem;
 
     int feedback; /* the texture overlaps the frame buffer */
+    int key;      /* K_* flags of the specialised pixel loop to use */
 } DrawState;
+
+/* The pixel loops are compiled once per combination of these settings, so
+ * the most common cases run without testing them for every pixel. */
+enum { K_TME = 1, K_ABE = 2, K_ZTE = 4, K_CT32 = 8, K_BIL = 16 };
+#define ALWAYS_INLINE inline __attribute__((always_inline))
+#define KEY_CASES(F) \
+    F(0) F(1) F(2) F(3) F(4) F(5) F(6) F(7) F(8) F(9) F(10) F(11) F(12) F(13) F(14) F(15) \
+    F(16) F(17) F(18) F(19) F(20) F(21) F(22) F(23) F(24) F(25) F(26) F(27) F(28) F(29) F(30) F(31)
 
 static DrawState ds;
 
@@ -331,6 +342,10 @@ static void setup_draw(void)
     ds.sc = BITS(alpha, 4, 2);
     ds.sd = BITS(alpha, 6, 2);
     ds.fix = BITS(alpha, 32, 8);
+    if (ds.sa == 3) ds.sa = 2; /* 3 is reserved; reads as 0 */
+    if (ds.sb == 3) ds.sb = 2;
+    if (ds.sd == 3) ds.sd = 2;
+    ds.blend_mix = ds.sa == 0 && ds.sb == 1 && ds.sc == 0 && ds.sd == 1;
 
     ds.tpsm = BITS(tex0, 20, 6);
     ds.tbp = BITS(tex0, 0, 14);
@@ -349,6 +364,9 @@ static void setup_draw(void)
     ds.ta0 = BITS(gs.texa, 0, 8);
     ds.aem = BITS(gs.texa, 15, 1);
     ds.ta1 = BITS(gs.texa, 32, 8);
+
+    ds.key = (ds.tme ? K_TME : 0) | (ds.abe ? K_ABE : 0) | (ds.zte ? K_ZTE : 0) |
+             (ds.fpsm == GS_PSMCT32 ? K_CT32 : 0) | (ds.tme && ds.bilinear ? K_BIL : 0);
 
     /* Effects that read the picture being drawn are drawn by one thread, so
      * the rows they read are always in the same state. */
@@ -426,23 +444,94 @@ static inline uint32_t texel(int u, int v)
     return ds.cpsm == 0 ? c : tex16(c);
 }
 
-static inline uint32_t sample(int u16, int v16)
-{
-    if (!ds.bilinear) /* MMAG: nearest */
-        return texel(u16 >> 4, v16 >> 4);
+/* Texels of the current primitive's texture area, converted to RGBA once
+ * before drawing (bilinear filtering reads each texel up to four times). */
+static struct {
+    uint32_t *buf;
+    size_t cap;
+    int on, u0, v0, w, h;
+} tc;
 
-    /* Bilinear: texel centres are at +0.5. */
+static void decode_rows(void *ctx, int r0, int r1)
+{
+    (void)ctx;
+    for (int r = r0; r < r1; r++) {
+        uint32_t *row = tc.buf + (size_t)r * tc.w;
+        for (int c = 0; c < tc.w; c++)
+            row[c] = texel(tc.u0 + c, tc.v0 + r);
+    }
+}
+
+/* Decodes the texels a primitive can reach: u, v in 1/16 texel, pixels the
+ * size of the primitive (no decoding when it would read far fewer texels
+ * than the area holds). */
+static void decode_texture(float umin, float umax, float vmin, float vmax, int64_t pixels)
+{
+    tc.on = 0;
+    if (!ds.tme || !(umin > -65536.0f && umax < 65536.0f && vmin > -65536.0f && vmax < 65536.0f))
+        return;
+    int u0 = (int)floorf(umin / 16.0f) - 1, u1 = (int)floorf(umax / 16.0f) + 2;
+    int v0 = (int)floorf(vmin / 16.0f) - 1, v1 = (int)floorf(vmax / 16.0f) + 2;
+    int64_t area = (int64_t)(u1 - u0) * (v1 - v0);
+    if (area > pixels * 2 + 4096 || area > (1 << 22))
+        return;
+    if ((size_t)area > tc.cap) {
+        free(tc.buf);
+        tc.cap = (size_t)area + 65536;
+        tc.buf = malloc(tc.cap * 4);
+        if (tc.buf == NULL) {
+            tc.cap = 0;
+            return;
+        }
+    }
+    tc.u0 = u0;
+    tc.v0 = v0;
+    tc.w = u1 - u0;
+    tc.h = v1 - v0;
+    gs_parallel(decode_rows, NULL, 0, tc.h, (int)area);
+    tc.on = 1;
+}
+
+static inline uint32_t fetch(int u, int v)
+{
+    if (!tc.on)
+        return texel(u, v);
+    u -= tc.u0;
+    v -= tc.v0;
+    u = u < 0 ? 0 : u >= tc.w ? tc.w - 1 : u;
+    v = v < 0 ? 0 : v >= tc.h ? tc.h - 1 : v;
+    return tc.buf[v * tc.w + u];
+}
+
+static ALWAYS_INLINE uint32_t sample(int k, int u16, int v16)
+{
+    if (!(k & K_BIL)) /* MMAG: nearest */
+        return fetch(u16 >> 4, v16 >> 4);
+
+    /* Bilinear: texel centres are at +0.5. Red/blue and green/alpha are
+     * weighted two at a time (the weights add up to 256). */
     int us = u16 - 8, vs = v16 - 8;
     int u0 = us >> 4, v0 = vs >> 4, fu = us & 15, fv = vs & 15;
-    uint32_t c00 = texel(u0, v0), c10 = texel(u0 + 1, v0);
-    uint32_t c01 = texel(u0, v0 + 1), c11 = texel(u0 + 1, v0 + 1);
-    uint32_t out = 0;
-    for (int sh = 0; sh < 32; sh += 8) {
-        int a = (c00 >> sh) & 255, b = (c10 >> sh) & 255, c = (c01 >> sh) & 255, d = (c11 >> sh) & 255;
-        int top = a * (16 - fu) + b * fu, bot = c * (16 - fu) + d * fu;
-        out |= (uint32_t)((top * (16 - fv) + bot * fv) >> 8) << sh;
+    uint32_t c00, c10, c01, c11;
+    if (tc.on) {
+        /* The decoded area holds at least 3x3 texels around what the
+         * primitive reads; clamping keeps the 2x2 block inside it. */
+        u0 -= tc.u0;
+        v0 -= tc.v0;
+        u0 = u0 < 0 ? 0 : u0 > tc.w - 2 ? tc.w - 2 : u0;
+        v0 = v0 < 0 ? 0 : v0 > tc.h - 2 ? tc.h - 2 : v0;
+        const uint32_t *p = tc.buf + v0 * tc.w + u0;
+        c00 = p[0]; c10 = p[1]; c01 = p[tc.w]; c11 = p[tc.w + 1];
+    } else {
+        c00 = texel(u0, v0); c10 = texel(u0 + 1, v0);
+        c01 = texel(u0, v0 + 1); c11 = texel(u0 + 1, v0 + 1);
     }
-    return out;
+    uint32_t w00 = (16 - fu) * (16 - fv), w10 = fu * (16 - fv), w01 = (16 - fu) * fv, w11 = fu * fv;
+    uint32_t rb = (c00 & 0xff00ff) * w00 + (c10 & 0xff00ff) * w10 +
+                  (c01 & 0xff00ff) * w01 + (c11 & 0xff00ff) * w11;
+    uint32_t ga = ((c00 >> 8) & 0xff00ff) * w00 + ((c10 >> 8) & 0xff00ff) * w10 +
+                  ((c01 >> 8) & 0xff00ff) * w01 + ((c11 >> 8) & 0xff00ff) * w11;
+    return ((rb >> 8) & 0xff00ff) | (ga & 0xff00ff00);
 }
 
 /* ---- Pixel pipeline ---------------------------------------------------- */
@@ -488,17 +577,16 @@ static inline uint32_t z_addr(int x, int y)
     }
 }
 
-/* Shades and writes one pixel. Colour components are 0..255; u, v are
- * texel coordinates in 1/16. */
-static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int f, int u, int v)
+/* Shades and writes one pixel inside the scissor area, with the settings
+ * of key k. Colour components are 0..255; u, v are texel coordinates in
+ * 1/16. */
+static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, int b, int a,
+                                int f, int u, int v)
 {
     int write_rgb = 1, write_a = 1, write_z = !ds.zmsk;
 
-    if (x < ds.scax0 || x > ds.scax1 || y < ds.scay0 || y > ds.scay1)
-        return;
-
-    if (ds.tme) {
-        uint32_t t = sample(u, v);
+    if (k & K_TME) {
+        uint32_t t = sample(k, u, v);
         int tr = t & 255, tg = (t >> 8) & 255, tb = (t >> 16) & 255, ta = t >> 24;
         switch (ds.tfx) {
         case 0: /* MODULATE */
@@ -518,7 +606,9 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
             if (ds.tcc) a = ta;
             break;
         }
-        r = clamp255(r); g = clamp255(g); b = clamp255(b); a = clamp255(a);
+        /* Every function above gives values >= 0. */
+        r = r > 255 ? 255 : r; g = g > 255 ? 255 : g;
+        b = b > 255 ? 255 : b; a = a > 255 ? 255 : a;
     }
 
     if (ds.fge) {
@@ -539,7 +629,7 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
 
     /* Depth test */
     uint32_t za = 0;
-    if (ds.zte) {
+    if (k & K_ZTE) {
         if (ds.ztst == 0)
             return;
         if (z > ds.zmax)
@@ -555,8 +645,8 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
         write_z = 0;
     }
 
-    uint32_t fa = frame_addr(x, y), raw, dst;
-    if (frame_is16()) {
+    uint32_t fa = (k & K_CT32) ? gs_addr32(0, ds.fbp, ds.fbw, x, y) : frame_addr(x, y), raw, dst;
+    if (!(k & K_CT32) && frame_is16()) {
         raw = gs_rd16(fa);
         dst = ((raw & 31) << 3) | (((raw >> 5) & 31) << 11) | (((raw >> 10) & 31) << 19) |
               ((raw & 0x8000) ? 0x80000000u : 0);
@@ -569,18 +659,20 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
     if (ds.date && (int)((dst >> 31) & 1) != ds.datm)
         return;
 
-    if (ds.abe && !(ds.pabe && a < 0x80)) {
-        int cd[3] = { dst & 255, (dst >> 8) & 255, (dst >> 16) & 255 };
-        int cs[3] = { r, g, b };
-        int c = ds.sc == 0 ? a : ds.sc == 1 ? (int)(dst >> 24) : ds.fix;
-        int out[3];
-        for (int i = 0; i < 3; i++) {
-            int va = ds.sa == 0 ? cs[i] : ds.sa == 1 ? cd[i] : 0;
-            int vb = ds.sb == 0 ? cs[i] : ds.sb == 1 ? cd[i] : 0;
-            int vd = ds.sd == 0 ? cs[i] : ds.sd == 1 ? cd[i] : 0;
-            out[i] = (((va - vb) * c) >> 7) + vd;
+    if ((k & K_ABE) && !(ds.pabe && a < 0x80)) {
+        int dr = dst & 255, dg = (dst >> 8) & 255, db = (dst >> 16) & 255;
+        if (ds.blend_mix) {
+            /* (Cs - Cd) * As + Cd, the usual transparency */
+            r = (((r - dr) * a) >> 7) + dr;
+            g = (((g - dg) * a) >> 7) + dg;
+            b = (((b - db) * a) >> 7) + db;
+        } else {
+            int c = ds.sc == 0 ? a : ds.sc == 1 ? (int)(dst >> 24) : ds.fix;
+            int col[3][3] = { { r, g, b }, { dr, dg, db }, { 0, 0, 0 } };
+            r = (((col[ds.sa][0] - col[ds.sb][0]) * c) >> 7) + col[ds.sd][0];
+            g = (((col[ds.sa][1] - col[ds.sb][1]) * c) >> 7) + col[ds.sd][1];
+            b = (((col[ds.sa][2] - col[ds.sb][2]) * c) >> 7) + col[ds.sd][2];
         }
-        r = out[0]; g = out[1]; b = out[2];
     }
 
     if (ds.colclamp) {
@@ -599,7 +691,7 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
         src = (src & 0x00ffffffu) | (dst & 0xff000000u);
 
     if (write_rgb || write_a) {
-        if (frame_is16()) {
+        if (!(k & K_CT32) && frame_is16()) {
             uint32_t v16 = ((src >> 3) & 31) | (((src >> 11) & 31) << 5) |
                            (((src >> 19) & 31) << 10) | ((src >> 31) << 15);
             gs_wr16(fa, (v16 & ~ds.fbmsk16) | (raw & ds.fbmsk16));
@@ -618,6 +710,14 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
         else
             gs_wr32(za, z);
     }
+}
+
+/* One pixel anywhere (points and lines). */
+static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int f, int u, int v)
+{
+    if (x < ds.scax0 || x > ds.scax1 || y < ds.scay0 || y > ds.scay1)
+        return;
+    shade(ds.key, x, y, z, r, g, b, a, f, u, v);
 }
 
 static void count_pixels(uint32_t n)
@@ -647,9 +747,8 @@ typedef struct {
     float u0, v0, du, dv;
 } SpriteJob;
 
-static void sprite_rows(void *ctx, int py0, int py1)
+static ALWAYS_INLINE void sprite_span(int k, const SpriteJob *j, int py0, int py1)
 {
-    const SpriteJob *j = ctx;
     const Vertex *b = j->b;
 
     /* Sprites take their colour, z and fog from the second vertex. */
@@ -657,8 +756,19 @@ static void sprite_rows(void *ctx, int py0, int py1)
         int v = (int)(j->v0 + ((py << 4) - j->y0) * j->dv);
         for (int px = j->px0; px < j->px1; px++) {
             int u = (int)(j->u0 + ((px << 4) - j->x0) * j->du);
-            draw_pixel(px, py, b->z, b->r, b->g, b->b, b->a, b->f, u, v);
+            shade(k, px, py, b->z, b->r, b->g, b->b, b->a, b->f, u, v);
         }
+    }
+}
+
+static void sprite_rows(void *ctx, int py0, int py1)
+{
+    const SpriteJob *j = ctx;
+
+    switch (ds.key) {
+#define SPRITE_CASE(k) case k: sprite_span(k, j, py0, py1); break;
+    KEY_CASES(SPRITE_CASE)
+#undef SPRITE_CASE
     }
     if (j->px1 > j->px0)
         count_pixels((uint32_t)(py1 - py0) * (j->px1 - j->px0));
@@ -695,7 +805,14 @@ static void draw_sprite(const Vertex *a, const Vertex *b)
     j.v0 = v0;
     j.du = x1 != x0 ? (u1 - u0) / (float)(x1 - x0) : 0.0f;
     j.dv = y1 != y0 ? (v1 - v0) / (float)(y1 - y0) : 0.0f;
+    {
+        float ua = u0 + (((px0 << 4) - x0)) * j.du, ub = u0 + (((px1 - 1) << 4) - x0) * j.du;
+        float va = v0 + (((py0 << 4) - y0)) * j.dv, vb = v0 + (((py1 - 1) << 4) - y0) * j.dv;
+        decode_texture(fminf(ua, ub), fmaxf(ua, ub), fminf(va, vb), fmaxf(va, vb),
+                       (int64_t)(px1 - px0) * (py1 - py0));
+    }
     gs_parallel(sprite_rows, &j, py0, py1, ds.feedback ? 0 : (px1 - px0) * (py1 - py0));
+    tc.on = 0;
 }
 
 static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
@@ -710,9 +827,8 @@ typedef struct {
     float att[3][9];
 } TriangleJob;
 
-static void triangle_rows(void *ctx, int py0, int py1)
+static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0, int py1)
 {
-    const TriangleJob *j = ctx;
     const Vertex *const *v = j->v;
     uint32_t drawn = 0;
 
@@ -736,10 +852,23 @@ static void triangle_rows(void *ctx, int py0, int py1)
             } else {
                 r = j->last->r; g = j->last->g; b = j->last->b; a = j->last->a;
             }
-            draw_pixel(px, py, (uint32_t)at[4], r, g, b, a, (int)at[5],
-                       (int)(at[6] / qq), (int)(at[7] / qq));
+            shade(k, px, py, (uint32_t)at[4], r, g, b, a, (int)at[5],
+                  (int)(at[6] / qq), (int)(at[7] / qq));
             drawn++;
         }
+    }
+    return drawn;
+}
+
+static void triangle_rows(void *ctx, int py0, int py1)
+{
+    const TriangleJob *j = ctx;
+    uint32_t drawn = 0;
+
+    switch (ds.key) {
+#define TRIANGLE_CASE(k) case k: drawn = triangle_span(k, j, py0, py1); break;
+    KEY_CASES(TRIANGLE_CASE)
+#undef TRIANGLE_CASE
     }
     count_pixels(drawn);
 }
@@ -797,8 +926,18 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
     }
     /* Flat shading uses the colour of the last vertex sent. */
     j.last = v2;
+    {
+        float umin = 1e30f, umax = -1e30f, vmin = 1e30f, vmax = -1e30f;
+        for (int i = 0; i < 3; i++) {
+            float u = j.att[i][6] / j.att[i][8], w = j.att[i][7] / j.att[i][8];
+            umin = fminf(umin, u); umax = fmaxf(umax, u);
+            vmin = fminf(vmin, w); vmax = fmaxf(vmax, w);
+        }
+        decode_texture(umin, umax, vmin, vmax, (int64_t)(px1 - px0 + 1) * (py1 - py0 + 1));
+    }
     gs_parallel(triangle_rows, &j, py0, py1 + 1,
                 ds.feedback ? 0 : (px1 - px0 + 1) * (py1 - py0 + 1) / 2);
+    tc.on = 0;
 }
 
 static void draw_line(const Vertex *a, const Vertex *b)
@@ -1049,10 +1188,28 @@ static void gif_qword(uint64_t lo, uint64_t hi)
         gif.in_tag = 0;
 }
 
-void gs_gif_write(const uint64_t *qwords, uint32_t count)
+static void gif_write(const uint64_t *qwords, uint32_t count)
 {
     for (uint32_t i = 0; i < count; i++)
         gif_qword(qwords[i * 2], qwords[i * 2 + 1]);
+}
+
+static int64_t busy_start(void)
+{
+    return gs_clock_ns != NULL ? gs_clock_ns() : 0;
+}
+
+static void busy_end(int64_t start)
+{
+    if (gs_clock_ns != NULL)
+        gs_stats.busy_ns += gs_clock_ns() - start;
+}
+
+void gs_gif_write(const uint64_t *qwords, uint32_t count)
+{
+    int64_t t = busy_start();
+    gif_write(qwords, count);
+    busy_end(t);
 }
 
 /* ---- DMA ---------------------------------------------------------------- */
@@ -1071,7 +1228,16 @@ void gs_dma_gif_normal(uint32_t madr, uint32_t qwc)
     gs_gif_write((const uint64_t *)gs_dma_pointer(madr), qwc);
 }
 
+static void dma_chain(uint32_t tadr);
+
 void gs_dma_gif_chain(uint32_t tadr)
+{
+    int64_t t = busy_start();
+    dma_chain(tadr);
+    busy_end(t);
+}
+
+static void dma_chain(uint32_t tadr)
 {
     uint32_t stack[2];
     int sp = 0;
@@ -1087,33 +1253,33 @@ void gs_dma_gif_chain(uint32_t tadr)
 
         switch (id) {
         case 0: /* refe: data at ADDR, then stop */
-            gs_gif_write((const uint64_t *)gs_dma_pointer(addr), qwc);
+            gif_write((const uint64_t *)gs_dma_pointer(addr), qwc);
             return;
         case 1: /* cnt: data follows the tag */
-            gs_gif_write(tag + 2, qwc);
+            gif_write(tag + 2, qwc);
             next = tadr + 16 + qwc * 16;
             break;
         case 2: /* next: data follows, next tag at ADDR */
-            gs_gif_write(tag + 2, qwc);
+            gif_write(tag + 2, qwc);
             next = addr;
             break;
         case 3: case 4: /* ref, refs */
-            gs_gif_write((const uint64_t *)gs_dma_pointer(addr), qwc);
+            gif_write((const uint64_t *)gs_dma_pointer(addr), qwc);
             break;
         case 5: /* call */
-            gs_gif_write(tag + 2, qwc);
+            gif_write(tag + 2, qwc);
             if (sp < 2)
                 stack[sp++] = tadr + 16 + qwc * 16;
             next = addr;
             break;
         case 6: /* ret */
-            gs_gif_write(tag + 2, qwc);
+            gif_write(tag + 2, qwc);
             if (sp == 0)
                 return;
             next = stack[--sp];
             break;
         default: /* end */
-            gs_gif_write(tag + 2, qwc);
+            gif_write(tag + 2, qwc);
             return;
         }
         tadr = next;
@@ -1150,6 +1316,12 @@ int gs_read_display(uint32_t *dst, int *w, int *h)
     if (changes == shown_changes)
         return 0;
     shown_changes = changes;
+    if (psm == GS_PSMCT32 || psm == GS_PSMCT24) {
+        for (int y = 0; y < height; y++)
+            for (int x = 0; x < width; x++)
+                dst[y * width + x] = gs_rd32(gs_addr32(0, fbp, fbw, x, y)) | 0xff000000u;
+        return 1;
+    }
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint32_t c = gs_read_pixel(psm, fbp, fbw, x, y);
@@ -1184,8 +1356,9 @@ void gs_debug_status(char *buf, int size)
     for (int y = 0; y < 480; y += 4)
         for (int x = 0; x < 640; x += 4)
             lit += (gs_read_pixel(psm, fbp * 32, fbw ? fbw : 10, x, y) & 0xffffff) != 0;
-    snprintf(buf, size, "gs: %u chains, %u uploads, %u prims, %u pixels | display page %u, "
+    snprintf(buf, size, "gs: %u ms, %u chains, %u uploads, %u prims, %u pixels | display page %u, "
              "width %u, %d%% non-black | draw page %u",
-             st.chains, st.uploads, st.prims, st.pixels, fbp, fbw * 64, lit * 100 / (160 * 120),
+             (unsigned)(st.busy_ns / 1000000), st.chains, st.uploads, st.prims, st.pixels, fbp,
+             fbw * 64, lit * 100 / (160 * 120),
              BITS(gs.frame[0], 0, 9));
 }
