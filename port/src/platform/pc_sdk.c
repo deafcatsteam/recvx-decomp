@@ -366,9 +366,13 @@ int sceMcInit(void) { return 0; }
 
 int sceMcGetInfo(int port, int slot, int *type, int *free, int *format)
 {
-    *type = 0;
-    *free = 0;
-    *format = 0;
+    /* The game passes NULL for the values it does not need. */
+    if (type != NULL)
+        *type = 0;
+    if (free != NULL)
+        *free = 0;
+    if (format != NULL)
+        *format = 0;
     mc_result = -10; /* no card */
     return 0;
 }
