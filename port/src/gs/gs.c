@@ -911,6 +911,7 @@ void gs_dma_gif_chain(uint32_t tadr)
     uint32_t stack[2];
     int sp = 0;
 
+    gs_stats.chains++;
     for (int guard = 0; guard < 1 << 20; guard++) {
         const uint64_t *tag = (const uint64_t *)gs_dma_pointer(tadr);
         uint64_t t = tag[0];
@@ -999,4 +1000,21 @@ void gs_reset(void)
     gs.q = 1.0f;
     gs.prmodecont = 1;
     gs.colclamp = 1;
+}
+
+void gs_debug_status(char *buf, int size)
+{
+    uint32_t fbp = BITS(gs.dispfb, 0, 9);
+    uint32_t fbw = BITS(gs.dispfb, 9, 6);
+    int psm = BITS(gs.dispfb, 15, 5), lit = 0;
+    GsStats st = gs_stats;
+
+    memset(&gs_stats, 0, sizeof(gs_stats));
+    for (int y = 0; y < 480; y += 4)
+        for (int x = 0; x < 640; x += 4)
+            lit += (gs_read_pixel(psm, fbp * 32, fbw ? fbw : 10, x, y) & 0xffffff) != 0;
+    snprintf(buf, size, "gs: %u chains, %u uploads, %u prims, %u pixels | display page %u, "
+             "width %u, %d%% non-black | draw page %u",
+             st.chains, st.uploads, st.prims, st.pixels, fbp, fbw * 64, lit * 100 / (160 * 120),
+             BITS(gs.frame[0], 0, 9));
 }

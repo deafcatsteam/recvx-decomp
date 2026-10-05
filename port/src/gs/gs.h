@@ -50,7 +50,12 @@ typedef struct {
     uint32_t prims;
     uint32_t pixels;
     uint32_t uploads;
+    uint32_t chains;
 } GsStats;
 extern GsStats gs_stats;
+
+/* One-line summary of the GS activity since the last call (counters are then
+ * reset) and of what the display shows. */
+void gs_debug_status(char *buf, int size);
 
 #endif

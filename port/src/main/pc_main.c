@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 #include "pc_window.h"
+#include "../host/pc_host.h"
 
 int cvx_main(int argc, char *argv[]);
 
@@ -77,6 +78,7 @@ int main(int argc, char *argv[])
 
     unprotect_image();
     pc_window_open();
+    pc_diag_start();
 
     return cvx_main(argc, argv);
 }

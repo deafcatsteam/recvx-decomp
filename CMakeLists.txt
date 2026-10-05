@@ -94,11 +94,16 @@ add_library(cvx_game_env INTERFACE)
 # Host services used by the platform layer, built without the game settings.
 add_library(cvx_host STATIC
     port/src/host/pc_host.c
+    port/src/host/pc_diag.c
     port/src/platform/pc_hwregs.c
     port/src/gs/gs.c
     port/src/gs/gs_mem.c
 )
 target_link_libraries(cvx_host PUBLIC m)
+if(NOT WIN32)
+    find_package(Threads REQUIRED)
+    target_link_libraries(cvx_host PUBLIC Threads::Threads)
+endif()
 
 add_library(cvx_game STATIC ${GAME_SOURCES} ${PORT_SOURCES})
 target_link_libraries(cvx_game PRIVATE cvx_game_env PUBLIC cvx_host)
@@ -120,6 +125,8 @@ target_compile_options(cvx_game_env INTERFACE
     -w
     -fno-strict-aliasing
     -fwrapv
+    # Lets the diagnostics show where the game is (port/src/host/pc_diag.c).
+    -fno-omit-frame-pointer
 )
 
 enable_testing()
@@ -133,6 +140,9 @@ set_source_files_properties(${GAME_DIR}/njloop.c PROPERTIES COMPILE_DEFINITIONS 
 
 add_executable(cvx_pc port/src/main/pc_main.c port/src/main/pc_window.c)
 target_link_libraries(cvx_pc PRIVATE cvx_game m)
+if(NOT WIN32)
+    set_target_properties(cvx_pc PROPERTIES ENABLE_EXPORTS ON) # names in stack traces
+endif()
 
 # Window and input through SDL2: the system's 32-bit SDL2 when there is one,
 # otherwise SDL2 is downloaded and built along with the game.

@@ -84,6 +84,7 @@ void pc_wait_vblank(void)
             pc_host_sleep_ns(next_ns - now);
     }
 
+    pc_diag_vblanks++;
     if (pc_frame_hook != NULL)
         pc_frame_hook();
     pc_vblank();
