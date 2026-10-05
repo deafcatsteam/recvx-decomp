@@ -1383,6 +1383,20 @@ void bhObj005(O_WRK* op)
         
         nb = op->ct2;
         
+#ifdef PLATFORM_PC
+        /* The water surface vertices follow the wave height grid. The PS2
+           also recomputes their normals with a VU0 microprogram that is not
+           available, so the normals are left as they are for now. */
+        {
+            float* src = (float*)pCnk;
+            float* dst = (float*)pOrg;
+
+            for (i = 0; i < nb; i++, src += 8, dst += 8)
+            {
+                dst[1] = src[1] + **(float**)src;
+            }
+        }
+#else
         asm volatile 
         ("
         .set noreorder
@@ -1470,7 +1484,23 @@ void bhObj005(O_WRK* op)
         .set reorder
         " : : "r"(nb), "r"(pCnk), "r"(pOrg), "r"(sys->gfrm_ct), "r"(xp), "r"(j), "r"(sys->wt_zp) : "$s2", "$s5", "memory" 
         ); 
+#endif
      
+#ifdef PLATFORM_PC
+        /* The wave heights die down by 0.2 per frame, never below 0. */
+        {
+            float* w = (float*)sys->wt_wvp;
+            int groups = sys->wt_nbpt >> 4;
+
+            do
+            {
+                for (i = 0; i < 16; i++, w++)
+                {
+                    *w = (*w - 0.2f > 0.0f) ? *w - 0.2f : 0.0f;
+                }
+            } while (--groups > 0);
+        }
+#else
         asm volatile 
         (" 
             
@@ -1532,6 +1562,7 @@ void bhObj005(O_WRK* op)
         
         " : : "r"(sys->wt_nbpt), "r"(sys->wt_wvp), "f"(0.2f) : "$t0", "$t1", "$t2", "memory" 
         );  
+#endif
             
     exit:
         break;

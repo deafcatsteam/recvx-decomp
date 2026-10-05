@@ -44,6 +44,9 @@ void vu1SetScreenProjection(float fProjection)
 {
     fVu1Projection = fProjection;
     
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     {
 
@@ -55,6 +58,7 @@ void vu1SetScreenProjection(float fProjection)
         vaddx.z  $vf23, $vf0, $vf4x
         
     }
+#endif
     
     _Make_ClipMatrix(ClipMatrix2, fVu1Projection, _fNaViwClipNear, _fNaViwClipFar);
 }
@@ -67,6 +71,9 @@ void vu1SetNearFarClip(float fNear, float fFar)
     
     fVu1InvNearClip = 1.0f / fVu1NearClip;
 
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     {
         
@@ -80,6 +87,7 @@ void vu1SetNearFarClip(float fNear, float fFar)
         vaddx.y  $vf23y, $vf0y, $vf5x
         
     }
+#endif
     
     _Make_ClipMatrix(ClipMatrix2, fVu1Projection, _fNaViwClipNear, _fNaViwClipFar);
 }
@@ -90,6 +98,9 @@ void vu1SetScreenOffset(float fOffsetX, float fOffsetY)
     fVu1OffsetX = fOffsetX;
     fVu1OffsetY = fOffsetY;
     
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     {
         
@@ -103,6 +114,7 @@ void vu1SetScreenOffset(float fOffsetX, float fOffsetY)
         vaddx.y  $vf16, $vf0, $vf5x
         
     }
+#endif
 }
 
 // 100% matching!
@@ -111,6 +123,9 @@ void vu1SetScreenAspect(float fAspectW, float fAspectH)
     fVu1AspectW = fAspectW;
     fVu1AspectH = fAspectH;
 
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     {
         
@@ -124,6 +139,7 @@ void vu1SetScreenAspect(float fAspectW, float fAspectH)
         vaddx.y  $vf17y, $vf0y, $vf5x
         
     }
+#endif
 }
 
 // 100% matching!
@@ -133,6 +149,9 @@ void vu1SetDiffuseMaterial(VU1_COLOR* pDiffuse)
     vu1Diffuse.fG = 128.0f * pDiffuse->fG;
     vu1Diffuse.fB = 128.0f * pDiffuse->fB;
     
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     ("
         lq         t3, VU1_COLOR.fR(%0)
@@ -151,6 +170,7 @@ void vu1SetDiffuseMaterial(VU1_COLOR* pDiffuse)
         vaddx.xyzw $vf20, $vf4, $vf0x 
     " : : "r"(pDiffuse), "f"(128.0f) : "t0"
     );
+#endif
 }
 
 // 100% matching!
@@ -160,6 +180,9 @@ void vu1SetSpeculaMaterial(VU1_COLOR* pSpecula)
     vu1Specula.fG = 31.0f * pSpecula->fG;
     vu1Specula.fB = 31.0f * pSpecula->fB;
     
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     ("
         mfc1       t0, %0
@@ -176,6 +199,7 @@ void vu1SetSpeculaMaterial(VU1_COLOR* pSpecula)
         vaddx.xyzw $vf21, $vf4, $vf0x 
     " : : "f"(31.0f) : "t0", "t1", "t2"
     );
+#endif
 }
 
 // 100% matching!
@@ -185,11 +209,15 @@ void vu1SetAmbient(VU1_COLOR* pAmbient)
     vu1Ambient.fG = pAmbient->fG;
     vu1Ambient.fB = pAmbient->fB;
     
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile
     ("
         lqc2 vf22, VU1_COLOR.fR(%0)
     " : : "r"(pAmbient) : 
     );
+#endif
 }
 
 // 100% matching!
@@ -197,6 +225,9 @@ void vu1SetAlphaRatio(float fAlpha)
 {
     fVu1AlphaRatio = 128.0f * fAlpha;
 
+#ifdef PLATFORM_PC
+    /* PS2: also loaded into VU0 registers for the VU0 code. */
+#else
     asm volatile 
     ("
 
@@ -207,11 +238,13 @@ void vu1SetAlphaRatio(float fAlpha)
 
     " : : "f"(fVu1AlphaRatio) : "t0"
     );
+#endif
 }
 
 #include "ps2_Vu1Scissor2.c"
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void InitNodeArraySet(SCISSOR* scissor)
 {
     scissor->rotflag = 0;
@@ -236,6 +269,7 @@ void InitNodeArraySet(SCISSOR* scissor)
     " : : "r"(scissor) : 
     );
 }
+#endif
 
 // 100% matching!
 static void InitScissorPlane(SCISSOR_PLANE* sp)
@@ -266,6 +300,7 @@ void _Init_ScissorSystem()
 }
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 int _Clip_ViewVolume(float* clip, float local_clip[4], float* vertex)
 {
     asm volatile
@@ -291,8 +326,10 @@ int _Clip_ViewVolume(float* clip, float local_clip[4], float* vertex)
     " : : "r"(clip), "r"(vertex) : 
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void PushTriangleNodeArray(SCISSOR* scissor, NODE* nod)
 {
     asm volatile 
@@ -336,8 +373,10 @@ void PushTriangleNodeArray(SCISSOR* scissor, NODE* nod)
     " : : "r"(scissor), "r"(&node) : "v1"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void ResetNodeArraySet(SCISSOR* scissor)
 {
     scissor->flipflag = 0;
@@ -359,8 +398,10 @@ void ResetNodeArraySet(SCISSOR* scissor)
     " : : "r"(scissor) : 
     );
 }
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void ScissorTriangle(SCISSOR* scissor, SCISSOR_PLANE* plane_set)
 {
     int i;                 
@@ -761,6 +802,7 @@ void ScissorTriangle(SCISSOR* scissor, SCISSOR_PLANE* plane_set)
         outarray = scissor->out;
     }
 }
+#endif
 
 // 100% matching!
 int _Check_DisplayAreaPoint(NJS_VECTOR* vec)
@@ -774,6 +816,7 @@ int _Check_DisplayAreaPoint(NJS_VECTOR* vec)
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void DrawScissorPolygonOpaque(SCISSOR* scissor, unsigned long ulType)
 {
     SCISSOR_NODE* in; 
@@ -841,6 +884,7 @@ void DrawScissorPolygonOpaque(SCISSOR* scissor, unsigned long ulType)
     
     Ps2AddPrim3DEx(ulType, pP, in->nodeNum);
 }
+#endif
 
 // 100% matching! 
 void vu1DrawTriangleStripOpaqueSingle(unsigned long ulType, VU1_STRIP_BUF* pStripTop, unsigned short usStripMax, unsigned short usMode)
@@ -1199,6 +1243,7 @@ void vu1DrawTriangleStripTransSingle(unsigned long ulType, VU1_STRIP_BUF* pStrip
 }
 
 // 99.38% matching
+#ifndef PLATFORM_PC
 int _Clip_Screen(float* clip)
 {
     int ret;         
@@ -1229,8 +1274,10 @@ int _Clip_Screen(float* clip)
 
     return ret;
 }
+#endif
 
 // 97.44% matching
+#ifndef PLATFORM_PC
 void vu1DrawTriangleStripTransDouble(unsigned long ulType, VU1_STRIP_BUF* pS, unsigned short usStripMax, unsigned short usMode)
 { 
     VU1_PRIM_BUF* pP;                            
@@ -1560,8 +1607,10 @@ void vu1DrawTriangleStripTransDouble(unsigned long ulType, VU1_STRIP_BUF* pS, un
     
     Ps2AddPrim3DEx(ulType, Ps2_DRAW_TMP, usStripMax); 
 } 
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColor(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1585,8 +1634,10 @@ void vu1GetVertexColor(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "f"(128.0f), "f"(256.0f) : "$t0", "$t1", "$t2", "$t3"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorCM(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) // first parameter is not present on the debugging symbols
 {
     asm volatile 
@@ -1603,8 +1654,10 @@ void vu1GetVertexColorCM(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) // first pa
     " : : "r"(pPrim), "r"(&vu1Diffuse), "f"(fVu1AlphaRatio) : "$v1", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorIgnore(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) // first parameter is not present on the debugging symbols
 {
     asm volatile 
@@ -1626,8 +1679,10 @@ void vu1GetVertexColorIgnore(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) // firs
     " : : "r"(pPrim), "f"(fVu1AlphaRatio) : "$t1"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDif(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1649,8 +1704,10 @@ void vu1GetVertexColorDif(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Diffuse), "f"(fVu1AlphaRatio) : "$v1", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifAmb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim) 
 {
     asm volatile 
@@ -1673,8 +1730,10 @@ void vu1GetVertexColorDifAmb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "f"(fVu1AlphaRatio) : "$t0"
     );
 }
+#endif
 
 // 96.47% matching
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe1(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1707,8 +1766,10 @@ void vu1GetVertexColorDifSpe1(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "f"(fVu1AlphaRatio) : "$t0", "memory"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe2(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1742,8 +1803,10 @@ void vu1GetVertexColorDifSpe2(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Ambient), "r"(&vu1Diffuse), "r"(&vu1Specula), "f"(fVu1AlphaRatio) : "$v1", "$a2", "$a3", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe3(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1788,8 +1851,10 @@ void vu1GetVertexColorDifSpe3(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Diffuse), "r"(&vu1Specula), "f"(fVu1AlphaRatio) : "$v1", "$a2", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe1Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1824,8 +1889,10 @@ void vu1GetVertexColorDifSpe1Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Ambient), "r"(&vu1Diffuse), "r"(&vu1Specula), "f"(fVu1AlphaRatio) : "$v1", "$a2", "$a3", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe2Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1859,8 +1926,10 @@ void vu1GetVertexColorDifSpe2Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Ambient), "r"(&vu1Diffuse), "r"(&vu1Specula), "f"(fVu1AlphaRatio) : "$v1", "$a2", "$a3", "$t0"
     );
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void vu1GetVertexColorDifSpe3Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
 {
     asm volatile 
@@ -1908,6 +1977,7 @@ void vu1GetVertexColorDifSpe3Amb(VU1_STRIP_BUF* pStrip, VU1_PRIM_BUF* pPrim)
     " : : "r"(pStrip), "r"(pPrim), "r"(&vu1Ambient), "r"(&vu1Diffuse), "r"(&vu1Specula), "f"(fVu1AlphaRatio) : "$v1", "$a2", "$a3", "$t0"
     );
 }
+#endif
 
 // 100% matching! 
 void vu1RotTransStripBuf(NJS_MATRIX* pMatrix, NJS_VECTOR* pVector, VU1_STRIP_BUF* pBuf)
@@ -1930,6 +2000,7 @@ void vu1RotTransStripBuf(NJS_MATRIX* pMatrix, NJS_VECTOR* pVector, VU1_STRIP_BUF
 }
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void vu1DrawTriangleStripTransDoubleI(unsigned long ulType, VU1_STRIP_BUF* pS, unsigned short usStripMax, unsigned short usMode)
 { 
     VU1_PRIM_BUF* pP;                              
@@ -2038,8 +2109,10 @@ void vu1DrawTriangleStripTransDoubleI(unsigned long ulType, VU1_STRIP_BUF* pS, u
     
     Ps2AddPrim3DExI(ulType, Ps2_DRAW_TMP, usStripMax); 
 } 
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void DrawScissorPolygonTrans1P(SCISSOR* scissor, unsigned long ulType)
 {
     SCISSOR_NODE* in; 
@@ -2107,6 +2180,7 @@ void DrawScissorPolygonTrans1P(SCISSOR* scissor, unsigned long ulType)
     
     Ps2AddPrim3DEx1P(ulType, pP, in->nodeNum);
 }
+#endif
 
 // 100% matching!
 void vu1DrawTriangleStripTransDouble1P(unsigned long ulType, VU1_STRIP_BUF* pS, unsigned short usStripMax, unsigned short usMode)

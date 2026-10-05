@@ -2423,7 +2423,12 @@ typedef struct {
 
 #define GS_COORD(v) ((unsigned int)((v) * 16))
 
+#ifdef PLATFORM_PC
+extern unsigned char port_scratchpad[0x4000];
+#define WORKBASE ((unsigned int)port_scratchpad)
+#else
 #define WORKBASE (0x70000000)
+#endif
 
 #define DMAnext             (2<<28)
 #define DMAend  (7<<28)

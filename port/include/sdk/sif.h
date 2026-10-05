@@ -16,6 +16,7 @@ typedef struct {
 #define SIF_DMA_INT_O 0x04
 
 u_int sceSifSetDma(sceSifDmaData *sdd, int len);
+u_int isceSifSetDma(sceSifDmaData *sdd, int len);
 int sceSifDmaStat(u_int id);
 int sceSifSyncIop(void);
 int sceSifRebootIop(const char *img);

@@ -483,6 +483,7 @@ void Ps2AddPrim2D(unsigned long prim, void* dp, unsigned int num)
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;             
@@ -652,8 +653,10 @@ void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num)
 l_002CBF9C:
     return;
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddPrim3DEx(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;             
@@ -825,8 +828,10 @@ void Ps2AddPrim3DEx(unsigned long prim, void* dp, unsigned int num)
 l_002CC2B0:
     return;
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddPrim3DEx1P(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;             
@@ -1006,8 +1011,10 @@ void Ps2AddPrim3DEx1P(unsigned long prim, void* dp, unsigned int num)
 l_002CC600:
     return;
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;             
@@ -1142,6 +1149,7 @@ void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num)
 l_002CC82C:
     return;
 }
+#endif
 
 // 100% matching! 
 void Ps2ClearOT()
@@ -1161,6 +1169,7 @@ void Ps2ClearOT()
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim)
 {
     unsigned int i; 
@@ -1254,6 +1263,7 @@ void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim)
     
     Ps2_ot_list_no++; 
 } 
+#endif
 
 // 100% matching! 
 void Ps2DrawOTag()
@@ -1306,7 +1316,11 @@ int Ps2DrawOTagSub(int start_no)
     
     for (i = 0; i < 64; i++) 
     { 
+#ifdef PLATFORM_PC
+        memset(&ps2_tp_cache[i], 0, sizeof(u_long128));
+#else
         *(u_long128*)&ps2_tp_cache[i] = 0; 
+#endif
     } 
     
     for (i = start_no; i < 4096; i++) 
@@ -1468,6 +1482,7 @@ int Ps2DrawOTagSub(int start_no)
 } 
 
 // 100% matching!
+#ifndef PLATFORM_PC
 unsigned int Ps2BitCount(register unsigned int value)
 {
     asm volatile
@@ -1484,6 +1499,7 @@ unsigned int Ps2BitCount(register unsigned int value)
             
     }
 }
+#endif
 
 // 100% matching!
 void Ps2InitTexCache()
@@ -2289,6 +2305,7 @@ void Ps2Vu1ProgSend(unsigned int prog_no)
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void Ps2AddPrim3DExI(unsigned long prim, void* dp, unsigned int num)
 {
     unsigned long* p;                
@@ -2559,6 +2576,7 @@ void Ps2AddPrim3DExI(unsigned long prim, void* dp, unsigned int num)
 l_002CF178:
     return;
 }
+#endif
 
 // 100% matching!
 void PS2_Render_Tex_Sub() 

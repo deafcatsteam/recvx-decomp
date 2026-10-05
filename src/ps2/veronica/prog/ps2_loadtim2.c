@@ -545,6 +545,7 @@ void Ps2PxlconvCheck(void* timadr)
 }
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void SyncPath()
 {
     unsigned int tmp;
@@ -594,8 +595,10 @@ label_0f2:
     
     while (DGET_GIF_STAT() & 0xC00); 
 } 
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void D2_SyncTag()
 {
     unsigned int tmp;
@@ -619,8 +622,10 @@ void D2_SyncTag()
 label_0f:
     DPUT_D_PCR(DGET_D_PCR() | tmp); 
 }
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void loadImage(void* tags)
 {
     asm volatile (bc0t label_0f); 
@@ -639,6 +644,7 @@ label_0f:
     DPUT_D2_TADR((int)tags); 
     DPUT_D2_CHCR(261); 
 } 
+#endif
 
 // 100% matching!
 void ClearVram()

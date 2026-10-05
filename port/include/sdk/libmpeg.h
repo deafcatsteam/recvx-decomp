@@ -27,11 +27,11 @@ typedef struct {
     int width;
     int height;
     int frameCount;
-    long long pts;
-    long long dts;
+    long pts; /* 64-bit, see port_prefix.h */
+    int64_t dts;
     u_long flags;
-    long long pts2nd;
-    long long dts2nd;
+    int64_t pts2nd;
+    int64_t dts2nd;
     u_long flags2nd;
     void *sys;
 } sceMpeg;
@@ -47,8 +47,8 @@ typedef struct {
 
 typedef struct {
     sceMpegCbType type;
-    long long pts;
-    long long dts;
+    long pts; /* 64-bit, see port_prefix.h */
+    int64_t dts;
 } sceMpegCbDataTimeStamp;
 
 typedef struct {
@@ -56,8 +56,8 @@ typedef struct {
     u_char *header;
     u_char *data;
     u_int len;
-    long long pts;
-    long long dts;
+    long pts; /* 64-bit, see port_prefix.h */
+    int64_t dts;
 } sceMpegCbDataStr;
 
 typedef int (*sceMpegCallback)(sceMpeg *mp, sceMpegCbData *cbdata, void *anyData);

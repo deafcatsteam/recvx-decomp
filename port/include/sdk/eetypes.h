@@ -6,7 +6,7 @@ typedef unsigned char u_char;
 typedef unsigned short u_short;
 typedef unsigned int u_int;
 /* `long` is 64-bit on the EE. */
-typedef unsigned long long u_long;
+typedef uint64_t u_long;
 typedef port_u128 u_long128;
 typedef port_u128 long128;
 

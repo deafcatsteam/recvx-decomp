@@ -263,6 +263,10 @@ void _Make_ClipMatrix(sceVu0FMATRIX sc, float scr, float near, float far)
 
     mp2 = &ClipMatrix2[0]; 
     
+#ifdef PLATFORM_PC
+    /* ClipMatrix2 was loaded into VU0 registers for the VU0 code, which the
+       port replaces with C. */
+#else
     asm volatile 
     { 
     .set noreorder
@@ -274,12 +278,17 @@ void _Make_ClipMatrix(sceVu0FMATRIX sc, float scr, float near, float far)
 
     .set reorder
     }
+#endif
 
     fM = ClipScreenMatrix[0];
     
     fw = &ClipDispW; 
     fh = &ClipDispH; 
 
+#ifdef PLATFORM_PC
+    fM[11] = *fw;
+    fM[10] = *fh;
+#else
     asm volatile 
     { 
     .set noreorder
@@ -292,6 +301,7 @@ void _Make_ClipMatrix(sceVu0FMATRIX sc, float scr, float near, float far)
 
     .set reorder
     }
+#endif
 } 
 
 // 100% matching!

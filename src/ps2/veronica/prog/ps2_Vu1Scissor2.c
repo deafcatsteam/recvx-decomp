@@ -10,6 +10,7 @@ extern void VU0_SET_NODE_ARRAY() __attribute__((section(".vutext")));
 extern void VU0_STORE_SCISSOR_WORK() __attribute__((section(".vutext")));
 
 // 98.80% matching
+#ifndef PLATFORM_PC
 void DrawScissorPolygonOpaque2(int count, unsigned long ulType)
 {
     VU1_PRIM_BUF* pPrim; 
@@ -58,8 +59,10 @@ void DrawScissorPolygonOpaque2(int count, unsigned long ulType)
     
     Ps2AddPrim3DEx(ulType, pPrim, count);
 }
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void InitNodeArraySet2()
 {
     asm volatile 
@@ -69,8 +72,10 @@ void InitNodeArraySet2()
         vmove.xyzw vf19, vf0
     }
 }
+#endif
 
 // 92.50% matching
+#ifndef PLATFORM_PC
 unsigned int _Clip_ViewVolume2(NJS_POINT4* vec) 
 {
     unsigned int ret;
@@ -89,8 +94,10 @@ unsigned int _Clip_ViewVolume2(NJS_POINT4* vec)
     
     return ret;
 }
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 unsigned int _Get_ClipViewVolume2()
 {
     unsigned int ret;
@@ -107,8 +114,10 @@ unsigned int _Get_ClipViewVolume2()
 
     return ret;
 }
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 int _Get_ClipVolumePlane() 
 {
     int ret;
@@ -127,8 +136,10 @@ int _Get_ClipVolumePlane()
 
     return ret;
 }
+#endif
 
 // 91.43% matching
+#ifndef PLATFORM_PC
 void _Check_ClipViewAll(NJS_POINT4* vec) 
 {
     asm volatile
@@ -141,8 +152,10 @@ void _Check_ClipViewAll(NJS_POINT4* vec)
     " : : "r"(vec) : 
     );
 }
+#endif
 
 // 96% matching
+#ifndef PLATFORM_PC
 void _Set_NodeArray(VU1_STRIP_BUF* pS, VU1_PRIM_BUF* pP)
 {
     asm volatile 
@@ -163,9 +176,11 @@ void _Set_NodeArray(VU1_STRIP_BUF* pS, VU1_PRIM_BUF* pP)
     " : : "r"(pS), "r"(pP) : 
     );
 }
+#endif
 
 // TODO: Verify that this function hasn't got more parts written in C, for example addiu and paddub tend to be compiler-emitted instructions
 // 96.57% matching 
+#ifndef PLATFORM_PC
 int _ClipInter(int mask1, int mask2, int xyzflg, float sin, int work0, int work1, int count)
 {
     int ret;
@@ -396,6 +411,7 @@ int _ClipInter(int mask1, int mask2, int xyzflg, float sin, int work0, int work1
 
     return ret;
 }
+#endif
 
 // 100% matching!
 int _Check_ScissorPlane()

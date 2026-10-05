@@ -710,6 +710,7 @@ void npCalcMorphing(NJS_CNK_OBJECT* obj_a, NJS_CNK_OBJECT* obj_b, float no, int 
 }
 
 // 99.95% matching
+#ifndef PLATFORM_PC
 void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float no, int ono)
 {
     int s_nb;
@@ -808,6 +809,7 @@ void npTransform(NJS_CNK_OBJECT* srcobj, NJS_CNK_OBJECT* dstobj, register float 
 
     srcobj->model->vlist = np.vlp2[ono]; 
 } 
+#endif
 
 // 100% matching!
 void npPushMdlstr(NJS_CNK_OBJECT* objp, int obj_n)
@@ -1588,6 +1590,28 @@ void npSetOffsetUV(NJS_CNK_MODEL* mdlp, short offu, short offv)
             } 
             else 
             {
+#ifdef PLATFORM_PC
+                /* Each strip: a vertex count (negative for reversed
+                   winding), then index, u, v per vertex; shift u and v. */
+                do
+                {
+                    int n = *plp++;
+
+                    if (n < 0)
+                    {
+                        n = -n;
+                    }
+
+                    do
+                    {
+                        plp[1] += offu;
+                        plp[2] += offv;
+                        plp += 3;
+                    } while (--n > 0);
+
+                    plp += usr_num;
+                } while (--srp_num > 0);
+#else
                 asm volatile 
                 ("
                 .set noreorder
@@ -1626,6 +1650,7 @@ void npSetOffsetUV(NJS_CNK_MODEL* mdlp, short offu, short offv)
                 .set reorder
                 " : "=r"(plp) : "r"(offu), "r"(offv), "r"(usr_num), "r"(srp_num) : "t0", "t1", "t2"
                 );
+#endif
             }
         }
         else if (head == 8) 
@@ -1668,6 +1693,28 @@ void npSetOffsetUV2(NJS_CNK_MODEL* mdlp, short offu, short offv)
             usr_num = (*++plp >> 14) & 0x3; 
             srp_num = *plp++ & ~0xC000;
            
+#ifdef PLATFORM_PC
+            /* Each strip: a vertex count (negative for reversed
+               winding), then index, u, v per vertex; shift u and v. */
+            do
+            {
+                int n = *plp++;
+
+                if (n < 0)
+                {
+                    n = -n;
+                }
+
+                do
+                {
+                    plp[1] += offu;
+                    plp[2] += offv;
+                    plp += 3;
+                } while (--n > 0);
+
+                plp += usr_num;
+            } while (--srp_num > 0);
+#else
             asm volatile 
             ("
             .set noreorder
@@ -1704,6 +1751,7 @@ void npSetOffsetUV2(NJS_CNK_MODEL* mdlp, short offu, short offv)
             .set reorder
             " : "=r"(plp) : "r"(offu), "r"(offv), "r"(usr_num), "r"(srp_num) : "t0", "t1", "t2"
             );
+#endif
 
             break;
         }
@@ -1749,6 +1797,7 @@ void npCutSkin(BH_PWORK* epw, int prm1, int prm2, int prm3, float prm4, float pr
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void npInitCalcSkin(void* pwp, int obj_n, int* sknp)
 { 
 	NJS_MATRIX mat;        
@@ -1835,8 +1884,10 @@ void npInitCalcSkin(void* pwp, int obj_n, int* sknp)
         }
     } 
 } 
+#endif
 
 // 99.93% matching
+#ifndef PLATFORM_PC
 void npCalcSkin(void* pwp, int obj_n, int* sknp)
 { 
     NJS_POINT4* p0;
@@ -2044,8 +2095,10 @@ void npCalcSkin(void* pwp, int obj_n, int* sknp)
         njPopMatrixEx(); 
     }
 } 
+#endif
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void npInitCalcSkinFM(void* pwp, int obj_n, int* sknp)
 { 
 	NJS_MATRIX mat;        
@@ -2135,8 +2188,10 @@ void npInitCalcSkinFM(void* pwp, int obj_n, int* sknp)
         }
     } 
 } 
+#endif
 
 // 99.93% matching
+#ifndef PLATFORM_PC
 void npCalcSkinFM(void* pwp, int obj_n, int* sknp)
 { 
     NJS_POINT4* p0;
@@ -2352,3 +2407,4 @@ void npCalcSkinFM(void* pwp, int obj_n, int* sknp)
         njPopMatrixEx(); 
     }
 } 
+#endif

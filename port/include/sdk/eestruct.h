@@ -257,17 +257,17 @@
      ((u_long)(prim) << 47) | ((u_long)(flg) << 58) | ((u_long)(nreg) << 60))
 
 typedef struct {
-    unsigned long long NLOOP:15;
-    unsigned long long EOP:1;
-    unsigned long long pad16:30;
-    unsigned long long PRE:1;
-    unsigned long long PRIM:11;
-    unsigned long long FLG:2;
-    unsigned long long NREG:4;
-    unsigned long long REGS0:4, REGS1:4, REGS2:4, REGS3:4;
-    unsigned long long REGS4:4, REGS5:4, REGS6:4, REGS7:4;
-    unsigned long long REGS8:4, REGS9:4, REGS10:4, REGS11:4;
-    unsigned long long REGS12:4, REGS13:4, REGS14:4, REGS15:4;
+    uint64_t NLOOP:15;
+    uint64_t EOP:1;
+    uint64_t pad16:30;
+    uint64_t PRE:1;
+    uint64_t PRIM:11;
+    uint64_t FLG:2;
+    uint64_t NREG:4;
+    uint64_t REGS0:4, REGS1:4, REGS2:4, REGS3:4;
+    uint64_t REGS4:4, REGS5:4, REGS6:4, REGS7:4;
+    uint64_t REGS8:4, REGS9:4, REGS10:4, REGS11:4;
+    uint64_t REGS12:4, REGS13:4, REGS14:4, REGS15:4;
 } __attribute__((aligned(16))) sceGifTag;
 
 /* ---- VIF codes ---- */
@@ -309,84 +309,84 @@ typedef struct {
 
 /* ---- GS register structures ---- */
 typedef struct {
-    unsigned long long TBP0:14;
-    unsigned long long TBW:6;
-    unsigned long long PSM:6;
-    unsigned long long TW:4;
-    unsigned long long TH:4;
-    unsigned long long TCC:1;
-    unsigned long long TFX:2;
-    unsigned long long CBP:14;
-    unsigned long long CPSM:4;
-    unsigned long long CSM:1;
-    unsigned long long CSA:5;
-    unsigned long long CLD:3;
+    uint64_t TBP0:14;
+    uint64_t TBW:6;
+    uint64_t PSM:6;
+    uint64_t TW:4;
+    uint64_t TH:4;
+    uint64_t TCC:1;
+    uint64_t TFX:2;
+    uint64_t CBP:14;
+    uint64_t CPSM:4;
+    uint64_t CSM:1;
+    uint64_t CSA:5;
+    uint64_t CLD:3;
 } sceGsTex0;
 
 typedef struct {
-    unsigned long long LCM:1;
-    unsigned long long pad01:1;
-    unsigned long long MXL:3;
-    unsigned long long MMAG:1;
-    unsigned long long MMIN:3;
-    unsigned long long MTBA:1;
-    unsigned long long pad10:9;
-    unsigned long long L:2;
-    unsigned long long pad21:11;
-    unsigned long long K:12;
-    unsigned long long pad44:20;
+    uint64_t LCM:1;
+    uint64_t pad01:1;
+    uint64_t MXL:3;
+    uint64_t MMAG:1;
+    uint64_t MMIN:3;
+    uint64_t MTBA:1;
+    uint64_t pad10:9;
+    uint64_t L:2;
+    uint64_t pad21:11;
+    uint64_t K:12;
+    uint64_t pad44:20;
 } sceGsTex1;
 
 /* Remaining registers are only stored/copied, never picked apart. */
 typedef struct {
-    unsigned long long EN1:1;
-    unsigned long long EN2:1;
-    unsigned long long CRTMD:3;
-    unsigned long long MMOD:1;
-    unsigned long long AMOD:1;
-    unsigned long long SLBG:1;
-    unsigned long long ALP:8;
-    unsigned long long pad16:48;
+    uint64_t EN1:1;
+    uint64_t EN2:1;
+    uint64_t CRTMD:3;
+    uint64_t MMOD:1;
+    uint64_t AMOD:1;
+    uint64_t SLBG:1;
+    uint64_t ALP:8;
+    uint64_t pad16:48;
 } sceGsPmode;
 
 typedef struct {
-    unsigned long long FBP:9;
-    unsigned long long FBW:6;
-    unsigned long long PSM:5;
-    unsigned long long pad20:12;
-    unsigned long long DBX:11;
-    unsigned long long DBY:11;
-    unsigned long long pad54:10;
+    uint64_t FBP:9;
+    uint64_t FBW:6;
+    uint64_t PSM:5;
+    uint64_t pad20:12;
+    uint64_t DBX:11;
+    uint64_t DBY:11;
+    uint64_t pad54:10;
 } sceGsDispfb;
 
 typedef struct {
-    unsigned long long DX:12;
-    unsigned long long DY:11;
-    unsigned long long MAGH:4;
-    unsigned long long MAGV:2;
-    unsigned long long pad29:3;
-    unsigned long long DW:12;
-    unsigned long long DH:11;
-    unsigned long long pad55:9;
+    uint64_t DX:12;
+    uint64_t DY:11;
+    uint64_t MAGH:4;
+    uint64_t MAGV:2;
+    uint64_t pad29:3;
+    uint64_t DW:12;
+    uint64_t DH:11;
+    uint64_t pad55:9;
 } sceGsDisplay;
 
 typedef struct {
-    unsigned long long FBP:9;
-    unsigned long long pad09:7;
-    unsigned long long FBW:6;
-    unsigned long long pad22:2;
-    unsigned long long PSM:6;
-    unsigned long long pad30:2;
-    unsigned long long FBMSK:32;
+    uint64_t FBP:9;
+    uint64_t pad09:7;
+    uint64_t FBW:6;
+    uint64_t pad22:2;
+    uint64_t PSM:6;
+    uint64_t pad30:2;
+    uint64_t FBMSK:32;
 } sceGsFrame;
 
 typedef struct {
-    unsigned long long ZBP:9;
-    unsigned long long pad09:15;
-    unsigned long long PSM:4;
-    unsigned long long pad28:4;
-    unsigned long long ZMSK:1;
-    unsigned long long pad33:31;
+    uint64_t ZBP:9;
+    uint64_t pad09:15;
+    uint64_t PSM:4;
+    uint64_t pad28:4;
+    uint64_t ZMSK:1;
+    uint64_t pad33:31;
 } sceGsZbuf;
 
 typedef u_long sceGsSmode2;

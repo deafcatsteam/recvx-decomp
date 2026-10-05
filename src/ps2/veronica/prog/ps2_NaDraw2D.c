@@ -14,6 +14,7 @@ void CalcPs2ZbuffAB()
 }
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void sceVu0ITOF12Vector(sceVu0FVECTOR v0, sceVu0IVECTOR v1)
 {
 	asm __volatile__("
@@ -22,6 +23,7 @@ void sceVu0ITOF12Vector(sceVu0FVECTOR v0, sceVu0IVECTOR v1)
 	sqc2    vf5,0x0(%0)
 	": : "r" (v0) , "r" (v1));
 }
+#endif
 
 // 100% matching! 
 void	njDrawLine2D(NJS_POINT2COL *p, Int n, Float pri, Uint32 attr)

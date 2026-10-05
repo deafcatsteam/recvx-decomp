@@ -43,23 +43,15 @@ execute_process(
             ${CASE_DIR} ${KATANA_INC} ${CRI_INC}
     COMMAND_ERROR_IS_FATAL ANY)
 
-# Game files whose PS2 version relies on inline assembly or hardware and that
-# the port replaces with its own implementation (see port/README.md).
+# Game files that the port replaces as a whole: the Ninja math (VU0 assembly,
+# rewritten in C), the IPU movie player and the EE-gcc runtime helpers. Other
+# files only have their assembly disabled with #ifndef PLATFORM_PC; the PC
+# versions of those live in port/src (see port/README.md).
 set(GAME_REPLACED
-    expand.c
-    face_bh.c
-    njplus.c
-    objitm.c
+    gcc_wrapper.c
     ps2_MovieFunc.c
-    ps2_NaDraw2D.c
     ps2_NaMath.c
     ps2_NaMatrix.c
-    ps2_NaView.c
-    ps2_NinjaCnk.c
-    ps2_Vu1Scissor2.c
-    ps2_Vu1Strip.c
-    ps2_dummy.c
-    ps2_loadtim2.c
 )
 
 file(GLOB GAME_SOURCES ${GAME_DIR}/*.c)
@@ -71,6 +63,14 @@ endforeach()
 set(PORT_SOURCES
     port/src/ninja/pc_NaMath.c
     port/src/ninja/pc_NaMatrix.c
+    port/src/platform/pc_hwregs.c
+    port/src/platform/pc_disc.c
+    port/src/platform/pc_kernel.c
+    port/src/platform/pc_sdk.c
+    port/src/platform/pc_vu0.c
+    port/src/audio/pc_adx.c
+    port/src/game/pc_game_asm.c
+    port/src/game/pc_movie.c
 )
 
 add_library(cvx_game STATIC ${GAME_SOURCES} ${PORT_SOURCES})
@@ -99,3 +99,6 @@ enable_testing()
 add_executable(test_math port/tests/test_math.c)
 target_link_libraries(test_math PRIVATE cvx_game m)
 add_test(NAME math COMMAND test_math)
+
+add_executable(cvx_pc ${GAME_DIR}/njloop.c)
+target_link_libraries(cvx_pc PRIVATE cvx_game m)

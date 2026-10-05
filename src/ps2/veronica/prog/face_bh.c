@@ -764,6 +764,7 @@ unsigned int fmCnkGetLastFrame(MASK_WORK* fm)
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 void _fmCnkCalcMuscle(MASK_WORK* fm)  
 {
     int m, n, i;  
@@ -928,8 +929,10 @@ void _fmCnkCalcMuscle(MASK_WORK* fm)
         );
     }
 }
+#endif
 
 // 99.32% matching
+#ifndef PLATFORM_PC
 void _fmCnkCalcJaw(MASK_WORK* fm) 
 {
     int i;                
@@ -1102,8 +1105,10 @@ void _fmCnkCalcJaw(MASK_WORK* fm)
         }
     }
 }
+#endif
 
 // 100% matching! 
+#ifndef PLATFORM_PC
 void _fmCnkCalcEye(MASK_WORK* fm) 
 {
     float dx;            
@@ -1219,8 +1224,10 @@ void _fmCnkCalcEye(MASK_WORK* fm)
         }
     }
 }
+#endif
 
 // 99.35% matching
+#ifndef PLATFORM_PC
 void _fmCnkCalcTang(MASK_WORK* fm) 
 {
     int i;                
@@ -1316,6 +1323,7 @@ void _fmCnkCalcTang(MASK_WORK* fm)
         }
     }
 }
+#endif
 
 // 100% matching! 
 void _fmCnkCalcNormal(MASK_WORK* fm) 

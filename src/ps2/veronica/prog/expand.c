@@ -9,6 +9,7 @@ void Init_Expand()
 }
 
 // 99.63% matching
+#ifndef PLATFORM_PC
 int Expand(register char* s, register unsigned char* d) 
 {
     register int T;
@@ -204,6 +205,7 @@ int Expand(register char* s, register unsigned char* d)
 
     return T;
 } 
+#endif
 
 /* Following is a C version of Expand() provided by Clownacy */
 /*typedef struct Expand_State

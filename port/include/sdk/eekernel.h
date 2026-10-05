@@ -3,6 +3,7 @@
 #define _eekernel_h_
 
 #include <eetypes.h>
+#include <eeregs.h>
 
 struct ThreadParam {
     int status;
@@ -63,6 +64,8 @@ void InvalidDCache(void *start, void *end);
 void iSyncDCache(void *start, void *end);
 void iInvalidDCache(void *start, void *end);
 void ExitHandler(void);
+
+int SetAlarm(u_short time, void (*handler)(int, u_short, void *), void *arg);
 int DIntr(void);
 int EIntr(void);
 void LoadExecPS2(const char *filename, int argc, char **argv);

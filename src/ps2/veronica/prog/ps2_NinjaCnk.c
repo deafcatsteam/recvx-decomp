@@ -1277,6 +1277,7 @@ CHUNK_HEAD* njCnkCvVn(CHUNK_HEAD* pCnk)
 }
 
 // 98.11% matching
+#ifndef PLATFORM_PC
 CHUNK_HEAD* njCnkCvVnPs2(CHUNK_HEAD* pCnk)
 {
     VU1_STRIP_BUF* pBuffer;                                    
@@ -1469,6 +1470,7 @@ CHUNK_HEAD* njCnkCvVnPs2(CHUNK_HEAD* pCnk)
     
     return (CHUNK_HEAD*)fpCnk;
 }
+#endif
 
 // 100% matching! 
 CHUNK_HEAD* njCnkCvVMod(CHUNK_HEAD* pCnk)
@@ -1825,6 +1827,7 @@ CHUNK_HEAD* njCnkCs(CHUNK_HEAD* pCnk)
 }
 
 // 100% matching!
+#ifndef PLATFORM_PC
 int _CVV(float* v0)
 {
     register int ret;
@@ -1855,8 +1858,10 @@ int _CVV(float* v0)
             
     } 
 }
+#endif
 
 // 99.22% matching
+#ifndef PLATFORM_PC
 CHUNK_HEAD* njCnkCsUvh(CHUNK_HEAD* pCnk)
 {
     unsigned char ucFlag;                                                           
@@ -2287,8 +2292,10 @@ CHUNK_HEAD* njCnkCsUvh(CHUNK_HEAD* pCnk)
     
     return (CHUNK_HEAD*)uspCnk;
 }
+#endif
 
 // 99.22% matching
+#ifndef PLATFORM_PC
 CHUNK_HEAD* njCnkCsUvn(CHUNK_HEAD* pCnk)
 {
     unsigned char ucFlag;                                                           
@@ -2719,6 +2726,7 @@ CHUNK_HEAD* njCnkCsUvn(CHUNK_HEAD* pCnk)
     
     return (CHUNK_HEAD*)uspCnk;
 }
+#endif
 
 // 100% matching!
 CHUNK_HEAD* njCnkDefaultLong(CHUNK_HEAD* pCnk)
