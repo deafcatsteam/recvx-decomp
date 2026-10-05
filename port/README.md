@@ -52,6 +52,14 @@ Variables utiles :
 | `CVX_ISO` | Chemin de l'ISO |
 | `CVX_HEADLESS` | Pas de fenêtre (tests) |
 | `CVX_NO_VSYNC` | Ne pas attendre le 60 Hz (le jeu tourne aussi vite que possible) |
+| `CVX_QUIET` | Pas de ligne d'état chaque seconde dans la console |
+| `CVX_NO_LOG` | Ne pas écrire `cvx_log.txt` |
+| `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
+
+Tout ce qui s'affiche dans la console est aussi écrit dans `cvx_log.txt`, à
+côté de l'exe. En cas de plantage, la console indique où était le jeu et
+reste ouverte jusqu'à un appui sur Entrée : envoie ce fichier pour signaler
+un problème.
 
 Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 
@@ -63,7 +71,7 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Retour arrière | Select | | E | △ |
 | Ctrl gauche | R1 (viser) | | Q | L1 |
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
-| | | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
+| Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
 
 ## Récupérer l'exécutable Windows
 

@@ -99,6 +99,7 @@ add_library(cvx_host STATIC
     port/src/platform/pc_hwregs.c
     port/src/gs/gs.c
     port/src/gs/gs_mem.c
+    port/src/gs/gs_threads.c
 )
 target_link_libraries(cvx_host PUBLIC m)
 if(NOT WIN32)

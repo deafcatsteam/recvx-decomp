@@ -181,15 +181,17 @@ static void frame(void)
         return;
 
     int w, h;
-    gs_read_display(pixels, &w, &h);
-    if (screen == NULL || w != screen_w || h != screen_h) {
-        if (screen != NULL)
-            SDL_DestroyTexture(screen);
-        screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, w, h);
-        screen_w = w;
-        screen_h = h;
+    if (gs_read_display(pixels, &w, &h)) {
+        if (screen == NULL || w != screen_w || h != screen_h) {
+            if (screen != NULL)
+                SDL_DestroyTexture(screen);
+            screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                                       w, h);
+            screen_w = w;
+            screen_h = h;
+        }
+        SDL_UpdateTexture(screen, NULL, pixels, w * 4);
     }
-    SDL_UpdateTexture(screen, NULL, pixels, w * 4);
 
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);

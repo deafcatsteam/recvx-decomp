@@ -89,20 +89,6 @@ static int column4_offset(int x, int y)
     return column_word(y, x) * 8 + ((x >> 3) & 3) * 2 + ((y >> 1) & 1);
 }
 
-/* Block number of (x, y) for a format with the given page and block sizes:
- * blocks are added to bp as plain numbers, like the GS does. */
-static uint32_t block_number(uint32_t bp, uint32_t bw, int x, int y, int page_w, int page_h,
-                             int block_w, int block_h, const uint8_t *table, int table_w)
-{
-    uint32_t pages_per_row = (bw * 64) / page_w;
-    uint32_t page;
-
-    if (pages_per_row == 0)
-        pages_per_row = 1;
-    page = (uint32_t)(y / page_h) * pages_per_row + (uint32_t)(x / page_w);
-    return (bp + page * 32 + table[((y % page_h) / block_h) * table_w + (x % page_w) / block_w]) & 0x3fff;
-}
-
 int gs_psm_bpp(int psm)
 {
     switch (psm) {
@@ -117,57 +103,62 @@ int gs_psm_bpp(int psm)
     }
 }
 
-/* Byte address of a 32-bit-word pixel. */
-static uint32_t addr32(const uint8_t *table, uint32_t bp, uint32_t bw, int x, int y)
+/*
+ * Address tables. Inside a page every format has a fixed arrangement, and
+ * pages follow each other as plain block numbers, so an address is
+ * (bp + page * 32) * 256 plus the offset of (x, y) inside its page. The
+ * offsets are computed once from the block and column tables above.
+ */
+uint16_t gs_page32[2][32 * 64];
+uint16_t gs_page16[4][64 * 64];
+uint16_t gs_page8[64 * 128];
+uint16_t gs_page4[128 * 128];
+
+static void build_tables(void)
 {
-    uint32_t block = block_number(bp, bw, x, y, 64, 32, 8, 8, table, 8);
-    return block * 256 + column32[y & 7][x & 7] * 4;
+    static const uint8_t (*const t32[2])[8] = { block32, block32z };
+    static const uint8_t (*const t16[4])[4] = { block16, block16s, block16z, block16sz };
+
+    for (int k = 0; k < 2; k++)
+        for (int y = 0; y < 32; y++)
+            for (int x = 0; x < 64; x++)
+                gs_page32[k][y * 64 + x] = t32[k][y / 8][x / 8] * 256 + column32[y & 7][x & 7] * 4;
+    for (int k = 0; k < 4; k++)
+        for (int y = 0; y < 64; y++)
+            for (int x = 0; x < 64; x++)
+                gs_page16[k][y * 64 + x] = t16[k][y / 8][x / 16] * 256 + column16[y & 7][x & 15] * 2;
+    for (int y = 0; y < 64; y++)
+        for (int x = 0; x < 128; x++)
+            gs_page8[y * 128 + x] = block8[y / 16][x / 16] * 256 + column8_offset(x & 15, y & 15);
+    for (int y = 0; y < 128; y++)
+        for (int x = 0; x < 128; x++)
+            gs_page4[y * 128 + x] = block4[y / 16][x / 32] * 512 + column4_offset(x & 31, y & 15);
 }
 
-/* Byte address of a 16-bit pixel. */
-static uint32_t addr16(const uint8_t *table, uint32_t bp, uint32_t bw, int x, int y)
+__attribute__((constructor)) static void init_tables(void)
 {
-    uint32_t block = block_number(bp, bw, x, y, 64, 64, 16, 8, table, 4);
-    return block * 256 + column16[y & 7][x & 15] * 2;
+    build_tables();
 }
-
-static uint32_t addr8(uint32_t bp, uint32_t bw, int x, int y)
-{
-    uint32_t block = block_number(bp, bw, x, y, 128, 64, 16, 16, &block8[0][0], 8);
-    return block * 256 + column8_offset(x & 15, y & 15);
-}
-
-/* Nibble address of a 4-bit pixel. */
-static uint32_t addr4(uint32_t bp, uint32_t bw, int x, int y)
-{
-    uint32_t block = block_number(bp, bw, x, y, 128, 128, 32, 16, &block4[0][0], 4);
-    return block * 512 + column4_offset(x & 31, y & 15);
-}
-
-static uint32_t rd32(uint32_t a) { uint32_t v; memcpy(&v, gs_vram + a, 4); return v; }
-static void wr32(uint32_t a, uint32_t v) { memcpy(gs_vram + a, &v, 4); }
-static uint32_t rd16(uint32_t a) { uint16_t v; memcpy(&v, gs_vram + a, 2); return v; }
-static void wr16(uint32_t a, uint32_t v) { uint16_t h = (uint16_t)v; memcpy(gs_vram + a, &h, 2); }
 
 uint32_t gs_read_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y)
 {
     switch (psm) {
-    case GS_PSMCT32: return rd32(addr32(&block32[0][0], bp, bw, x, y));
-    case GS_PSMCT24: return rd32(addr32(&block32[0][0], bp, bw, x, y)) & 0xffffff;
-    case GS_PSMZ32: return rd32(addr32(&block32z[0][0], bp, bw, x, y));
-    case GS_PSMZ24: return rd32(addr32(&block32z[0][0], bp, bw, x, y)) & 0xffffff;
-    case GS_PSMCT16: return rd16(addr16(&block16[0][0], bp, bw, x, y));
-    case GS_PSMCT16S: return rd16(addr16(&block16s[0][0], bp, bw, x, y));
-    case GS_PSMZ16: return rd16(addr16(&block16z[0][0], bp, bw, x, y));
-    case GS_PSMZ16S: return rd16(addr16(&block16sz[0][0], bp, bw, x, y));
-    case GS_PSMT8: return gs_vram[addr8(bp, bw, x, y)];
+    case GS_PSMCT32: return gs_rd32(gs_addr32(0, bp, bw, x, y));
+    case GS_PSMCT24: return gs_rd32(gs_addr32(0, bp, bw, x, y)) & 0xffffff;
+    case GS_PSMZ32: return gs_rd32(gs_addr32(1, bp, bw, x, y));
+    case GS_PSMZ24: return gs_rd32(gs_addr32(1, bp, bw, x, y)) & 0xffffff;
+    case GS_PSMCT16: return gs_rd16(gs_addr16(0, bp, bw, x, y));
+    case GS_PSMCT16S: return gs_rd16(gs_addr16(1, bp, bw, x, y));
+    case GS_PSMZ16: return gs_rd16(gs_addr16(2, bp, bw, x, y));
+    case GS_PSMZ16S: return gs_rd16(gs_addr16(3, bp, bw, x, y));
+    case GS_PSMT8: return gs_vram[gs_addr8(bp, bw, x, y)];
     case GS_PSMT4: {
-        uint32_t n = addr4(bp, bw, x, y);
+        uint32_t n = gs_addr4(bp, bw, x, y);
         return (gs_vram[n >> 1] >> ((n & 1) * 4)) & 15;
     }
-    case GS_PSMT8H: return rd32(addr32(&block32[0][0], bp, bw, x, y)) >> 24;
-    case GS_PSMT4HL: return (rd32(addr32(&block32[0][0], bp, bw, x, y)) >> 24) & 15;
-    case GS_PSMT4HH: return rd32(addr32(&block32[0][0], bp, bw, x, y)) >> 28;
+    case GS_PSMT8H: return gs_rd32(gs_addr32(0, bp, bw, x, y)) >> 24;
+    case GS_PSMT4HL: return (gs_rd32(gs_addr32(0, bp, bw, x, y)) >> 24) & 15;
+    case GS_PSMT4HH: return gs_rd32(gs_addr32(0, bp, bw, x, y)) >> 28;
     }
     return 0;
 }
@@ -177,38 +168,38 @@ void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
     uint32_t a;
 
     switch (psm) {
-    case GS_PSMCT32: wr32(addr32(&block32[0][0], bp, bw, x, y), v); return;
-    case GS_PSMZ32: wr32(addr32(&block32z[0][0], bp, bw, x, y), v); return;
+    case GS_PSMCT32: gs_wr32(gs_addr32(0, bp, bw, x, y), v); return;
+    case GS_PSMZ32: gs_wr32(gs_addr32(1, bp, bw, x, y), v); return;
     case GS_PSMCT24:
-        a = addr32(&block32[0][0], bp, bw, x, y);
-        wr32(a, (rd32(a) & 0xff000000) | (v & 0xffffff));
+        a = gs_addr32(0, bp, bw, x, y);
+        gs_wr32(a, (gs_rd32(a) & 0xff000000) | (v & 0xffffff));
         return;
     case GS_PSMZ24:
-        a = addr32(&block32z[0][0], bp, bw, x, y);
-        wr32(a, (rd32(a) & 0xff000000) | (v & 0xffffff));
+        a = gs_addr32(1, bp, bw, x, y);
+        gs_wr32(a, (gs_rd32(a) & 0xff000000) | (v & 0xffffff));
         return;
-    case GS_PSMCT16: wr16(addr16(&block16[0][0], bp, bw, x, y), v); return;
-    case GS_PSMCT16S: wr16(addr16(&block16s[0][0], bp, bw, x, y), v); return;
-    case GS_PSMZ16: wr16(addr16(&block16z[0][0], bp, bw, x, y), v); return;
-    case GS_PSMZ16S: wr16(addr16(&block16sz[0][0], bp, bw, x, y), v); return;
-    case GS_PSMT8: gs_vram[addr8(bp, bw, x, y)] = (uint8_t)v; return;
+    case GS_PSMCT16: gs_wr16(gs_addr16(0, bp, bw, x, y), v); return;
+    case GS_PSMCT16S: gs_wr16(gs_addr16(1, bp, bw, x, y), v); return;
+    case GS_PSMZ16: gs_wr16(gs_addr16(2, bp, bw, x, y), v); return;
+    case GS_PSMZ16S: gs_wr16(gs_addr16(3, bp, bw, x, y), v); return;
+    case GS_PSMT8: gs_vram[gs_addr8(bp, bw, x, y)] = (uint8_t)v; return;
     case GS_PSMT4: {
-        uint32_t n = addr4(bp, bw, x, y);
+        uint32_t n = gs_addr4(bp, bw, x, y);
         int shift = (n & 1) * 4;
         gs_vram[n >> 1] = (uint8_t)((gs_vram[n >> 1] & ~(15 << shift)) | ((v & 15) << shift));
         return;
     }
     case GS_PSMT8H:
-        a = addr32(&block32[0][0], bp, bw, x, y);
-        wr32(a, (rd32(a) & 0x00ffffff) | (v << 24));
+        a = gs_addr32(0, bp, bw, x, y);
+        gs_wr32(a, (gs_rd32(a) & 0x00ffffff) | (v << 24));
         return;
     case GS_PSMT4HL:
-        a = addr32(&block32[0][0], bp, bw, x, y);
-        wr32(a, (rd32(a) & 0xf0ffffff) | ((v & 15) << 24));
+        a = gs_addr32(0, bp, bw, x, y);
+        gs_wr32(a, (gs_rd32(a) & 0xf0ffffff) | ((v & 15) << 24));
         return;
     case GS_PSMT4HH:
-        a = addr32(&block32[0][0], bp, bw, x, y);
-        wr32(a, (rd32(a) & 0x0fffffff) | ((v & 15) << 28));
+        a = gs_addr32(0, bp, bw, x, y);
+        gs_wr32(a, (gs_rd32(a) & 0x0fffffff) | ((v & 15) << 28));
         return;
     }
 }

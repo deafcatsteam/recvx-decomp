@@ -40,10 +40,11 @@ void gs_set_display(uint64_t dispfb, uint64_t display);
 
 /* Converts the displayed frame buffer into 32-bit RGBA (R in the low byte,
  * alpha forced opaque). Returns its size through w and h; dst must hold
- * GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H pixels. */
+ * GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H pixels. Returns 0, without converting,
+ * when nothing was drawn or displayed since the last call. */
 #define GS_DISPLAY_MAX_W 1024
 #define GS_DISPLAY_MAX_H 1024
-void gs_read_display(uint32_t *dst, int *w, int *h);
+int gs_read_display(uint32_t *dst, int *w, int *h);
 
 /* Statistics of the last frame, for debugging. */
 typedef struct {

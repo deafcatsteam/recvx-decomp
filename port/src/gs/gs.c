@@ -5,6 +5,7 @@
  */
 #include "gs.h"
 #include "gs_mem.h"
+#include "gs_threads.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -90,12 +91,6 @@ static uint32_t expand16(uint32_t c, int use_texa)
     return rgba(r, g, b, a);
 }
 
-static uint32_t expand24(uint32_t c)
-{
-    int a = (BITS(gs.texa, 15, 1) && (c & 0xffffff) == 0) ? 0 : BITS(gs.texa, 0, 8);
-    return (c & 0xffffff) | ((uint32_t)a << 24);
-}
-
 /* ---- CLUT -------------------------------------------------------------- */
 
 static void load_clut(uint64_t tex0)
@@ -150,8 +145,13 @@ static void load_clut(uint64_t tex0)
 
 /* ---- Image transfers ---------------------------------------------------- */
 
+/* Counts changes to GS memory and display settings, so the display is only
+ * converted again when it may have changed. */
+static uint32_t changes, shown_changes = ~0u;
+
 static void trx_start(void)
 {
+    changes++;
     int dir = BITS(gs.trxdir, 0, 2);
 
     trx.active = 0;
@@ -243,82 +243,37 @@ static void trx_bytes(const uint8_t *q, int len)
     }
 }
 
-/* ---- Texture sampling -------------------------------------------------- */
+/* ---- Drawing state ------------------------------------------------------ */
 
-static int wrap_coord(int c, int size, int mode, int minv, int maxv)
-{
-    switch (mode) {
-    case 0: return c & (size - 1);                       /* REPEAT */
-    case 1: return c < 0 ? 0 : c >= size ? size - 1 : c;  /* CLAMP */
-    case 2: return c < minv ? minv : c > maxv ? maxv : c; /* REGION_CLAMP */
-    default: return (c & minv) | maxv;                    /* REGION_REPEAT */
-    }
-}
-
-static uint32_t texel(int ctx, int u, int v)
-{
-    uint64_t tex0 = gs.tex0[ctx], clamp = gs.clamp[ctx];
-    int psm = BITS(tex0, 20, 6);
-    uint32_t tbp = BITS(tex0, 0, 14), tbw = BITS(tex0, 14, 6);
-    int tw = 1 << BITS(tex0, 26, 4), th = 1 << BITS(tex0, 30, 4);
-    int cpsm = BITS(tex0, 51, 4);
-    uint32_t c;
-
-    u = wrap_coord(u, tw, BITS(clamp, 0, 2), BITS(clamp, 4, 10), BITS(clamp, 14, 10));
-    v = wrap_coord(v, th, BITS(clamp, 2, 2), BITS(clamp, 24, 10), BITS(clamp, 34, 10));
-
-    switch (psm) {
-    case GS_PSMCT32:
-        return gs_read_pixel(psm, tbp, tbw, u & 2047, v & 2047);
-    case GS_PSMCT24:
-        return expand24(gs_read_pixel(psm, tbp, tbw, u & 2047, v & 2047));
-    case GS_PSMCT16: case GS_PSMCT16S:
-        return expand16(gs_read_pixel(psm, tbp, tbw, u & 2047, v & 2047), 1);
-    case GS_PSMT8: case GS_PSMT8H: case GS_PSMT4: case GS_PSMT4HL: case GS_PSMT4HH: {
-        uint32_t idx = gs_read_pixel(psm, tbp, tbw, u & 2047, v & 2047);
-        if (psm == GS_PSMT4 || psm == GS_PSMT4HL || psm == GS_PSMT4HH)
-            idx += BITS(tex0, 56, 5) * 16; /* CSA */
-        c = gs.clut[idx & 511];
-        return cpsm == 0 ? c : expand16(c, 1);
-    }
-    }
-    return 0;
-}
-
-static uint32_t sample(int ctx, int u16, int v16)
-{
-    uint64_t tex1 = gs.tex1[ctx];
-
-    if (!BITS(tex1, 5, 1)) /* MMAG: nearest */
-        return texel(ctx, u16 >> 4, v16 >> 4);
-
-    /* Bilinear: texel centres are at +0.5. */
-    int us = u16 - 8, vs = v16 - 8;
-    int u0 = us >> 4, v0 = vs >> 4, fu = us & 15, fv = vs & 15;
-    uint32_t c00 = texel(ctx, u0, v0), c10 = texel(ctx, u0 + 1, v0);
-    uint32_t c01 = texel(ctx, u0, v0 + 1), c11 = texel(ctx, u0 + 1, v0 + 1);
-    uint32_t out = 0;
-    for (int sh = 0; sh < 32; sh += 8) {
-        int a = (c00 >> sh) & 255, b = (c10 >> sh) & 255, c = (c01 >> sh) & 255, d = (c11 >> sh) & 255;
-        int top = a * (16 - fu) + b * fu, bot = c * (16 - fu) + d * fu;
-        out |= (uint32_t)((top * (16 - fv) + bot * fv) >> 8) << sh;
-    }
-    return out;
-}
-
-/* ---- Pixel pipeline ---------------------------------------------------- */
-
+/* Register fields decoded once per primitive. */
 typedef struct {
     int ctx;
     int tme, fge, abe, fst, iip;
     int fpsm, zpsm;
-    uint32_t fbp, fbw, zbp, fbmsk;
+    uint32_t fbp, fbw, zbp, fbmsk, fbmsk16;
     int zmsk;
-    uint64_t test, alpha;
     int scax0, scax1, scay0, scay1;
     int tfx, tcc;
     int fba, colclamp, pabe;
     int fr, fg, fb_; /* fog colour */
+
+    /* Tests */
+    int ate, atst, aref, afail;
+    int date, datm;
+    int zte, ztst;
+    uint32_t zmax;
+
+    /* Blending: (A - B) * C >> 7 + D */
+    int sa, sb, sc, sd, fix;
+
+    /* Texture */
+    int tpsm, cpsm, csa, bilinear;
+    uint32_t tbp, tbw;
+    int tw, th;
+    int wms, wmt, minu, maxu, minv, maxv;
+    int ta0, ta1, aem;
+
+    int feedback; /* the texture overlaps the frame buffer */
 } DrawState;
 
 static DrawState ds;
@@ -327,6 +282,7 @@ static void setup_draw(void)
 {
     uint64_t attrs = BITS(gs.prmodecont, 0, 1) ? gs.prim : gs.prmode;
     int ctx = BITS(attrs, 9, 1);
+    uint64_t test, alpha, tex0 = gs.tex0[ctx], clamp = gs.clamp[ctx];
 
     ds.ctx = ctx;
     ds.iip = BITS(attrs, 3, 1);
@@ -339,26 +295,159 @@ static void setup_draw(void)
     ds.fbw = BITS(gs.frame[ctx], 16, 6);
     ds.fpsm = BITS(gs.frame[ctx], 24, 6);
     ds.fbmsk = BITS(gs.frame[ctx], 32, 32);
+    ds.fbmsk16 = ((ds.fbmsk >> 3) & 31) | (((ds.fbmsk >> 11) & 31) << 5) |
+                 (((ds.fbmsk >> 19) & 31) << 10) | ((ds.fbmsk >> 31) << 15);
     ds.zbp = BITS(gs.zbuf[ctx], 0, 9) * 32;
     ds.zpsm = BITS(gs.zbuf[ctx], 24, 4) | 0x30;
     ds.zmsk = BITS(gs.zbuf[ctx], 32, 1);
-    ds.test = gs.test[ctx];
-    ds.alpha = gs.alpha[ctx];
     ds.scax0 = BITS(gs.scissor[ctx], 0, 11);
     ds.scax1 = BITS(gs.scissor[ctx], 16, 11);
     ds.scay0 = BITS(gs.scissor[ctx], 32, 11);
     ds.scay1 = BITS(gs.scissor[ctx], 48, 11);
-    ds.tfx = BITS(gs.tex0[ctx], 35, 2);
-    ds.tcc = BITS(gs.tex0[ctx], 34, 1);
+    ds.tfx = BITS(tex0, 35, 2);
+    ds.tcc = BITS(tex0, 34, 1);
     ds.fba = BITS(gs.fba[ctx], 0, 1);
     ds.colclamp = BITS(gs.colclamp, 0, 1);
     ds.pabe = BITS(gs.pabe, 0, 1);
     ds.fr = BITS(gs.fogcol, 0, 8);
     ds.fg = BITS(gs.fogcol, 8, 8);
     ds.fb_ = BITS(gs.fogcol, 16, 8);
+
+    test = gs.test[ctx];
+    ds.ate = BITS(test, 0, 1);
+    ds.atst = BITS(test, 1, 3);
+    ds.aref = BITS(test, 4, 8);
+    ds.afail = BITS(test, 12, 2);
+    ds.date = BITS(test, 14, 1) && ds.fpsm != GS_PSMCT24;
+    ds.datm = BITS(test, 15, 1);
+    ds.zte = BITS(test, 16, 1);
+    ds.ztst = BITS(test, 17, 2);
+    ds.zmax = (ds.zpsm == GS_PSMZ16 || ds.zpsm == GS_PSMZ16S) ? 0xffff
+            : ds.zpsm == GS_PSMZ24 ? 0xffffff : 0xffffffff;
+
+    alpha = gs.alpha[ctx];
+    ds.sa = BITS(alpha, 0, 2);
+    ds.sb = BITS(alpha, 2, 2);
+    ds.sc = BITS(alpha, 4, 2);
+    ds.sd = BITS(alpha, 6, 2);
+    ds.fix = BITS(alpha, 32, 8);
+
+    ds.tpsm = BITS(tex0, 20, 6);
+    ds.tbp = BITS(tex0, 0, 14);
+    ds.tbw = BITS(tex0, 14, 6);
+    ds.tw = 1 << BITS(tex0, 26, 4);
+    ds.th = 1 << BITS(tex0, 30, 4);
+    ds.cpsm = BITS(tex0, 51, 4);
+    ds.csa = BITS(tex0, 56, 5) * 16;
+    ds.bilinear = BITS(gs.tex1[ctx], 5, 1);
+    ds.wms = BITS(clamp, 0, 2);
+    ds.wmt = BITS(clamp, 2, 2);
+    ds.minu = BITS(clamp, 4, 10);
+    ds.maxu = BITS(clamp, 14, 10);
+    ds.minv = BITS(clamp, 24, 10);
+    ds.maxv = BITS(clamp, 34, 10);
+    ds.ta0 = BITS(gs.texa, 0, 8);
+    ds.aem = BITS(gs.texa, 15, 1);
+    ds.ta1 = BITS(gs.texa, 32, 8);
+
+    /* Effects that read the picture being drawn are drawn by one thread, so
+     * the rows they read are always in the same state. */
+    ds.feedback = 0;
+    if (ds.tme) {
+        uint32_t f0 = ds.fbp * 256, f1 = f0 + GS_ROW64(ds.fbw) * 64 * 4 * (ds.scay1 + 1);
+        uint32_t t0 = ds.tbp * 256, t1 = t0 + GS_ROW64(ds.tbw) * 64 * 4 * ds.th;
+        ds.feedback = t0 < f1 && f0 < t1;
+    }
 }
 
-static int compare(int method, int a, int ref)
+/* ---- Texture sampling -------------------------------------------------- */
+
+static inline int wrap_coord(int c, int size, int mode, int minv, int maxv)
+{
+    switch (mode) {
+    case 0: return c & (size - 1);                       /* REPEAT */
+    case 1: return c < 0 ? 0 : c >= size ? size - 1 : c;  /* CLAMP */
+    case 2: return c < minv ? minv : c > maxv ? maxv : c; /* REGION_CLAMP */
+    default: return (c & minv) | maxv;                    /* REGION_REPEAT */
+    }
+}
+
+/* A CT16 texel or CLUT entry with the TEXA alpha rules. */
+static inline uint32_t tex16(uint32_t c)
+{
+    uint32_t rgb = ((c & 31) << 3) | (((c >> 5) & 31) << 11) | (((c >> 10) & 31) << 19);
+    int a;
+
+    if (c & 0x8000)
+        a = ds.ta1;
+    else
+        a = (ds.aem && (c & 0x7fff) == 0) ? 0 : ds.ta0;
+    return rgb | ((uint32_t)a << 24);
+}
+
+static inline uint32_t texel(int u, int v)
+{
+    uint32_t c, idx;
+
+    u = wrap_coord(u, ds.tw, ds.wms, ds.minu, ds.maxu) & 2047;
+    v = wrap_coord(v, ds.th, ds.wmt, ds.minv, ds.maxv) & 2047;
+
+    switch (ds.tpsm) {
+    case GS_PSMCT32:
+        return gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v));
+    case GS_PSMCT24:
+        c = gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) & 0xffffff;
+        return c | ((uint32_t)((ds.aem && c == 0) ? 0 : ds.ta0) << 24);
+    case GS_PSMCT16:
+        return tex16(gs_rd16(gs_addr16(0, ds.tbp, ds.tbw, u, v)));
+    case GS_PSMCT16S:
+        return tex16(gs_rd16(gs_addr16(1, ds.tbp, ds.tbw, u, v)));
+    case GS_PSMT8:
+        idx = gs_vram[gs_addr8(ds.tbp, ds.tbw, u, v)];
+        break;
+    case GS_PSMT4: {
+        uint32_t n = gs_addr4(ds.tbp, ds.tbw, u, v);
+        idx = ((gs_vram[n >> 1] >> ((n & 1) * 4)) & 15) + ds.csa;
+        break;
+    }
+    case GS_PSMT8H:
+        idx = gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 24;
+        break;
+    case GS_PSMT4HL:
+        idx = ((gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 24) & 15) + ds.csa;
+        break;
+    case GS_PSMT4HH:
+        idx = (gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 28) + ds.csa;
+        break;
+    default:
+        return gs_read_pixel(ds.tpsm, ds.tbp, ds.tbw, u, v);
+    }
+    c = gs.clut[idx & 511];
+    return ds.cpsm == 0 ? c : tex16(c);
+}
+
+static inline uint32_t sample(int u16, int v16)
+{
+    if (!ds.bilinear) /* MMAG: nearest */
+        return texel(u16 >> 4, v16 >> 4);
+
+    /* Bilinear: texel centres are at +0.5. */
+    int us = u16 - 8, vs = v16 - 8;
+    int u0 = us >> 4, v0 = vs >> 4, fu = us & 15, fv = vs & 15;
+    uint32_t c00 = texel(u0, v0), c10 = texel(u0 + 1, v0);
+    uint32_t c01 = texel(u0, v0 + 1), c11 = texel(u0 + 1, v0 + 1);
+    uint32_t out = 0;
+    for (int sh = 0; sh < 32; sh += 8) {
+        int a = (c00 >> sh) & 255, b = (c10 >> sh) & 255, c = (c01 >> sh) & 255, d = (c11 >> sh) & 255;
+        int top = a * (16 - fu) + b * fu, bot = c * (16 - fu) + d * fu;
+        out |= (uint32_t)((top * (16 - fv) + bot * fv) >> 8) << sh;
+    }
+    return out;
+}
+
+/* ---- Pixel pipeline ---------------------------------------------------- */
+
+static inline int compare(int method, int a, int ref)
 {
     switch (method) {
     case 0: return 0;
@@ -372,15 +461,31 @@ static int compare(int method, int a, int ref)
     }
 }
 
-static uint32_t read_frame(int x, int y)
+/* Frame buffer address of (x, y) and its value as RGBA. */
+static inline uint32_t frame_addr(int x, int y)
 {
-    uint32_t c = gs_read_pixel(ds.fpsm, ds.fbp, ds.fbw, x, y);
+    switch (ds.fpsm) {
+    case GS_PSMCT16: return gs_addr16(0, ds.fbp, ds.fbw, x, y);
+    case GS_PSMCT16S: return gs_addr16(1, ds.fbp, ds.fbw, x, y);
+    case GS_PSMZ16: return gs_addr16(2, ds.fbp, ds.fbw, x, y);
+    case GS_PSMZ16S: return gs_addr16(3, ds.fbp, ds.fbw, x, y);
+    case GS_PSMZ32: case GS_PSMZ24: return gs_addr32(1, ds.fbp, ds.fbw, x, y);
+    default: return gs_addr32(0, ds.fbp, ds.fbw, x, y);
+    }
+}
 
-    if (ds.fpsm == GS_PSMCT16 || ds.fpsm == GS_PSMCT16S)
-        return expand16(c, 0);
-    if (ds.fpsm == GS_PSMCT24)
-        return c | 0x80000000u;
-    return c;
+static inline int frame_is16(void)
+{
+    return (ds.fpsm & 2) != 0; /* CT16, CT16S, Z16, Z16S */
+}
+
+static inline uint32_t z_addr(int x, int y)
+{
+    switch (ds.zpsm) {
+    case GS_PSMZ16: return gs_addr16(2, ds.zbp, ds.fbw, x, y);
+    case GS_PSMZ16S: return gs_addr16(3, ds.zbp, ds.fbw, x, y);
+    default: return gs_addr32(1, ds.zbp, ds.fbw, x, y);
+    }
 }
 
 /* Shades and writes one pixel. Colour components are 0..255; u, v are
@@ -393,7 +498,7 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
         return;
 
     if (ds.tme) {
-        uint32_t t = sample(ds.ctx, u, v);
+        uint32_t t = sample(u, v);
         int tr = t & 255, tg = (t >> 8) & 255, tb = (t >> 16) & 255, ta = t >> 24;
         switch (ds.tfx) {
         case 0: /* MODULATE */
@@ -423,8 +528,8 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
     }
 
     /* Alpha test */
-    if (BITS(ds.test, 0, 1) && !compare(BITS(ds.test, 1, 3), a, BITS(ds.test, 4, 8))) {
-        switch (BITS(ds.test, 12, 2)) {
+    if (ds.ate && !compare(ds.atst, a, ds.aref)) {
+        switch (ds.afail) {
         case 0: return;                            /* KEEP */
         case 1: write_z = 0; break;                /* FB_ONLY */
         case 2: write_rgb = write_a = 0; break;    /* ZB_ONLY */
@@ -433,45 +538,46 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
     }
 
     /* Depth test */
-    if (BITS(ds.test, 16, 1)) {
-        int ztst = BITS(ds.test, 17, 2);
-        if (ztst == 0)
+    uint32_t za = 0;
+    if (ds.zte) {
+        if (ds.ztst == 0)
             return;
-        if (ztst >= 2) {
-            uint32_t zmax = (ds.zpsm == GS_PSMZ16 || ds.zpsm == GS_PSMZ16S) ? 0xffff
-                          : ds.zpsm == GS_PSMZ24 ? 0xffffff : 0xffffffff;
-            uint32_t zd = gs_read_pixel(ds.zpsm, ds.zbp, ds.fbw, x, y);
-            if (z > zmax)
-                z = zmax;
-            if (ztst == 2 ? z < zd : z <= zd)
+        if (z > ds.zmax)
+            z = ds.zmax;
+        za = z_addr(x, y);
+        if (ds.ztst >= 2) {
+            uint32_t zd = (ds.zpsm & 2) ? gs_rd16(za)
+                        : ds.zpsm == GS_PSMZ24 ? gs_rd32(za) & 0xffffff : gs_rd32(za);
+            if (ds.ztst == 2 ? z < zd : z <= zd)
                 return;
         }
     } else {
         write_z = 0;
     }
 
-    uint32_t dst = read_frame(x, y);
+    uint32_t fa = frame_addr(x, y), raw, dst;
+    if (frame_is16()) {
+        raw = gs_rd16(fa);
+        dst = ((raw & 31) << 3) | (((raw >> 5) & 31) << 11) | (((raw >> 10) & 31) << 19) |
+              ((raw & 0x8000) ? 0x80000000u : 0);
+    } else {
+        raw = gs_rd32(fa);
+        dst = ds.fpsm == GS_PSMCT24 || ds.fpsm == GS_PSMZ24 ? raw | 0x80000000u : raw;
+    }
 
     /* Destination alpha test */
-    if (BITS(ds.test, 14, 1) && ds.fpsm != GS_PSMCT24) {
-        int dbit = (dst >> 31) & 1;
-        if (dbit != (int)BITS(ds.test, 15, 1))
-            return;
-    }
+    if (ds.date && (int)((dst >> 31) & 1) != ds.datm)
+        return;
 
     if (ds.abe && !(ds.pabe && a < 0x80)) {
         int cd[3] = { dst & 255, (dst >> 8) & 255, (dst >> 16) & 255 };
         int cs[3] = { r, g, b };
-        int ad = dst >> 24;
-        int sa = BITS(ds.alpha, 0, 2), sb = BITS(ds.alpha, 2, 2);
-        int sc = BITS(ds.alpha, 4, 2), sd = BITS(ds.alpha, 6, 2);
-        int fix = BITS(ds.alpha, 32, 8);
-        int c = sc == 0 ? a : sc == 1 ? ad : fix;
+        int c = ds.sc == 0 ? a : ds.sc == 1 ? (int)(dst >> 24) : ds.fix;
         int out[3];
         for (int i = 0; i < 3; i++) {
-            int va = sa == 0 ? cs[i] : sa == 1 ? cd[i] : 0;
-            int vb = sb == 0 ? cs[i] : sb == 1 ? cd[i] : 0;
-            int vd = sd == 0 ? cs[i] : sd == 1 ? cd[i] : 0;
+            int va = ds.sa == 0 ? cs[i] : ds.sa == 1 ? cd[i] : 0;
+            int vb = ds.sb == 0 ? cs[i] : ds.sb == 1 ? cd[i] : 0;
+            int vd = ds.sd == 0 ? cs[i] : ds.sd == 1 ? cd[i] : 0;
             out[i] = (((va - vb) * c) >> 7) + vd;
         }
         r = out[0]; g = out[1]; b = out[2];
@@ -491,26 +597,32 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
         src = (src & 0xff000000u) | (dst & 0x00ffffffu);
     if (!write_a)
         src = (src & 0x00ffffffu) | (dst & 0xff000000u);
-    src = (src & ~ds.fbmsk) | (dst & ds.fbmsk);
 
     if (write_rgb || write_a) {
-        switch (ds.fpsm) {
-        case GS_PSMCT32:
-            gs_write_pixel(GS_PSMCT32, ds.fbp, ds.fbw, x, y, src);
-            break;
-        case GS_PSMCT24:
-            gs_write_pixel(GS_PSMCT24, ds.fbp, ds.fbw, x, y, src & 0xffffff);
-            break;
-        default:
-            gs_write_pixel(ds.fpsm, ds.fbp, ds.fbw, x, y,
-                           ((src >> 3) & 31) | (((src >> 11) & 31) << 5) |
-                           (((src >> 19) & 31) << 10) | ((src >> 31) << 15));
-            break;
+        if (frame_is16()) {
+            uint32_t v16 = ((src >> 3) & 31) | (((src >> 11) & 31) << 5) |
+                           (((src >> 19) & 31) << 10) | ((src >> 31) << 15);
+            gs_wr16(fa, (v16 & ~ds.fbmsk16) | (raw & ds.fbmsk16));
+        } else if (ds.fpsm == GS_PSMCT24 || ds.fpsm == GS_PSMZ24) {
+            uint32_t m = ds.fbmsk | 0xff000000u;
+            gs_wr32(fa, (src & ~m) | (raw & m));
+        } else {
+            gs_wr32(fa, (src & ~ds.fbmsk) | (raw & ds.fbmsk));
         }
     }
-    if (write_z)
-        gs_write_pixel(ds.zpsm, ds.zbp, ds.fbw, x, y, z);
-    gs_stats.pixels++;
+    if (write_z) {
+        if (ds.zpsm & 2)
+            gs_wr16(za, z);
+        else if (ds.zpsm == GS_PSMZ24)
+            gs_wr32(za, (gs_rd32(za) & 0xff000000u) | (z & 0xffffff));
+        else
+            gs_wr32(za, z);
+    }
+}
+
+static void count_pixels(uint32_t n)
+{
+    __atomic_fetch_add(&gs_stats.pixels, n, __ATOMIC_RELAXED);
 }
 
 /* ---- Rasterisation ----------------------------------------------------- */
@@ -529,10 +641,34 @@ static void tex_coords(const Vertex *v, float *u, float *w)
     }
 }
 
+typedef struct {
+    const Vertex *b;
+    int x0, y0, px0, px1;
+    float u0, v0, du, dv;
+} SpriteJob;
+
+static void sprite_rows(void *ctx, int py0, int py1)
+{
+    const SpriteJob *j = ctx;
+    const Vertex *b = j->b;
+
+    /* Sprites take their colour, z and fog from the second vertex. */
+    for (int py = py0; py < py1; py++) {
+        int v = (int)(j->v0 + ((py << 4) - j->y0) * j->dv);
+        for (int px = j->px0; px < j->px1; px++) {
+            int u = (int)(j->u0 + ((px << 4) - j->x0) * j->du);
+            draw_pixel(px, py, b->z, b->r, b->g, b->b, b->a, b->f, u, v);
+        }
+    }
+    if (j->px1 > j->px0)
+        count_pixels((uint32_t)(py1 - py0) * (j->px1 - j->px0));
+}
+
 static void draw_sprite(const Vertex *a, const Vertex *b)
 {
     int x0 = a->x, x1 = b->x, y0 = a->y, y1 = b->y;
     float u0, v0, u1, v1;
+    SpriteJob j;
 
     tex_coords(a, &u0, &v0);
     tex_coords(b, &u1, &v1);
@@ -542,22 +678,24 @@ static void draw_sprite(const Vertex *a, const Vertex *b)
     /* Pixels whose top-left corner lies in [x0, x1) x [y0, y1). */
     int px0 = (x0 + 15) >> 4, px1 = (x1 + 15) >> 4;
     int py0 = (y0 + 15) >> 4, py1 = (y1 + 15) >> 4;
-    float du = x1 != x0 ? (u1 - u0) / (float)(x1 - x0) : 0.0f;
-    float dv = y1 != y0 ? (v1 - v0) / (float)(y1 - y0) : 0.0f;
 
     if (px0 < ds.scax0) px0 = ds.scax0;
     if (py0 < ds.scay0) py0 = ds.scay0;
     if (px1 > ds.scax1 + 1) px1 = ds.scax1 + 1;
     if (py1 > ds.scay1 + 1) py1 = ds.scay1 + 1;
+    if (px1 <= px0 || py1 <= py0)
+        return;
 
-    /* Sprites take their colour, z and fog from the second vertex. */
-    for (int py = py0; py < py1; py++) {
-        float v = v0 + ((py << 4) - y0) * dv;
-        for (int px = px0; px < px1; px++) {
-            float u = u0 + ((px << 4) - x0) * du;
-            draw_pixel(px, py, b->z, b->r, b->g, b->b, b->a, b->f, (int)u, (int)v);
-        }
-    }
+    j.b = b;
+    j.x0 = x0;
+    j.y0 = y0;
+    j.px0 = px0;
+    j.px1 = px1;
+    j.u0 = u0;
+    j.v0 = v0;
+    j.du = x1 != x0 ? (u1 - u0) / (float)(x1 - x0) : 0.0f;
+    j.dv = y1 != y0 ? (v1 - v0) / (float)(y1 - y0) : 0.0f;
+    gs_parallel(sprite_rows, &j, py0, py1, ds.feedback ? 0 : (px1 - px0) * (py1 - py0));
 }
 
 static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
@@ -565,17 +703,63 @@ static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
     return (int64_t)(bx - ax) * (py - ay) - (int64_t)(by - ay) * (px - ax);
 }
 
+typedef struct {
+    const Vertex *v[3], *last;
+    int64_t area;
+    int px0, px1;
+    float att[3][9];
+} TriangleJob;
+
+static void triangle_rows(void *ctx, int py0, int py1)
+{
+    const TriangleJob *j = ctx;
+    const Vertex *const *v = j->v;
+    uint32_t drawn = 0;
+
+    for (int py = py0; py < py1; py++) {
+        int sy = py << 4;
+        for (int px = j->px0; px <= j->px1; px++) {
+            int sx = px << 4;
+            int64_t w0 = edge(v[1]->x, v[1]->y, v[2]->x, v[2]->y, sx, sy);
+            int64_t w1 = edge(v[2]->x, v[2]->y, v[0]->x, v[0]->y, sx, sy);
+            int64_t w2 = edge(v[0]->x, v[0]->y, v[1]->x, v[1]->y, sx, sy);
+            if (w0 < 0 || w1 < 0 || w2 < 0)
+                continue;
+            float b0 = (float)w0 / j->area, b1 = (float)w1 / j->area, b2 = (float)w2 / j->area;
+            float at[9];
+            for (int k = 0; k < 9; k++)
+                at[k] = j->att[0][k] * b0 + j->att[1][k] * b1 + j->att[2][k] * b2;
+            float qq = at[8] != 0.0f ? at[8] : 1.0f;
+            int r, g, b, a;
+            if (ds.iip) {
+                r = (int)at[0]; g = (int)at[1]; b = (int)at[2]; a = (int)at[3];
+            } else {
+                r = j->last->r; g = j->last->g; b = j->last->b; a = j->last->a;
+            }
+            draw_pixel(px, py, (uint32_t)at[4], r, g, b, a, (int)at[5],
+                       (int)(at[6] / qq), (int)(at[7] / qq));
+            drawn++;
+        }
+    }
+    count_pixels(drawn);
+}
+
 static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
 {
-    const Vertex *v[3] = { v0, v1, v2 };
+    TriangleJob j;
+    const Vertex **v = j.v;
     int64_t area = edge(v0->x, v0->y, v1->x, v1->y, v2->x, v2->y);
 
     if (area == 0)
         return;
+    v[0] = v0;
+    v[1] = v1;
+    v[2] = v2;
     if (area < 0) {
         const Vertex *t = v[1]; v[1] = v[2]; v[2] = t;
         area = -area;
     }
+    j.area = area;
 
     int minx = v[0]->x, maxx = v[0]->x, miny = v[0]->y, maxy = v[0]->y;
     for (int i = 1; i < 3; i++) {
@@ -589,10 +773,13 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
     if (py0 < ds.scay0) py0 = ds.scay0;
     if (px1 > ds.scax1) px1 = ds.scax1;
     if (py1 > ds.scay1) py1 = ds.scay1;
+    if (px1 < px0 || py1 < py0)
+        return;
+    j.px0 = px0;
+    j.px1 = px1;
 
     /* Per-vertex attributes; texture coordinates are interpolated as s/q, t/q
      * and 1/q for perspective correction (STQ), or linearly (UV). */
-    float att[3][9];
     for (int i = 0; i < 3; i++) {
         const Vertex *p = v[i];
         float q = (ds.fst || p->q == 0.0f) ? 1.0f : p->q;
@@ -601,41 +788,17 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
             u = (float)p->u;
             w = (float)p->v;
         } else {
-            int tw = 1 << BITS(gs.tex0[ds.ctx], 26, 4), th = 1 << BITS(gs.tex0[ds.ctx], 30, 4);
-            u = p->s * tw * 16.0f;
-            w = p->t * th * 16.0f;
+            u = p->s * ds.tw * 16.0f;
+            w = p->t * ds.th * 16.0f;
         }
-        att[i][0] = (float)p->r; att[i][1] = (float)p->g; att[i][2] = (float)p->b;
-        att[i][3] = (float)p->a; att[i][4] = (float)p->z; att[i][5] = (float)p->f;
-        att[i][6] = u; att[i][7] = w; att[i][8] = ds.fst ? 1.0f : q;
+        j.att[i][0] = (float)p->r; j.att[i][1] = (float)p->g; j.att[i][2] = (float)p->b;
+        j.att[i][3] = (float)p->a; j.att[i][4] = (float)p->z; j.att[i][5] = (float)p->f;
+        j.att[i][6] = u; j.att[i][7] = w; j.att[i][8] = ds.fst ? 1.0f : q;
     }
     /* Flat shading uses the colour of the last vertex sent. */
-    const Vertex *last = v2;
-
-    for (int py = py0; py <= py1; py++) {
-        int sy = py << 4;
-        for (int px = px0; px <= px1; px++) {
-            int sx = px << 4;
-            int64_t w0 = edge(v[1]->x, v[1]->y, v[2]->x, v[2]->y, sx, sy);
-            int64_t w1 = edge(v[2]->x, v[2]->y, v[0]->x, v[0]->y, sx, sy);
-            int64_t w2 = edge(v[0]->x, v[0]->y, v[1]->x, v[1]->y, sx, sy);
-            if (w0 < 0 || w1 < 0 || w2 < 0)
-                continue;
-            float b0 = (float)w0 / area, b1 = (float)w1 / area, b2 = (float)w2 / area;
-            float at[9];
-            for (int k = 0; k < 9; k++)
-                at[k] = att[0][k] * b0 + att[1][k] * b1 + att[2][k] * b2;
-            float qq = at[8] != 0.0f ? at[8] : 1.0f;
-            int r, g, b, a;
-            if (ds.iip) {
-                r = (int)at[0]; g = (int)at[1]; b = (int)at[2]; a = (int)at[3];
-            } else {
-                r = last->r; g = last->g; b = last->b; a = last->a;
-            }
-            draw_pixel(px, py, (uint32_t)at[4], r, g, b, a, (int)at[5],
-                       (int)(at[6] / qq), (int)(at[7] / qq));
-        }
-    }
+    j.last = v2;
+    gs_parallel(triangle_rows, &j, py0, py1 + 1,
+                ds.feedback ? 0 : (px1 - px0 + 1) * (py1 - py0 + 1) / 2);
 }
 
 static void draw_line(const Vertex *a, const Vertex *b)
@@ -657,6 +820,7 @@ static void draw_line(const Vertex *a, const Vertex *b)
                    c ? c->a : (int)(a->a + (b->a - a->a) * t),
                    b->f, (int)(u0 + (u1 - u0) * t), (int)(v0 + (v1 - v0) * t));
     }
+    count_pixels(steps + 1);
 }
 
 /* ---- Vertex queue ------------------------------------------------------ */
@@ -703,8 +867,9 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
     if (draw) {
         setup_draw();
         gs_stats.prims++;
+        changes++;
         switch (type) {
-        case 0: draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v); break;
+        case 0: draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v); count_pixels(1); break;
         case 1: case 2: draw_line(&gs.queue[0], &gs.queue[1]); break;
         case 3: case 4: case 5: draw_triangle(&gs.queue[0], &gs.queue[1], &gs.queue[2]); break;
         case 6: draw_sprite(&gs.queue[0], &gs.queue[1]); break;
@@ -962,9 +1127,10 @@ void gs_set_display(uint64_t dispfb, uint64_t display)
 {
     gs.dispfb = dispfb;
     gs.display = display;
+    changes++;
 }
 
-void gs_read_display(uint32_t *dst, int *w, int *h)
+int gs_read_display(uint32_t *dst, int *w, int *h)
 {
     uint32_t fbp = BITS(gs.dispfb, 0, 9) * 32;
     uint32_t fbw = BITS(gs.dispfb, 9, 6);
@@ -981,6 +1147,9 @@ void gs_read_display(uint32_t *dst, int *w, int *h)
         height = 480;
     *w = width;
     *h = height;
+    if (changes == shown_changes)
+        return 0;
+    shown_changes = changes;
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
             uint32_t c = gs_read_pixel(psm, fbp, fbw, x, y);
@@ -989,6 +1158,7 @@ void gs_read_display(uint32_t *dst, int *w, int *h)
             dst[y * width + x] = c | 0xff000000u;
         }
     }
+    return 1;
 }
 
 void gs_reset(void)
@@ -997,6 +1167,7 @@ void gs_reset(void)
     memset(&gs, 0, sizeof(gs));
     memset(&trx, 0, sizeof(trx));
     memset(&gif, 0, sizeof(gif));
+    changes++;
     gs.q = 1.0f;
     gs.prmodecont = 1;
     gs.colclamp = 1;
