@@ -87,8 +87,8 @@
 #define SCE_GS_PSMT8        0x13
 #define SCE_GS_PSMT4        0x14
 #define SCE_GS_PSMT8H       0x1b
-#define SCE_GS_PSMT4HH      0x24
-#define SCE_GS_PSMT4HL      0x2c
+#define SCE_GS_PSMT4HL      0x24
+#define SCE_GS_PSMT4HH      0x2c
 #define SCE_GS_PSMZ32       0x30
 #define SCE_GS_PSMZ24       0x31
 #define SCE_GS_PSMZ16       0x32

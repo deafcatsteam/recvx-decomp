@@ -2,13 +2,17 @@
  * Window and input for the PC port (SDL2).
  *
  * Opens the game window, turns keyboard and game controller input into the
- * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and presents a
- * frame at every V-blank. Nothing is drawn yet: the renderer comes next.
+ * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and shows the
+ * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
+ * fullscreen, F12 saves a screenshot.
  *
  * Without SDL2, or with CVX_HEADLESS set, the game runs without a window.
  */
 #include "pc_window.h"
 
+#include "../gs/gs.h"
+
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -33,6 +37,9 @@ extern void (*pc_frame_hook)(void);
 static SDL_Window *window;
 static SDL_Renderer *renderer;
 static SDL_GameController *controller;
+static SDL_Texture *screen;
+static int screen_w, screen_h;
+static uint32_t pixels[GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H];
 
 static const struct {
     SDL_Scancode key;
@@ -119,6 +126,21 @@ static void read_input(void)
     pc_pad_sticks[3] = ly;
 }
 
+static void save_screenshot(void)
+{
+    static int count;
+    char name[64];
+    SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(pixels, screen_w, screen_h, 32, screen_w * 4,
+                                                           SDL_PIXELFORMAT_RGBA32);
+
+    if (shot == NULL)
+        return;
+    snprintf(name, sizeof(name), "cvx_screenshot_%03d.bmp", count++);
+    if (SDL_SaveBMP(shot, name) == 0)
+        printf("window: saved %s\n", name);
+    SDL_FreeSurface(shot);
+}
+
 static void frame(void)
 {
     SDL_Event ev;
@@ -139,6 +161,8 @@ static void frame(void)
             }
             break;
         case SDL_KEYDOWN:
+            if (ev.key.keysym.scancode == SDL_SCANCODE_F12)
+                save_screenshot();
             if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
                 Uint32 full = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
                 SDL_SetWindowFullscreen(window, full ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);
@@ -148,8 +172,20 @@ static void frame(void)
     }
     read_input();
 
+    int w, h;
+    gs_read_display(pixels, &w, &h);
+    if (screen == NULL || w != screen_w || h != screen_h) {
+        if (screen != NULL)
+            SDL_DestroyTexture(screen);
+        screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING, w, h);
+        screen_w = w;
+        screen_h = h;
+    }
+    SDL_UpdateTexture(screen, NULL, pixels, w * 4);
+
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
+    SDL_RenderCopy(renderer, screen, NULL, NULL); /* stretched to 4:3 */
     SDL_RenderPresent(renderer);
 }
 
@@ -172,6 +208,8 @@ int pc_window_open(void)
         return 0;
     }
     renderer = SDL_CreateRenderer(window, -1, 0);
+    if (renderer != NULL)
+        SDL_RenderSetLogicalSize(renderer, 640, 480); /* the PS2 picture is 4:3 */
     if (renderer == NULL) {
         fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
         SDL_DestroyWindow(window);

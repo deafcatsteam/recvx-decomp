@@ -16,6 +16,8 @@
 #include "ps2_dummy.h"
 #include "ps2_loadtim2.h"
 
+#include "../gs/gs.h"
+
 /* ---- Data processing, translated ---------------------------------------- */
 
 /*
@@ -145,9 +147,15 @@ void Ps2AddOT(void* p, unsigned int num, float z, unsigned long prim) {}
 void Ps2AddPrim3D(unsigned long prim, void* dp, unsigned int num) {}
 void Ps2AddPrim3DMod(unsigned long prim, void* dp, unsigned int num) {}
 
+/* GIF transfers complete immediately on PC: nothing to wait for. */
 void SyncPath() {}
 void D2_SyncTag() {}
-void loadImage(void* tags) {}
+
+/* Starts a GIF DMA chain (channel 2, source chain mode) at tags. */
+void loadImage(void* tags)
+{
+    gs_dma_gif_chain((unsigned int)tags);
+}
 
 int _Clip_Screen(float* clip)
 {

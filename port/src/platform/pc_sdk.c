@@ -25,6 +25,8 @@
 
 #include "pc_disc.h"
 #include "pc_platform.h"
+#include "../gs/gs.h"
+#include "../gs/gs_mem.h"
 
 /* ---- DVD --------------------------------------------------------------- */
 
@@ -98,9 +100,38 @@ int sceSSyn_SetOutputMode(int mode) { return 0; }
 
 /* ---- GS and DMA -------------------------------------------------------- */
 
+/*
+ * The libgraph structures are GIF packets: a GIF tag followed by
+ * (value, register address) pairs. They are filled the way libgraph does and
+ * sent to the software GS (port/src/gs) as they are.
+ */
+
 static int field;
 
-int sceGsResetGraph(short mode, short inter, short omode, short ffmode) { return 0; }
+static void put64(void *field_addr, uint64_t v)
+{
+    memcpy(field_addr, &v, 8);
+}
+
+static uint64_t get64(const void *field_addr)
+{
+    uint64_t v;
+    memcpy(&v, field_addr, 8);
+    return v;
+}
+
+static uint64_t gif_tag(int nloop, int eop, int flg, int nreg, uint64_t regs, uint64_t *hi)
+{
+    *hi = regs;
+    return (uint64_t)nloop | ((uint64_t)eop << 15) | ((uint64_t)flg << 58) | ((uint64_t)nreg << 60);
+}
+
+int sceGsResetGraph(short mode, short inter, short omode, short ffmode)
+{
+    gs_reset();
+    return 0;
+}
+
 void sceGsResetPath(void) {}
 int sceGsSyncPath(int mode, u_short timeout) { return 0; }
 
@@ -111,31 +142,163 @@ int sceGsSyncV(int mode)
     return field;
 }
 
+/* A drawing environment: 8 (value, address) pairs for one context. */
+static void set_draw_env(uint64_t *pairs, int ctx, uint32_t fbp, short psm, short w, short h,
+                         uint32_t zbp, short ztest, short zpsm)
+{
+    uint64_t v[8] = {
+        fbp | ((uint64_t)((w + 63) / 64) << 16) | ((uint64_t)psm << 24),
+        zbp | ((uint64_t)(zpsm & 0xf) << 24) | ((uint64_t)(ztest == 0) << 32),
+        ((uint64_t)(2048 - (w >> 1)) << 4) | ((uint64_t)(2048 - (h >> 1)) << 36),
+        ((uint64_t)(w - 1) << 16) | ((uint64_t)(h - 1) << 48),
+        1, /* PRMODECONT: use the PRIM register */
+        1, /* COLCLAMP */
+        0, /* DTHE */
+        (1ull << 16) | ((uint64_t)(ztest ? ztest : 1) << 17),
+    };
+    int addr[8] = { 0x4c + ctx, 0x4e + ctx, 0x18 + ctx, 0x40 + ctx, 0x1a, 0x46, 0x45, 0x47 + ctx };
+
+    for (int i = 0; i < 8; i++) {
+        pairs[i * 2] = v[i];
+        pairs[i * 2 + 1] = addr[i];
+    }
+}
+
+/* A clear: sprite over the whole buffer with the depth test always passing. */
+static void set_clear(uint64_t *pairs, short w, short h, short ztest)
+{
+    uint64_t ofx = (uint64_t)(2048 - (w >> 1)) << 4, ofy = (uint64_t)(2048 - (h >> 1)) << 4;
+    uint64_t v[6] = {
+        (1ull << 16) | (1ull << 17),                           /* TEST: ZTE, ALWAYS */
+        6,                                                     /* PRIM: sprite */
+        0x3f80000000000000ull,                                 /* RGBAQ: black, Q 1 */
+        ofx | (ofy << 16),                                     /* XYZ2 */
+        (ofx + ((uint64_t)w << 4)) | ((ofy + ((uint64_t)h << 4)) << 16),
+        (1ull << 16) | ((uint64_t)(ztest ? ztest : 1) << 17),  /* TEST restored */
+    };
+    int addr[6] = { 0x47, 0x00, 0x01, 0x05, 0x05, 0x47 };
+
+    for (int i = 0; i < 6; i++) {
+        pairs[i * 2] = v[i];
+        pairs[i * 2 + 1] = addr[i];
+    }
+}
+
 void sceGsSetDefDBuffDc(sceGsDBuffDc *db, short psm, short w, short h,
                         short ztest, short zpsm, short clear)
 {
+    uint32_t pages = ((w + 63) / 64) * ((h + 31) / 32);
+    uint32_t buf[2] = { 0, pages }, zbp = pages * 2;
+    int nloop = clear ? 22 : 16;
+    uint64_t hi;
+
     memset(db, 0, sizeof(*db));
+    for (int i = 0; i < 2; i++) {
+        /* disp[i] shows the buffer that is not being drawn into. */
+        put64(&db->disp[i].pmode, 1 | (1 << 2) | (1 << 5) | (0xff << 8));
+        put64(&db->disp[i].smode2, 1 | (1 << 1));
+        put64(&db->disp[i].dispfb, buf[i ^ 1] | ((uint64_t)((w + 63) / 64) << 9) | ((uint64_t)psm << 15));
+        put64(&db->disp[i].display, 636 | (50 << 12) | ((uint64_t)((2560 + w - 1) / w - 1) << 23) |
+                                        (2559ull << 32) | ((uint64_t)(h - 1) << 44));
+    }
+
+    uint64_t *g0 = (uint64_t *)&db->giftag0, *g1 = (uint64_t *)&db->giftag1;
+    g0[0] = gif_tag(nloop, 1, 0, 1, 0xe, &hi);
+    g0[1] = hi;
+    g1[0] = g0[0];
+    g1[1] = hi;
+    set_draw_env((uint64_t *)&db->draw01, 0, buf[0], psm, w, h, zbp, ztest, zpsm);
+    set_draw_env((uint64_t *)&db->draw02, 1, buf[0], psm, w, h, zbp, ztest, zpsm);
+    set_draw_env((uint64_t *)&db->draw11, 0, buf[1], psm, w, h, zbp, ztest, zpsm);
+    set_draw_env((uint64_t *)&db->draw12, 1, buf[1], psm, w, h, zbp, ztest, zpsm);
+    set_clear((uint64_t *)&db->clear0, w, h, ztest);
+    set_clear((uint64_t *)&db->clear1, w, h, ztest);
 }
 
-int sceGsSwapDBuffDc(sceGsDBuffDc *db, int id) { return 0; }
+int sceGsSwapDBuffDc(sceGsDBuffDc *db, int id)
+{
+    const uint64_t *tag = (const uint64_t *)(id == 0 ? &db->giftag0 : &db->giftag1);
+
+    id &= 1;
+    gs_set_display(get64(&db->disp[id].dispfb), get64(&db->disp[id].display));
+    /* The drawing environment follows its GIF tag in the structure. */
+    gs_gif_write(tag, 1 + (uint32_t)(tag[0] & 0x7fff));
+    return field;
+}
 
 int sceGsSetDefLoadImage(sceGsLoadImage *lp, short dbp, short dbw, short dpsm,
                          short x, short y, short w, short h)
 {
+    uint64_t *q = (uint64_t *)lp, hi;
+    int bits = dpsm == SCE_GS_PSMT4 || dpsm == SCE_GS_PSMT4HL || dpsm == SCE_GS_PSMT4HH ? 4
+             : dpsm == SCE_GS_PSMT8 || dpsm == SCE_GS_PSMT8H ? 8
+             : dpsm == SCE_GS_PSMCT16 || dpsm == SCE_GS_PSMCT16S ? 16
+             : dpsm == SCE_GS_PSMCT24 ? 24 : 32;
+
     memset(lp, 0, sizeof(*lp));
+    q[0] = gif_tag(4, 0, 0, 1, 0xe, &hi);
+    q[1] = hi;
+    q[2] = ((uint64_t)dbp << 32) | ((uint64_t)dbw << 48) | ((uint64_t)dpsm << 56);
+    q[3] = 0x50;
+    q[4] = ((uint64_t)x << 32) | ((uint64_t)y << 48);
+    q[5] = 0x51;
+    q[6] = (uint64_t)w | ((uint64_t)h << 32);
+    q[7] = 0x52;
+    q[8] = 0;
+    q[9] = 0x53;
+    q[10] = gif_tag(((int)w * h * bits / 8 + 15) / 16, 1, 2, 0, 0, &hi);
+    q[11] = hi;
     return 0;
 }
 
-int sceGsExecLoadImage(sceGsLoadImage *lp, u_long128 *srcaddr) { return 0; }
+int sceGsExecLoadImage(sceGsLoadImage *lp, u_long128 *srcaddr)
+{
+    const uint64_t *q = (const uint64_t *)lp;
 
+    gs_gif_write(q, 6);
+    gs_gif_write((const uint64_t *)srcaddr, (uint32_t)(q[10] & 0x7fff));
+    return 0;
+}
+
+/* Local -> host transfers: the structure is kept and read back directly. */
 int sceGsSetDefStoreImage(sceGsStoreImage *sp, short sbp, short sbw, short spsm,
                           short x, short y, short w, short h)
 {
     memset(sp, 0, sizeof(*sp));
+    put64(&sp->bitbltbuf, (uint64_t)sbp | ((uint64_t)sbw << 16) | ((uint64_t)spsm << 24));
+    put64(&sp->trxpos, (uint64_t)x | ((uint64_t)y << 16));
+    put64(&sp->trxreg, (uint64_t)w | ((uint64_t)h << 32));
     return 0;
 }
 
-int sceGsExecStoreImage(sceGsStoreImage *sp, u_long128 *dstaddr) { return 0; }
+int sceGsExecStoreImage(sceGsStoreImage *sp, u_long128 *dstaddr)
+{
+    uint64_t bb = get64(&sp->bitbltbuf), pos = get64(&sp->trxpos), reg = get64(&sp->trxreg);
+    int psm = (bb >> 24) & 0x3f, bp = bb & 0x3fff, bw = (bb >> 16) & 0x3f;
+    int x0 = pos & 0x7ff, y0 = (pos >> 16) & 0x7ff, w = reg & 0xfff, h = (reg >> 32) & 0xfff;
+    uint8_t *out = (uint8_t *)dstaddr;
+    int nib = 0;
+
+    for (int y = 0; y < h; y++) {
+        for (int x = 0; x < w; x++) {
+            uint32_t v = gs_read_pixel(psm, bp, bw, x0 + x, y0 + y);
+            switch (psm) {
+            case SCE_GS_PSMCT32: memcpy(out, &v, 4); out += 4; break;
+            case SCE_GS_PSMCT24: memcpy(out, &v, 3); out += 3; break;
+            case SCE_GS_PSMCT16: case SCE_GS_PSMCT16S: memcpy(out, &v, 2); out += 2; break;
+            case SCE_GS_PSMT8: *out++ = (uint8_t)v; break;
+            default:
+                if (nib)
+                    *out++ |= (uint8_t)(v << 4);
+                else
+                    *out = (uint8_t)(v & 15);
+                nib ^= 1;
+                break;
+            }
+        }
+    }
+    return 0;
+}
 
 int sceDmaReset(int mode) { return 0; }
 void sceDmaSend(sceDmaChan *d, void *tag) {}

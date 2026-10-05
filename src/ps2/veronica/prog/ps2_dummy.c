@@ -1468,7 +1468,12 @@ int Ps2DrawOTagSub(int start_no)
         
         SyncPath();
         
+#ifdef PLATFORM_PC
+        /* PC addresses do not fit in the 24 bits kept on the PS2. */
+        loadImage(start_addr);
+#else
         loadImage((void*)((int)start_addr & 0xFFFFFF));
+#endif
         
         SyncPath(); 
         

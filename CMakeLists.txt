@@ -29,6 +29,15 @@ if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
                         "gcc-multilib; on Windows, use the MinGW-w64 i686 (32-bit) toolchain.")
 endif()
 
+# The game stores pointers in DMA tags with only 28 bits of address, as PS2
+# memory is 32 MB: keep the program at a fixed address in the low 256 MB.
+if(WIN32)
+    add_link_options(-Wl,--disable-dynamicbase)
+else()
+    add_compile_options(-fno-pie)
+    add_link_options(-no-pie)
+endif()
+
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
 
 set(GAME_DIR ${CMAKE_SOURCE_DIR}/src/ps2/veronica/prog)
@@ -67,7 +76,6 @@ endforeach()
 set(PORT_SOURCES
     port/src/ninja/pc_NaMath.c
     port/src/ninja/pc_NaMatrix.c
-    port/src/platform/pc_hwregs.c
     port/src/platform/pc_disc.c
     port/src/platform/pc_kernel.c
     port/src/platform/pc_iop.c
@@ -84,7 +92,13 @@ set(PORT_SOURCES
 add_library(cvx_game_env INTERFACE)
 
 # Host services used by the platform layer, built without the game settings.
-add_library(cvx_host STATIC port/src/host/pc_host.c)
+add_library(cvx_host STATIC
+    port/src/host/pc_host.c
+    port/src/platform/pc_hwregs.c
+    port/src/gs/gs.c
+    port/src/gs/gs_mem.c
+)
+target_link_libraries(cvx_host PUBLIC m)
 
 add_library(cvx_game STATIC ${GAME_SOURCES} ${PORT_SOURCES})
 target_link_libraries(cvx_game PRIVATE cvx_game_env PUBLIC cvx_host)
@@ -130,7 +144,8 @@ if(CVX_WITH_SDL)
         include(FetchContent)
         FetchContent_Declare(SDL2
             URL https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz
-            URL_HASH SHA256=24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4)
+            URL_HASH SHA256=24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
         set(SDL_SHARED OFF CACHE BOOL "" FORCE)
         set(SDL_STATIC ON CACHE BOOL "" FORCE)
         set(SDL_TEST OFF CACHE BOOL "" FORCE)
@@ -152,6 +167,10 @@ if(CVX_WITH_SDL)
     endif()
     target_compile_definitions(cvx_pc PRIVATE CVX_HAVE_SDL)
 endif()
+
+add_executable(test_gs port/tests/test_gs.c)
+target_link_libraries(test_gs PRIVATE cvx_host)
+add_test(NAME gs COMMAND test_gs)
 
 add_executable(test_disc port/tests/test_disc.c)
 target_link_libraries(test_disc PRIVATE cvx_game cvx_game_env m)
