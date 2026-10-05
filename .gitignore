@@ -42,3 +42,4 @@ config/undefined_syms_auto.txt
 # PC port build output
 build-pc
 build-dbg
+build-win

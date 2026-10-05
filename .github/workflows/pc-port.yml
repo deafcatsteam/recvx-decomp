@@ -1,0 +1,46 @@
+name: PC port
+
+on:
+  push:
+    paths:
+      - "port/**"
+      - "src/**"
+      - "include/ps2/**"
+      - "CMakeLists.txt"
+      - ".github/workflows/pc-port.yml"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # The port needs the Katana and CRI headers, not the PS2 compiler.
+      - name: Fetch the SDK header submodules
+        run: git submodule update --init --depth 1 include/recvx-decomp-katana include/recvx-decomp-cri
+
+      - name: Install toolchains
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-multilib gcc-mingw-w64-i686 g++-mingw-w64-i686 cmake ninja-build
+
+      - name: Build and test (Linux, 32-bit)
+        run: |
+          cmake -S . -B build-linux -G Ninja
+          cmake --build build-linux
+          ctest --test-dir build-linux --output-on-failure
+
+      - name: Build (Windows, 32-bit)
+        run: |
+          cmake -S . -B build-win -G Ninja -DCMAKE_BUILD_TYPE=Release \
+                -DCMAKE_TOOLCHAIN_FILE=port/cmake/mingw-w64-i686.cmake
+          cmake --build build-win
+
+      - name: Upload the Windows build
+        uses: actions/upload-artifact@v4
+        with:
+          name: cvx_pc-windows
+          path: build-win/cvx_pc.exe

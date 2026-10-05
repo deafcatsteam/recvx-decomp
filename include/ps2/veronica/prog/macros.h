@@ -27,7 +27,7 @@
 #ifdef PLATFORM_PC
 /* The 16 KB scratchpad RAM is an ordinary array on PC. */
 extern unsigned char port_scratchpad[0x4000];
-#define SPR_ADDR(_val) ((unsigned int)port_scratchpad | (_val))
+#define SPR_ADDR(_val) ((unsigned int)port_scratchpad + (_val))
 #else
 #define SPR_ADDR(_val) ((0x70000000) | _val)
 #endif

@@ -2,24 +2,99 @@
 
 Ce dossier contient tout ce qui sert à compiler le code décompilé du jeu pour PC.
 Le build PS2 d'origine (`compile.py`, qui doit rester identique octet par octet)
-n'est pas touché : les quelques adaptations faites dans `src/` sont derrière
-`#ifdef PLATFORM_PC` et produisent exactement le même code pour la PS2.
+n'est pas touché : les adaptations faites dans `src/` et `include/ps2/` sont
+derrière `#ifdef PLATFORM_PC`, et sans `PLATFORM_PC` ces fichiers sont
+identiques à la version d'origine.
 
-## Compiler
+## Où on en est
 
-Prérequis : CMake ≥ 3.20, Python 3, GCC ou Clang avec le support 32 bits
-(`gcc-multilib` sous Debian/Ubuntu), et les sous-modules :
+Le jeu entier compile et s'assemble en un programme PC (`cvx_pc`, ou
+`cvx_pc.exe` sous Windows) qui lit les données directement dans l'ISO du jeu.
+Avec une fausse image disque, il passe toute l'initialisation du système de
+fichiers et du son ; **avec ta vraie ISO, il n'a encore jamais été lancé.**
+Il ne dessine rien pour l'instant : la fenêtre reste noire, le rendu est la
+prochaine grosse étape.
+
+- [x] Tout le code C du jeu compile (les fonctions en assembleur sont mises de côté)
+- [x] Maths Ninja (`ps2_NaMath.c`, `ps2_NaMatrix.c`) réécrites en C et testées
+- [x] Décompression `Expand`, défilement d'UV, surface de l'eau, etc. traduits en C
+- [x] Lecture du disque depuis l'ISO, archives AFS (CRI ADXF), testée
+- [x] Noyau, IOP, manette, horloge 60 Hz, SDK Sony : remplacements PC
+- [x] Fenêtre, clavier et manette (SDL2), builds Linux et Windows
+- [ ] **Premier lancement avec la vraie ISO** (à faire chez toi, voir plus bas)
+- [ ] Rendu : remplacer le VU1/GS par un moteur PC (D3D9 pour RTX Remix, ou OpenGL)
+- [ ] Skinning (`npCalcSkin`), morphing (`npTransform`), visages (`_fmCnkCalc*`)
+- [ ] Son : pilote IOP `TSNDDRV` (effets, musique) et flux ADX (voix, BGM)
+- [ ] Vidéos (`ps2_MovieFunc.c`, MPEG2 via l'IPU) : sautées pour l'instant
+- [ ] Cartes mémoire : sauvegardes dans des fichiers
+
+## Lancer le jeu
+
+Il faut ta propre image du disque **Resident Evil Code: Veronica X (NTSC-U,
+SLUS-20184)**. Le jeu cherche `cvx.iso` dans le dossier courant, ou le chemin
+donné par la variable `CVX_ISO` :
 
 ```
-git submodule update --init
+CVX_ISO=/chemin/vers/cvx.iso ./cvx_pc          # Linux / WSL
+```
+
+```
+set CVX_ISO=C:\Jeux\cvx.iso
+cvx_pc.exe
+```
+(Windows, invite de commandes ; ou mets simplement l'ISO renommée `cvx.iso` à côté de l'exe.)
+
+Variables utiles :
+
+| Variable | Effet |
+|---|---|
+| `CVX_ISO` | Chemin de l'ISO |
+| `CVX_HEADLESS` | Pas de fenêtre (tests) |
+| `CVX_NO_VSYNC` | Ne pas attendre le 60 Hz (le jeu tourne aussi vite que possible) |
+
+Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
+
+| Clavier | Bouton PS2 | | Clavier | Bouton PS2 |
+|---|---|---|---|---|
+| Flèches | Croix directionnelle | | Espace | ✕ (action) |
+| W A S D | Stick gauche | | Échap | ○ (annuler) |
+| Entrée | Start | | Maj gauche | □ (courir) |
+| Retour arrière | Select | | E | △ |
+| Ctrl gauche | R1 (viser) | | Q | L1 |
+| 1 / 3 | L2 / R2 | | F11 | Plein écran |
+
+## Récupérer l'exécutable Windows
+
+À chaque push, GitHub Actions (`.github/workflows/pc-port.yml`) compile et
+teste le port, puis publie `cvx_pc.exe` : onglet **Actions** du dépôt →
+dernier run « PC port » → **Artifacts** → `cvx_pc-windows`. L'exe n'a besoin
+d'aucune DLL en plus.
+
+## Compiler soi-même
+
+Prérequis : CMake ≥ 3.20, Python 3, un compilateur C 32 bits, et les
+sous-modules Katana et CRI (le compilateur PS2 n'est pas nécessaire) :
+
+```
+git submodule update --init include/recvx-decomp-katana include/recvx-decomp-cri
 cmake -S . -B build-pc
 cmake --build build-pc
-ctest --test-dir build-pc        # tests des maths
+ctest --test-dir build-pc        # tests : maths, disque/AFS/Expand
 ```
 
-Sous Windows, utiliser MSYS2/MinGW 32 bits ou WSL pour l'instant : le code
-utilise des extensions GCC (bitfields 64 bits, `__attribute__`), MSVC n'est pas
-encore supporté.
+- **Linux / WSL** : `sudo apt install gcc-multilib cmake python3`, et pour avoir
+  une vraie fenêtre `sudo dpkg --add-architecture i386 && sudo apt update &&
+  sudo apt install libsdl2-dev:i386`. Sans SDL2 32 bits installé, CMake
+  télécharge et compile SDL2 lui-même, mais sans X11/Wayland (pas de fenêtre).
+- **Windows** (pas encore testé, le plus simple reste l'exe de GitHub Actions) :
+  MSYS2, shell « MINGW32 » :
+  `pacman -S mingw-w64-i686-gcc mingw-w64-i686-cmake mingw-w64-i686-ninja python`,
+  puis les commandes ci-dessus (ajouter `-G Ninja`). SDL2 est téléchargé et
+  compilé automatiquement.
+- **Windows depuis Linux** : `-DCMAKE_TOOLCHAIN_FILE=port/cmake/mingw-w64-i686.cmake`
+  (paquets `gcc-mingw-w64-i686 g++-mingw-w64-i686`).
+
+MSVC n'est pas supporté : le code utilise des extensions GCC.
 
 ### Pourquoi 32 bits ?
 
@@ -28,40 +103,42 @@ données (modèles, motions, scripts). En gardant des pointeurs de 4 octets, le
 code décompilé fonctionne tel quel. Le passage en 64 bits est possible plus tard,
 mais demandera de convertir les données au chargement.
 
-## Organisation
+## Comment c'est construit
+
+Le code du jeu tourne tel quel ; tout ce qui touchait au matériel PS2 passe par
+une couche « plateforme » écrite pour le PC.
 
 | Chemin | Rôle |
 |---|---|
-| `include/port_prefix.h` | Inclus avant chaque fichier : `PLATFORM_PC`, libc, types 64/128 bits de l'EE |
-| `include/sdk/` | En-têtes de remplacement du SDK PS2 de Sony (types, structures, prototypes) |
-| `src/ninja/` | Versions C des fichiers PS2 écrits en assembleur VU0 |
-| `tests/` | Tests unitaires (`test_math`) |
+| `include/port_prefix.h` | Inclus avant chaque fichier du jeu : `PLATFORM_PC`, libc, `long` sur 8 octets comme sur PS2, types 128 bits |
+| `include/sdk/` | En-têtes de remplacement du SDK PS2 de Sony ; les registres matériels pointent vers de la mémoire ordinaire |
+| `src/main/` | Point d'entrée PC (`pc_main.c`) et fenêtre/entrées SDL2 (`pc_window.c`) |
+| `src/platform/pc_disc.c` | Lecture de l'ISO (ISO 9660) secteur par secteur, comme le lecteur DVD |
+| `src/platform/pc_iop.c` | Mémoire et RPC de l'IOP, modèle minimal du pilote son |
+| `src/platform/pc_kernel.c` | Noyau EE : sémaphores, interruptions V-blank, cadence 60 Hz |
+| `src/platform/pc_sdk.c` | DVD, GS, DMA, manette, carte mémoire |
+| `src/platform/pc_vu0.c` | Fonctions vectorielles `libvu0` en C |
+| `src/audio/pc_adx.c` | CRI ADXF (fichiers et archives AFS) ; ADXT (flux audio) muet |
+| `src/game/pc_game_asm.c` | Fonctions du jeu en assembleur : traduites en C, ou vides en attendant le rendu |
+| `src/game/pc_movie.c` | Lecteur vidéo : chaque vidéo se termine tout de suite |
+| `src/ninja/` | Maths Ninja en C (remplacent les fichiers VU0) |
+| `src/host/` | Services du système (temps), compilés sans les réglages du jeu |
+| `tests/` | `test_math`, `test_disc` (+ `make_test_iso.py`, une ISO de test sans données du jeu) |
 | `tools/gen_case_links.py` | Corrige la casse des en-têtes Dreamcast/CRI (venus de Windows) |
 
-## Où on en est
+Dans les fichiers du jeu, une fonction en assembleur est entourée de
+`#ifndef PLATFORM_PC` et sa version PC est dans `src/game/` ; un petit bloc
+d'assembleur au milieu d'une fonction C est remplacé sur place
+(`#ifdef PLATFORM_PC` … `#else` asm `#endif`). Seuls `ps2_NaMath.c`,
+`ps2_NaMatrix.c`, `ps2_MovieFunc.c` et `gcc_wrapper.c` sont remplacés en entier
+(liste `GAME_REPLACED` dans `CMakeLists.txt`).
 
-- [x] Les 140 fichiers de jeu sans assembleur compilent avec GCC (`cvx_game`)
-- [x] Les maths Ninja (`ps2_NaMath.c`, `ps2_NaMatrix.c`) réécrites en C et testées
-- [ ] Les 12 autres fichiers remplacés (liste `GAME_REPLACED` dans `CMakeLists.txt`)
-- [ ] Bibliothèque audio CRI ADX (`src/cri/mwlib`) dans le build
-- [ ] Implémentations des fonctions du SDK Sony (d'abord vides, puis réelles)
-- [ ] Édition de liens complète, puis premier lancement (`main` PC + SDL)
+### Ce qui reste vide en attendant le rendu
 
-### Fichiers PS2 encore à remplacer
-
-| Fichier | Contenu | Remplacement prévu |
-|---|---|---|
-| `ps2_NinjaCnk.c`, `ps2_Vu1Strip.c`, `ps2_Vu1Scissor2.c` | Dessin des modèles via le VU1 | Rendu PC (D3D9 / OpenGL) |
-| `ps2_dummy.c`, `ps2_NaDraw2D.c`, `ps2_NaView.c` | Primitives 2D/3D, caméra, double buffer | Rendu PC |
-| `ps2_loadtim2.c` | Envoi des textures au GS | Upload de textures GPU (point d'accroche des packs HD) |
-| `ps2_MovieFunc.c` | Vidéos MPEG2 via l'IPU | FFmpeg |
-| `njplus.c`, `face_bh.c` | Skinning et animation faciale en VU0 | Traduction C (comme les matrices) |
-| `expand.c` | Décompression des données | Traduction C |
-| `objitm.c` | Une fonction d'objet (`bhObj005`) | Traduction C |
-
-Fichiers qui compilent mais parlent au matériel PS2 et devront être réécrits :
-`ps2_sg_*.c` (pad, carte mémoire, disque), `ps2_snddrv.c`, `sdc*.c`,
-`ps2_sfd_mw.c`, `system.c` (`bhSysCallOption`).
+`Ps2AddPrim3D*`, `Ps2AddOT`, `loadImage`, `njCnkCvVnPs2`, `njCnkCsUvh/Uvn`,
+les fonctions `vu1*` de `ps2_Vu1Strip.c` et le découpage de `ps2_Vu1Scissor2.c`.
+Le jeu prépare ses paquets GS normalement (dans `ps2_dummy.c`, `ps2_NinjaCnk.c`…) :
+le futur moteur de rendu partira de là.
 
 ## Règles pour la suite
 
@@ -71,4 +148,7 @@ Fichiers qui compilent mais parlent au matériel PS2 et devront être réécrits
   particularités (table de sinus, racines VU0 sur |x|, division par 0 sans NaN…),
   et l'indiquent en commentaire.
 - Toute traduction de maths/géométrie vient avec un test dans `tests/`.
+- Le code PC n'écrit pas `long long` (le mot `long` est redéfini) : utiliser
+  `int64_t` / `uint64_t`, et inclure les en-têtes système dans `port_prefix.h`
+  ou dans un fichier de `src/host/`.
 - Les fichiers du jeu (ISO, ELF, textures, packs HD) ne sont jamais commités.

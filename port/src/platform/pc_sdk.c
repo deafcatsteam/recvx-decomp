@@ -181,6 +181,16 @@ int scePadRead(int port, int slot, u_char *rdata)
     rdata[2] = pc_pad_buttons >> 8;
     rdata[3] = pc_pad_buttons & 0xff;
     memcpy(rdata + 4, pc_pad_sticks, 4);
+
+    /* Pressure of right, left, up, down, triangle, circle, cross, square,
+     * L1, R1, L2 and R2: full when held, as on keyboard there is no
+     * in-between. */
+    static const unsigned short pressure_bits[12] = {
+        0x2000, 0x8000, 0x1000, 0x4000, 0x0010, 0x0020,
+        0x0040, 0x0080, 0x0004, 0x0008, 0x0001, 0x0002,
+    };
+    for (int i = 0; i < 12; i++)
+        rdata[8 + i] = (pc_pad_buttons & pressure_bits[i]) ? 0x00 : 0xff;
     return 32;
 }
 

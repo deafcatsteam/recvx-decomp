@@ -18,7 +18,11 @@ int pc_disc_read_bytes(uint64_t offset, unsigned int size, void *buf)
 {
     if (disc == NULL && !pc_disc_open())
         return 0;
+#ifdef _WIN32
+    if (_fseeki64(disc, (int64_t)offset, SEEK_SET) != 0)
+#else
     if (fseeko(disc, (off_t)offset, SEEK_SET) != 0)
+#endif
         return 0;
     return fread(buf, 1, size, disc) == size;
 }

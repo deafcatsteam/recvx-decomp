@@ -10,6 +10,11 @@
 # its structures and data files, so keeping pointers 4 bytes wide lets the
 # decompiled code run unchanged.
 cmake_minimum_required(VERSION 3.20)
+
+# Ask for 32-bit code before the compiler is inspected, so that CMake also
+# looks for 32-bit libraries. GCC and Clang on Linux and MinGW-w64 accept it.
+set(CMAKE_C_FLAGS_INIT "-m32")
+
 project(cvx_pc C)
 
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -20,13 +25,8 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_EXTENSIONS ON)
 
 if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-    if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
-        message(STATUS "Forcing a 32-bit build (-m32)")
-        add_compile_options(-m32)
-        add_link_options(-m32)
-    elseif(MSVC)
-        message(FATAL_ERROR "Configure a 32-bit build: cmake -A Win32 ...")
-    endif()
+    message(FATAL_ERROR "The port must be built as a 32-bit program. On Linux, install "
+                        "gcc-multilib; on Windows, use the MinGW-w64 i686 (32-bit) toolchain.")
 endif()
 
 find_package(Python3 REQUIRED COMPONENTS Interpreter)
@@ -83,8 +83,11 @@ set(PORT_SOURCES
 # get them.
 add_library(cvx_game_env INTERFACE)
 
+# Host services used by the platform layer, built without the game settings.
+add_library(cvx_host STATIC port/src/host/pc_host.c)
+
 add_library(cvx_game STATIC ${GAME_SOURCES} ${PORT_SOURCES})
-target_link_libraries(cvx_game PRIVATE cvx_game_env)
+target_link_libraries(cvx_game PRIVATE cvx_game_env PUBLIC cvx_host)
 target_include_directories(cvx_game_env INTERFACE
     ${CMAKE_SOURCE_DIR}/port/include/sdk
     ${CMAKE_SOURCE_DIR}/src/cri/mwlib/ee/lib/libadxe
@@ -114,8 +117,41 @@ add_test(NAME math COMMAND test_math)
 # The game's main() becomes cvx_main(), called by the port's entry point.
 set_source_files_properties(${GAME_DIR}/njloop.c PROPERTIES COMPILE_DEFINITIONS main=cvx_main)
 
-add_executable(cvx_pc port/src/main/pc_main.c)
+add_executable(cvx_pc port/src/main/pc_main.c port/src/main/pc_window.c)
 target_link_libraries(cvx_pc PRIVATE cvx_game m)
+
+# Window and input through SDL2: the system's 32-bit SDL2 when there is one,
+# otherwise SDL2 is downloaded and built along with the game.
+option(CVX_WITH_SDL "Open a window and read input with SDL2" ON)
+if(CVX_WITH_SDL)
+    find_package(SDL2 CONFIG QUIET)
+    if(NOT SDL2_FOUND)
+        message(STATUS "No 32-bit SDL2 found: building it from source")
+        include(FetchContent)
+        FetchContent_Declare(SDL2
+            URL https://github.com/libsdl-org/SDL/releases/download/release-2.30.9/SDL2-2.30.9.tar.gz
+            URL_HASH SHA256=24b574f71c87a763f50704bbb630cbe38298d544a1f890f099a4696b1d6beba4)
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON CACHE BOOL "" FORCE)
+        set(SDL_TEST OFF CACHE BOOL "" FORCE)
+        if(UNIX AND NOT APPLE)
+            # The 32-bit X11/Wayland libraries are rarely installed; without
+            # them this SDL2 has no real video driver. Install your
+            # distribution's 32-bit SDL2 (libsdl2-dev:i386) for a window.
+            message(WARNING "Building SDL2 without X11/Wayland: install a 32-bit SDL2 "
+                            "package (e.g. libsdl2-dev:i386) to get a window on Linux.")
+            set(SDL_X11 OFF CACHE BOOL "" FORCE)
+            set(SDL_WAYLAND OFF CACHE BOOL "" FORCE)
+        endif()
+        FetchContent_MakeAvailable(SDL2)
+    endif()
+    if(TARGET SDL2::SDL2-static)
+        target_link_libraries(cvx_pc PRIVATE SDL2::SDL2-static)
+    else()
+        target_link_libraries(cvx_pc PRIVATE SDL2::SDL2)
+    endif()
+    target_compile_definitions(cvx_pc PRIVATE CVX_HAVE_SDL)
+endif()
 
 add_executable(test_disc port/tests/test_disc.c)
 target_link_libraries(test_disc PRIVATE cvx_game cvx_game_env m)

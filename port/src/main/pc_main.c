@@ -3,20 +3,44 @@
  * a PS2 to be, then runs the game's own main() (njloop.c, renamed cvx_main
  * by the build).
  */
+#ifdef _WIN32
+#include <windows.h>
+#else
 #define _GNU_SOURCE
 #include <link.h>
-#include <stdio.h>
 #include <sys/mman.h>
 #include <unistd.h>
+#endif
+#include <stdint.h>
+#include <stdio.h>
+
+#include "pc_window.h"
 
 int cvx_main(int argc, char *argv[]);
 
 /*
  * The PS2 has no memory protection and the game writes into data the PC
  * toolchain puts in read-only pages (string literals, for instance the disc
- * file names it upper-cases in place). Make every segment of the executable
- * writable.
+ * file names it upper-cases in place). Make the executable's image writable.
  */
+#ifdef _WIN32
+
+static void unprotect_image(void)
+{
+    unsigned char *base = (unsigned char *)GetModuleHandleA(NULL);
+    IMAGE_NT_HEADERS *nt = (IMAGE_NT_HEADERS *)(base + ((IMAGE_DOS_HEADER *)base)->e_lfanew);
+    IMAGE_SECTION_HEADER *sec = IMAGE_FIRST_SECTION(nt);
+
+    for (int i = 0; i < nt->FileHeader.NumberOfSections; i++, sec++) {
+        DWORD old;
+        DWORD prot = (sec->Characteristics & IMAGE_SCN_MEM_EXECUTE) ? PAGE_EXECUTE_READWRITE
+                                                                    : PAGE_READWRITE;
+        VirtualProtect(base + sec->VirtualAddress, sec->Misc.VirtualSize, prot, &old);
+    }
+}
+
+#else
+
 static int unprotect_segment(struct dl_phdr_info *info, size_t size, void *data)
 {
     long page = sysconf(_SC_PAGESIZE);
@@ -39,12 +63,20 @@ static int unprotect_segment(struct dl_phdr_info *info, size_t size, void *data)
     return 1;
 }
 
+static void unprotect_image(void)
+{
+    dl_iterate_phdr(unprotect_segment, NULL);
+}
+
+#endif
+
 int main(int argc, char *argv[])
 {
     /* Keep the game's log lines in order with ours, even when redirected. */
     setvbuf(stdout, NULL, _IONBF, 0);
 
-    dl_iterate_phdr(unprotect_segment, NULL);
+    unprotect_image();
+    pc_window_open();
 
     return cvx_main(argc, argv);
 }

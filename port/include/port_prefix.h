@@ -34,6 +34,12 @@
 #include <unistd.h>
 #undef u_long
 
+#ifdef _WIN32
+/* index() is POSIX; the game only names it in a debug message. */
+static inline char *port_index(const char *s, int c) { return strchr(s, c); }
+#define index port_index
+#endif
+
 /*
  * `long` is 8 bytes for CodeWarrior on the EE but 4 bytes on 32-bit x86. The
  * game relies on the wide one (GS packets are built from 64-bit longs, struct
