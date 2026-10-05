@@ -208,6 +208,35 @@ static void frame(void)
     SDL_RenderPresent(renderer);
 }
 
+/* The audio device plays what pc_audio.c has queued. */
+static void SDLCALL audio_callback(void *user, Uint8 *stream, int len)
+{
+    (void)user;
+    pc_audio_pull((int16_t *)stream, len / 4);
+}
+
+static void open_audio(void)
+{
+    SDL_AudioSpec want, have;
+    SDL_AudioDeviceID dev;
+
+    if (getenv("CVX_NO_AUDIO") != NULL || SDL_InitSubSystem(SDL_INIT_AUDIO) != 0)
+        return;
+    memset(&want, 0, sizeof(want));
+    want.freq = PC_AUDIO_RATE;
+    want.format = AUDIO_S16SYS;
+    want.channels = 2;
+    want.samples = 1024;
+    want.callback = audio_callback;
+    dev = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (dev == 0) {
+        fprintf(stderr, "window: no sound (%s)\n", SDL_GetError());
+        return;
+    }
+    pc_audio_open = 1;
+    SDL_PauseAudioDevice(dev, 0);
+}
+
 int pc_window_open(void)
 {
     if (getenv("CVX_HEADLESS") != NULL)
@@ -236,6 +265,7 @@ int pc_window_open(void)
         return 0;
     }
     printf("window: SDL %s video\n", SDL_GetCurrentVideoDriver());
+    open_audio();
     pc_frame_hook = frame;
     return 1;
 }

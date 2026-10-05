@@ -101,6 +101,8 @@ add_library(cvx_host STATIC
     port/src/host/pc_host.c
     port/src/host/pc_diag.c
     port/src/host/pc_log.c
+    port/src/host/pc_audio.c
+    port/src/host/pc_video.c
     port/src/platform/pc_hwregs.c
     port/src/gs/gs.c
     port/src/gs/gs_mem.c
@@ -110,6 +112,64 @@ target_link_libraries(cvx_host PUBLIC m)
 if(NOT WIN32)
     find_package(Threads REQUIRED)
     target_link_libraries(cvx_host PUBLIC Threads::Threads)
+endif()
+
+# Movies: MPEG-2 video decoded by FFmpeg (LGPL), downloaded and built with
+# only the MPEG video decoders. It is used by the host side only
+# (port/src/host/pc_video.c), whose headers are not affected by the game's
+# `long` remapping.
+option(CVX_WITH_FFMPEG "Play the game's movies (MPEG-2 decoded by FFmpeg)" ON)
+if(CVX_WITH_FFMPEG)
+    include(ExternalProject)
+    find_program(MAKE_PROGRAM NAMES gmake make mingw32-make REQUIRED)
+    cmake_host_system_information(RESULT CVX_NCPU QUERY NUMBER_OF_LOGICAL_CORES)
+    set(FFMPEG_PREFIX ${CMAKE_BINARY_DIR}/ffmpeg)
+    set(FFMPEG_ARGS
+        --prefix=<INSTALL_DIR> --arch=x86
+        --disable-everything --disable-autodetect --disable-programs --disable-doc
+        --disable-network --disable-avdevice --disable-avformat --disable-swscale
+        --disable-swresample --disable-avfilter --disable-asm --disable-debug
+        --enable-static --disable-shared
+        --enable-decoder=mpeg2video,mpeg1video --enable-parser=mpegvideo)
+    if(WIN32)
+        list(APPEND FFMPEG_ARGS --target-os=mingw32)
+        if(CMAKE_CROSSCOMPILING)
+            string(REGEX REPLACE "gcc(\\.exe)?$" "" FFMPEG_CROSS ${CMAKE_C_COMPILER})
+            list(APPEND FFMPEG_ARGS --enable-cross-compile --cross-prefix=${FFMPEG_CROSS})
+        endif()
+    else()
+        list(APPEND FFMPEG_ARGS "--cc=${CMAKE_C_COMPILER} -m32" --extra-ldflags=-m32)
+    endif()
+    ExternalProject_Add(ffmpeg
+        GIT_REPOSITORY https://github.com/FFmpeg/FFmpeg.git
+        GIT_TAG n7.1
+        GIT_SHALLOW TRUE
+        GIT_PROGRESS FALSE
+        UPDATE_COMMAND ""
+        PREFIX ${FFMPEG_PREFIX}
+        INSTALL_DIR ${FFMPEG_PREFIX}
+        CONFIGURE_COMMAND <SOURCE_DIR>/configure ${FFMPEG_ARGS}
+        BUILD_COMMAND ${MAKE_PROGRAM} -j${CVX_NCPU}
+        INSTALL_COMMAND ${MAKE_PROGRAM} install
+        BUILD_BYPRODUCTS ${FFMPEG_PREFIX}/lib/libavcodec.a ${FFMPEG_PREFIX}/lib/libavutil.a)
+    file(MAKE_DIRECTORY ${FFMPEG_PREFIX}/include)
+    add_library(cvx_avutil STATIC IMPORTED)
+    set_target_properties(cvx_avutil PROPERTIES
+        IMPORTED_LOCATION ${FFMPEG_PREFIX}/lib/libavutil.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_PREFIX}/include)
+    add_library(cvx_avcodec STATIC IMPORTED)
+    set_target_properties(cvx_avcodec PROPERTIES
+        IMPORTED_LOCATION ${FFMPEG_PREFIX}/lib/libavcodec.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_PREFIX}/include
+        INTERFACE_LINK_LIBRARIES cvx_avutil)
+    add_dependencies(cvx_avutil ffmpeg)
+    add_dependencies(cvx_avcodec ffmpeg)
+    target_link_libraries(cvx_host PRIVATE cvx_avcodec)
+    target_link_libraries(cvx_host PUBLIC atomic)
+    if(WIN32)
+        target_link_libraries(cvx_host PUBLIC bcrypt ole32 user32)
+    endif()
+    target_compile_definitions(cvx_host PRIVATE CVX_HAVE_FFMPEG)
 endif()
 
 add_library(cvx_game STATIC ${GAME_SOURCES} ${PORT_SOURCES})
@@ -210,3 +270,13 @@ set_tests_properties(disc PROPERTIES
 add_executable(test_3d port/tests/test_3d.c)
 target_link_libraries(test_3d PRIVATE cvx_game cvx_game_env m)
 add_test(NAME render_3d COMMAND test_3d)
+
+add_executable(test_movie port/tests/test_movie.c)
+target_link_libraries(test_movie PRIVATE cvx_game cvx_game_env m)
+add_test(NAME movie_make_image
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/port/tests/make_test_iso.py
+                 ${CMAKE_BINARY_DIR}/test_movie.iso ${CMAKE_SOURCE_DIR}/port/tests/data/test.pss)
+add_test(NAME movie COMMAND test_movie)
+set_tests_properties(movie PROPERTIES
+    DEPENDS movie_make_image
+    ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_movie.iso)

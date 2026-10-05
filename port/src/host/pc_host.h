@@ -36,4 +36,44 @@ extern volatile int pc_quit_requested;
 /* Set while the fast-forward key is held: frames are not paced. */
 extern volatile int pc_turbo;
 
+/* ---- Movies: MPEG video decoder (pc_video.c, FFmpeg) ---- */
+
+typedef struct PcVideo PcVideo;
+
+/* Returns NULL when the port is built without a decoder. */
+PcVideo *pc_video_open(void);
+void pc_video_close(PcVideo *v);
+
+/* Feeds bytes of the video elementary stream; size 0 marks its end. Returns
+ * the number of decoded frames waiting. */
+int pc_video_feed(PcVideo *v, const uint8_t *data, int size);
+int pc_video_ready(PcVideo *v);
+
+/* Set when enough frames wait: stop feeding for now. */
+int pc_video_full(PcVideo *v);
+
+/* Takes the oldest decoded frame (RGBA, valid until the next call), or NULL. */
+const uint32_t *pc_video_take(PcVideo *v, int *w, int *h);
+
+double pc_video_fps(PcVideo *v);
+
+/* ---- Sound output (pc_audio.c, played by the window's audio device) ---- */
+
+#define PC_AUDIO_RATE 48000
+
+/* Queues 16-bit stereo samples (interleaved) at the given rate. */
+void pc_audio_push(const int16_t *lr, int frames, int rate);
+
+/* Fills out with the next frames (silence when nothing is queued). */
+void pc_audio_pull(int16_t *out, int frames);
+
+/* Frames queued and not played yet. */
+int pc_audio_queued(void);
+
+/* Drops everything queued. */
+void pc_audio_clear(void);
+
+/* Set by the window when an audio device is open. */
+extern volatile int pc_audio_open;
+
 #endif

@@ -12,8 +12,8 @@ Le jeu entier compile et s'assemble en un programme PC (`cvx_pc`, ou
 `cvx_pc.exe` sous Windows) qui lit les données directement dans l'ISO du jeu.
 Avec une fausse image disque, il passe toute l'initialisation du système de
 fichiers et du son ; **avec ta vraie ISO, il n'a encore jamais été lancé.**
-Le rendu 2D (menus, textes, images) passe par un GS logiciel qui reproduit la
-carte graphique de la PS2 ; la 3D n'est pas encore dessinée.
+Le rendu (menus, textes, images, et maintenant la 3D) passe par un GS logiciel
+qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFmpeg.
 
 - [x] Tout le code C du jeu compile (les fonctions en assembleur sont mises de côté)
 - [x] Maths Ninja (`ps2_NaMath.c`, `ps2_NaMatrix.c`) réécrites en C et testées
@@ -23,10 +23,13 @@ carte graphique de la PS2 ; la 3D n'est pas encore dessinée.
 - [x] Fenêtre, clavier et manette (SDL2), builds Linux et Windows
 - [ ] **Premier lancement avec la vraie ISO** (à faire chez toi, voir plus bas)
 - [x] Rendu 2D : GS logiciel (`src/gs/`), testé sur des paquets de test ; reste à valider sur le jeu
-- [ ] Rendu 3D natif (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
-- [ ] Skinning (`npCalcSkin`), morphing (`npTransform`), visages (`_fmCnkCalc*`)
+- [x] Rendu 3D par le GS logiciel : sommets, éclairage, découpage traduits du VU0 (`src/game/pc_render3d.c`), testé ; reste à valider sur le jeu
+- [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
+- [ ] Animation des visages (`_fmCnkCalc*`) : les visages gardent leur pose de repos
+- [ ] Rendu 3D par la carte graphique (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
 - [ ] Son : pilote IOP `TSNDDRV` (effets, musique) et flux ADX (voix, BGM)
-- [ ] Vidéos (`ps2_MovieFunc.c`, MPEG2 via l'IPU) : sautées pour l'instant
+- [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
+- [x] Sortie son (SDL) : utilisée par les vidéos pour l'instant
 - [ ] Cartes mémoire : sauvegardes dans des fichiers
 
 ## Lancer le jeu
@@ -55,6 +58,7 @@ Variables utiles :
 | `CVX_QUIET` | Pas de ligne d'état chaque seconde dans la console |
 | `CVX_NO_LOG` | Ne pas écrire `cvx_log.txt` |
 | `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
+| `CVX_NO_AUDIO` | Pas de son |
 
 Tout ce qui s'affiche dans la console est aussi écrit dans `cvx_log.txt`, à
 côté de l'exe. En cas de plantage, la console indique où était le jeu et
@@ -72,6 +76,7 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Ctrl gauche | R1 (viser) | | Q | L1 |
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
 | Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
+| Entrée, Retour arrière ou Échap | Passer une vidéo (Start, Select ou ○ à la manette) | | | |
 | | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`) |
 
 ## Récupérer l'exécutable Windows
@@ -132,10 +137,13 @@ une couche « plateforme » écrite pour le PC.
 | `src/platform/pc_vu0.c` | Fonctions vectorielles `libvu0` en C |
 | `src/audio/pc_adx.c` | CRI ADXF (fichiers et archives AFS) ; ADXT (flux audio) muet |
 | `src/game/pc_game_asm.c` | Fonctions du jeu en assembleur : traduites en C, ou vides en attendant le rendu |
-| `src/game/pc_movie.c` | Lecteur vidéo : chaque vidéo se termine tout de suite |
+| `src/game/pc_movie.c` | Lecteur vidéo : lit le `.PSS` sur le disque, sépare image et son |
+| `src/game/pc_render3d.c` | 3D : couleurs des sommets, découpage, paquets GS (code VU0 traduit) |
+| `src/host/pc_video.c` | Décodage MPEG-2 avec FFmpeg (LGPL, téléchargé et compilé par CMake avec le strict nécessaire) |
+| `src/host/pc_audio.c` | File d'attente du son, jouée par la fenêtre (SDL) |
 | `src/ninja/` | Maths Ninja en C (remplacent les fichiers VU0) |
 | `src/host/` | Services du système (temps), compilés sans les réglages du jeu |
-| `tests/` | `test_math`, `test_disc` (+ `make_test_iso.py`, une ISO de test sans données du jeu) |
+| `tests/` | `test_math`, `test_disc` (+ `make_test_iso.py`, une ISO de test sans données du jeu), `test_3d`, `test_movie` (+ `make_test_pss.py`, une vidéo synthétique) |
 | `tools/gen_case_links.py` | Corrige la casse des en-têtes Dreamcast/CRI (venus de Windows) |
 
 Dans les fichiers du jeu, une fonction en assembleur est entourée de
@@ -145,12 +153,16 @@ d'assembleur au milieu d'une fonction C est remplacé sur place
 `ps2_NaMatrix.c`, `ps2_MovieFunc.c` et `gcc_wrapper.c` sont remplacés en entier
 (liste `GAME_REPLACED` dans `CMakeLists.txt`).
 
-### Ce qui reste vide en attendant le rendu
+### Comment la 3D est dessinée
 
-`Ps2AddPrim3D*`, `Ps2AddOT`, `loadImage`, `njCnkCvVnPs2`, `njCnkCsUvh/Uvn`,
-les fonctions `vu1*` de `ps2_Vu1Strip.c` et le découpage de `ps2_Vu1Scissor2.c`.
-Le jeu prépare ses paquets GS normalement (dans `ps2_dummy.c`, `ps2_NinjaCnk.c`…) :
-le futur moteur de rendu partira de là.
+Sur PS2, les modèles « chunk » passent par le VU0 (sommets, lumières), puis par
+un microprogramme VU1 pour la plupart des modes de dessin. Le port fait tout
+sur le processeur, avec les versions C que le jeu a de ces fonctions de bandes
+de triangles (`ps2_Vu1Strip.c`, que la PS2 utilise pour certains modes) ;
+elles produisent les mêmes primitives GS. Les sommets en espace caméra, les
+matrices et les lumières passent tous par `njCnkCvVnPs2` et
+`src/game/pc_render3d.c` : c'est là que le futur rendu par la carte graphique
+(et RTX Remix) récupérera la vraie scène 3D.
 
 ## Règles pour la suite
 

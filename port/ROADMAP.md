@@ -25,13 +25,36 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 
 1. **Rendu 2D** par émulation du GS : mémoire vidéo, transferts de textures,
    sprites et polygones 2D, affichage dans la fenêtre. → écran titre et menus.
-2. **Rendu 3D** natif (OpenGL) : modèles chunk, textures, éclairage, brouillard,
-   transparences ; traduction en C du skinning (`npCalcSkin`), du morphing
-   (`npTransform`) et des visages (`_fmCnkCalc*`).
+2. **Rendu 3D** ✔ d'abord par le GS logiciel, fidèle à la PS2 : le code VU0
+   (sommets, éclairage, découpage) est traduit en C, avec le skinning
+   (`npCalcSkin`) et le morphing (`npTransform`). Reste : les visages
+   (`_fmCnkCalc*`). Le rendu natif par la carte graphique vient ensuite
+   (phase B), à partir des mêmes données.
 3. **Son** : remplaçant PC du pilote IOP `TSNDDRV` (effets, musiques MIDI),
-   flux ADX (voix, ambiances), vidéos SFD (MPEG + ADX, via FFmpeg).
-4. **Sauvegardes** dans des fichiers (carte mémoire émulée), finitions des
+   flux ADX (voix, ambiances). La sortie son (SDL) existe déjà.
+4. **Vidéos** ✔ `.PSS` lues sur le disque : image MPEG-2 (FFmpeg) et son ;
+   toutes peuvent être passées.
+5. **Sauvegardes** dans des fichiers (carte mémoire émulée), finitions des
    contrôles.
+
+### Ce qui prépare déjà la suite
+
+- **3D** : toute la géométrie passe par `njCnkCvVnPs2` et
+  `src/game/pc_render3d.c`, avec les sommets en espace caméra, les matrices
+  et les lumières. Un rendu par la carte graphique (OpenGL, puis D3D9 pour
+  RTX Remix) pourra s'y brancher et recevoir la vraie scène 3D, au lieu des
+  triangles déjà projetés du GS.
+- **Haute résolution** : en attendant ce rendu, le GS logiciel pourra
+  dessiner à 2× ou 4× la résolution (étape intermédiaire simple), et passer
+  sur la carte graphique.
+- **Vidéos** : les images sont décodées en pleine qualité avant le GS ; elles
+  pourront être affichées directement en plein écran par la carte graphique,
+  et remplacées par des versions refaites en HD (FFmpeg n'a qu'à activer
+  d'autres décodeurs, H.264 par exemple).
+- **Son** : la file `src/host/pc_audio.c` recevra aussi les effets, les
+  musiques et les voix ; FFmpeg sait déjà décoder l'ADX.
+- **Performances** : le GS logiciel dessine sur plusieurs cœurs ; la
+  traduction C du VU0 se prête aussi au SIMD (SSE) si besoin.
 
 ## Phase B — Graphismes modernes
 

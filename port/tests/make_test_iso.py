@@ -2,7 +2,9 @@
 """Writes a tiny ISO 9660 image used by test_disc (no game data involved).
 
 Layout: /RDX_LNK.AFS (an AFS archive of 3 files), /CF_ROM.TXT and
-/MOVIE/OPEN.SFD.
+/MOVIE/OPEN.SFD, plus /MOVIE/MV_000.PSS when a movie file is given.
+
+    make_test_iso.py OUT.iso [MOVIE.pss]
 """
 import struct
 import sys
@@ -40,7 +42,8 @@ def afs(files):
     return head + b'\0' * (SECTOR - len(head)) + data
 
 
-def main(path):
+def main(path, pss_path=None):
+    pss = open(pss_path, 'rb').read() if pss_path else b''
     afs_data = afs([b'hello afs file 0', b'B' * 3000, b'third'])
     txt = b'plain file contents\n'
     sfd = b'x' * 5000
@@ -53,12 +56,16 @@ def main(path):
         lsn += (len(content) + SECTOR - 1) // SECTOR
     sfd_lsn = lsn
     lsn += (len(sfd) + SECTOR - 1) // SECTOR
+    pss_lsn = lsn
+    lsn += (len(pss) + SECTOR - 1) // SECTOR
 
     root = dir_record(b'\0', ROOT, SECTOR, True) + dir_record(b'\1', ROOT, SECTOR, True)
     root += dir_record(b'CF_ROM.TXT;1', files[1][1], len(txt), False)
     root += dir_record(b'MOVIE', MOVIE, SECTOR, True)
     root += dir_record(b'RDX_LNK.AFS;1', files[0][1], len(afs_data), False)
     movie = dir_record(b'\0', MOVIE, SECTOR, True) + dir_record(b'\1', ROOT, SECTOR, True)
+    if pss:
+        movie += dir_record(b'MV_000.PSS;1', pss_lsn, len(pss), False)
     movie += dir_record(b'OPEN.SFD;1', sfd_lsn, len(sfd), False)
 
     pvd = bytearray(SECTOR)
@@ -77,11 +84,11 @@ def main(path):
     image[17 * SECTOR:18 * SECTOR] = term
     image[ROOT * SECTOR:ROOT * SECTOR + len(root)] = root
     image[MOVIE * SECTOR:MOVIE * SECTOR + len(movie)] = movie
-    for _, at, content in files + [(None, sfd_lsn, sfd)]:
+    for _, at, content in files + [(None, sfd_lsn, sfd), (None, pss_lsn, pss)]:
         image[at * SECTOR:at * SECTOR + len(content)] = content
     with open(path, 'wb') as f:
         f.write(image)
 
 
 if __name__ == '__main__':
-    main(sys.argv[1])
+    main(sys.argv[1], sys.argv[2] if len(sys.argv) > 2 else None)
