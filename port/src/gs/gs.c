@@ -825,6 +825,7 @@ typedef struct {
     int64_t area;
     int px0, px1;
     float att[3][9];
+    double z[3];
 } TriangleJob;
 
 static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0, int py1)
@@ -847,13 +848,18 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
                 at[k] = j->att[0][k] * b0 + j->att[1][k] * b1 + j->att[2][k] * b2;
             float qq = at[8] != 0.0f ? at[8] : 1.0f;
             int r, g, b, a;
+            /* Rounding errors must not take a value below what all three
+             * vertices hold: colours get a small bias, and depth (up to 32
+             * bits, compared exactly) is computed in double and rounded. */
             if (ds.iip) {
-                r = (int)at[0]; g = (int)at[1]; b = (int)at[2]; a = (int)at[3];
+                r = (int)(at[0] + 0.01f); g = (int)(at[1] + 0.01f);
+                b = (int)(at[2] + 0.01f); a = (int)(at[3] + 0.01f);
             } else {
                 r = j->last->r; g = j->last->g; b = j->last->b; a = j->last->a;
             }
-            shade(k, px, py, (uint32_t)at[4], r, g, b, a, (int)at[5],
-                  (int)(at[6] / qq), (int)(at[7] / qq));
+            double z = (j->z[0] * w0 + j->z[1] * w1 + j->z[2] * w2) / (double)j->area + 0.5;
+            shade(k, px, py, z >= 4294967295.0 ? 0xffffffffu : (uint32_t)z, r, g, b, a,
+                  (int)(at[5] + 0.01f), (int)(at[6] / qq), (int)(at[7] / qq));
             drawn++;
         }
     }
@@ -923,6 +929,7 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
         j.att[i][0] = (float)p->r; j.att[i][1] = (float)p->g; j.att[i][2] = (float)p->b;
         j.att[i][3] = (float)p->a; j.att[i][4] = (float)p->z; j.att[i][5] = (float)p->f;
         j.att[i][6] = u; j.att[i][7] = w; j.att[i][8] = ds.fst ? 1.0f : q;
+        j.z[i] = (double)p->z;
     }
     /* Flat shading uses the colour of the last vertex sent. */
     j.last = v2;
@@ -1004,7 +1011,28 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
         return;
 
     if (draw) {
+        static int trace = -1;
+        if (trace < 0)
+            trace = getenv("CVX_GS_TRACE") != NULL;
         setup_draw();
+        if (trace) {
+            /* One line per primitive: its registers, then its vertices. */
+            int c = ds.ctx;
+            fprintf(stderr, "prim %u type %d ctx %d prim %03x frame %016llx tex0 %016llx tex1 %016llx "
+                    "clamp %016llx alpha %016llx test %016llx zbuf %016llx texa %016llx fba %d pabe %d dthe %d\n",
+                    gs_stats.prims, type, c, (unsigned)BITS(gs.prim, 0, 11),
+                    (unsigned long long)gs.frame[c], (unsigned long long)gs.tex0[c],
+                    (unsigned long long)gs.tex1[c], (unsigned long long)gs.clamp[c],
+                    (unsigned long long)gs.alpha[c], (unsigned long long)gs.test[c], (unsigned long long)gs.zbuf[c],
+                    (unsigned long long)gs.texa, (int)BITS(gs.fba[c], 0, 1), (int)BITS(gs.pabe, 0, 1),
+                    (int)BITS(gs.dthe, 0, 1));
+            for (int i = 0; i < gs.queued; i++) {
+                const Vertex *q = &gs.queue[i];
+                fprintf(stderr, "  v%d xy %.4f %.4f z %u rgba %d %d %d %d uv %.4f %.4f stq %g %g %g\n", i,
+                        q->x / 16.0, q->y / 16.0, q->z, q->r, q->g, q->b, q->a, q->u / 16.0, q->v / 16.0,
+                        q->s, q->t, q->q);
+            }
+        }
         gs_stats.prims++;
         changes++;
         switch (type) {
@@ -1012,6 +1040,16 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
         case 1: case 2: draw_line(&gs.queue[0], &gs.queue[1]); break;
         case 3: case 4: case 5: draw_triangle(&gs.queue[0], &gs.queue[1], &gs.queue[2]); break;
         case 6: draw_sprite(&gs.queue[0], &gs.queue[1]); break;
+        }
+        if (trace) {
+            /* CVX_GS_PIXEL=x,y: that pixel of the frame buffer and depth
+             * buffer after the primitive. */
+            const char *px = getenv("CVX_GS_PIXEL");
+            int x, y;
+            if (px != NULL && sscanf(px, "%d,%d", &x, &y) == 2)
+                fprintf(stderr, "  pixel %d,%d = %08x z %08x\n", x, y,
+                        gs_read_pixel(ds.fpsm, ds.fbp, ds.fbw, x, y),
+                        gs_read_pixel(ds.zpsm, ds.zbp, ds.fbw, x, y));
         }
     }
 

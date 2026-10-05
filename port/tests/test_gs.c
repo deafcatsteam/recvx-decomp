@@ -247,6 +247,43 @@ static void test_dma_chain(void)
     CHECK(fb(51, 51) == 0x80abcdef);
 }
 
+/* A gouraud-shaded overlay at the same depth as what is under it passes a
+ * "greater or equal" depth test everywhere, whatever the rounding of the
+ * interpolation (the game's text fades rely on it). */
+static void test_equal_depth(void)
+{
+    int bad = 0;
+
+    gs_reset();
+    setup_frame();
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x4e, 8 | ((uint64_t)0 << 24));      /* ZBUF_1: page 8, Z32 */
+    ad(0x47, (1ull << 16) | (1ull << 17)); /* TEST_1: depth test, ALWAYS */
+    ad(0x00, 6);                            /* sprite at z 65534 */
+    send();
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x01, 0x80ffffff);
+    ad(0x05, xyz(0, 0) | (65534ull << 32));
+    ad(0x05, xyz(64, 64) | (65534ull << 32));
+    send();
+    tag(2, 1, 0, 1, 0xe);
+    ad(0x47, (1ull << 16) | (2ull << 17)); /* GEQUAL */
+    ad(0x00, 4 | (1 << 3));                 /* gouraud triangle strip */
+    send();
+    /* Corners like the game's: far beyond the frame, at odd positions. */
+    tag(8, 1, 0, 1, 0xe);
+    ad(0x01, 0x80000000); ad(0x05, 3 | (5ull << 16) | (65534ull << 32));
+    ad(0x01, 0x80000000); ad(0x05, (640 * 16 + 7) | (5ull << 16) | (65534ull << 32));
+    ad(0x01, 0x40000000); ad(0x05, 3 | ((uint64_t)(104 * 16 + 9) << 16) | (65534ull << 32));
+    ad(0x01, 0x40000000); ad(0x05, (640 * 16 + 7) | ((uint64_t)(104 * 16 + 9) << 16) | (65534ull << 32));
+    send();
+    /* Pixel row and column 0 are outside the triangles. */
+    for (int y = 1; y < 64; y++)
+        for (int x = 1; x < 64; x++)
+            bad += (fb(x, y) & 0xffffff) != 0;
+    CHECK(bad == 0);
+}
+
 /* A frame dump drawn again gives the same picture. */
 static void test_dump_replay(void)
 {
@@ -284,6 +321,7 @@ int main(void)
     test_alpha_blend();
     test_triangle();
     test_dma_chain();
+    test_equal_depth();
     test_dump_replay();
     if (failures == 0)
         printf("test_gs: all checks passed\n");

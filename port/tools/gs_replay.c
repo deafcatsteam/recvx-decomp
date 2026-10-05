@@ -2,7 +2,11 @@
  * Draws a GS frame dump (F10 in the game, see gs_dump_frame) again and saves
  * what the display shows as a BMP picture:
  *
- *   gs_replay cvx_gsdump_000.bin out.bmp
+ *   gs_replay cvx_gsdump_000.bin out.bmp [page]
+ *
+ * The display often shows a copy of the previous frame (drawn by the game,
+ * not by this replay); page shows a 640-pixel-wide CT32 buffer at that frame
+ * buffer page instead, such as the one the frame is drawn into.
  */
 #include "../src/gs/gs.h"
 
@@ -21,8 +25,8 @@ int main(int argc, char **argv)
     int w, h;
     FILE *f;
 
-    if (argc != 3) {
-        fprintf(stderr, "usage: gs_replay DUMP OUT.bmp\n");
+    if (argc != 3 && argc != 4) {
+        fprintf(stderr, "usage: gs_replay DUMP OUT.bmp [PAGE]\n");
         return 2;
     }
     gs_reset();
@@ -30,6 +34,8 @@ int main(int argc, char **argv)
         fprintf(stderr, "gs_replay: cannot read %s (or made by another version)\n", argv[1]);
         return 1;
     }
+    if (argc == 4)
+        gs_set_display((uint64_t)atoi(argv[3]) | (10ull << 9), (2559ull << 32) | (479ull << 44));
     gs_read_display(pixels, &w, &h);
     f = fopen(argv[2], "wb");
     if (f == NULL)
