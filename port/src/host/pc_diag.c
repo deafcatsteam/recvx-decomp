@@ -112,6 +112,32 @@ static const char *symbol_for(uint32_t addr, uint32_t *offset)
     return syms[best].name;
 }
 
+/* Collects the return addresses of a stack from its instruction and frame
+ * pointers (the game is built with frame pointers). */
+static int collect_stack(uint32_t eip, uint32_t ebp, uint32_t *pcs)
+{
+    int n = 0;
+
+    pcs[n++] = eip;
+    while (n < MAX_FRAMES && ebp != 0 && !IsBadReadPtr((void *)(uintptr_t)ebp, 8)) {
+        uint32_t next = ((uint32_t *)(uintptr_t)ebp)[0];
+        pcs[n++] = ((uint32_t *)(uintptr_t)ebp)[1];
+        if (next <= ebp)
+            break;
+        ebp = next;
+    }
+    return n;
+}
+
+static void print_stack(const uint32_t *pcs, int n)
+{
+    for (int i = 0; i < n; i++) {
+        uint32_t off = 0;
+        const char *name = symbol_for(pcs[i], &off);
+        fprintf(stderr, "    %08x  %s+0x%x\n", pcs[i], name, off);
+    }
+}
+
 static void print_main_stack(void)
 {
     CONTEXT ctx;
@@ -122,25 +148,33 @@ static void print_main_stack(void)
     if (SuspendThread(main_thread) == (DWORD)-1)
         return;
     ctx.ContextFlags = CONTEXT_CONTROL;
-    if (GetThreadContext(main_thread, &ctx)) {
-        uint32_t ebp = ctx.Ebp;
-        pcs[n++] = ctx.Eip;
-        /* Walk the frame pointer chain (the game is built with frame pointers). */
-        while (n < MAX_FRAMES && ebp != 0 && !IsBadReadPtr((void *)(uintptr_t)ebp, 8)) {
-            uint32_t next = ((uint32_t *)(uintptr_t)ebp)[0];
-            pcs[n++] = ((uint32_t *)(uintptr_t)ebp)[1];
-            if (next <= ebp)
-                break;
-            ebp = next;
-        }
-    }
+    if (GetThreadContext(main_thread, &ctx))
+        n = collect_stack(ctx.Eip, ctx.Ebp, pcs);
     ResumeThread(main_thread);
+    print_stack(pcs, n);
+}
 
-    for (int i = 0; i < n; i++) {
-        uint32_t off = 0;
-        const char *name = symbol_for(pcs[i], &off);
-        fprintf(stderr, "    %08x  %s+0x%x\n", pcs[i], name, off);
-    }
+static LONG WINAPI crash_handler(EXCEPTION_POINTERS *info)
+{
+    EXCEPTION_RECORD *rec = info->ExceptionRecord;
+
+    fprintf(stderr, "\n*** crash: exception %08lx at %08lx", (unsigned long)rec->ExceptionCode,
+            (unsigned long)(uintptr_t)rec->ExceptionAddress);
+    if (rec->ExceptionCode == EXCEPTION_ACCESS_VIOLATION && rec->NumberParameters >= 2)
+        fprintf(stderr, " (%s address %08lx)", rec->ExceptionInformation[0] ? "writing" : "reading",
+                (unsigned long)rec->ExceptionInformation[1]);
+    fprintf(stderr, "; the game was in:\n");
+    uint32_t pcs[MAX_FRAMES];
+    int n = collect_stack(info->ContextRecord->Eip, info->ContextRecord->Ebp, pcs);
+    load_symbols();
+    print_stack(pcs, n);
+    pc_log_crash_done();
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+
+static void install_crash_handler(void)
+{
+    SetUnhandledExceptionFilter(crash_handler);
 }
 
 #else /* POSIX */
@@ -159,6 +193,23 @@ static void dump_stack(int sig)
     (void)sig;
     /* Skip this handler and the signal trampoline. */
     backtrace_symbols_fd(pcs + 2, n > 2 ? n - 2 : 0, 2);
+}
+
+static void crash_handler(int sig)
+{
+    fprintf(stderr, "\n*** crash: signal %d; the game was in:\n", sig);
+    dump_stack(sig);
+    pc_log_crash_done();
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+
+static void install_crash_handler(void)
+{
+    signal(SIGSEGV, crash_handler);
+    signal(SIGBUS, crash_handler);
+    signal(SIGFPE, crash_handler);
+    signal(SIGILL, crash_handler);
 }
 
 static void print_main_stack(void)
@@ -214,6 +265,7 @@ static void *diag_thread(void *arg)
 
 void pc_diag_start(void)
 {
+    install_crash_handler();
 #ifdef _WIN32
     DuplicateHandle(GetCurrentProcess(), GetCurrentThread(), GetCurrentProcess(), &main_thread,
                     0, FALSE, DUPLICATE_SAME_ACCESS);

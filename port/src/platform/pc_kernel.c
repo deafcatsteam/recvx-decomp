@@ -75,7 +75,7 @@ void pc_wait_vblank(void)
     if (no_vsync < 0)
         no_vsync = getenv("CVX_NO_VSYNC") != NULL;
 
-    if (!no_vsync) {
+    if (!no_vsync && !pc_turbo) {
         int64_t now = pc_host_time_ns();
         if (next_ns == 0 || now - next_ns > period_ns * 4)
             next_ns = now; /* first frame, or fell far behind: resync */

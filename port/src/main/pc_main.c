@@ -75,6 +75,7 @@ int main(int argc, char *argv[])
 {
     /* Keep the game's log lines in order with ours, even when redirected. */
     setvbuf(stdout, NULL, _IONBF, 0);
+    pc_log_start();
 
     unprotect_image();
     pc_window_open();

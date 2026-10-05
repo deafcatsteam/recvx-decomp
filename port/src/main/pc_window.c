@@ -4,13 +4,14 @@
  * Opens the game window, turns keyboard and game controller input into the
  * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and shows the
  * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
- * fullscreen, F12 saves a screenshot.
+ * fullscreen, F12 saves a screenshot, Tab held fast-forwards.
  *
  * Without SDL2, or with CVX_HEADLESS set, the game runs without a window.
  */
 #include "pc_window.h"
 
 #include "../gs/gs.h"
+#include "../host/pc_host.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -148,6 +149,7 @@ static void frame(void)
     while (SDL_PollEvent(&ev)) {
         switch (ev.type) {
         case SDL_QUIT:
+            pc_quit_requested = 1;
             exit(0);
         case SDL_CONTROLLERDEVICEADDED:
             if (controller == NULL)
@@ -171,6 +173,12 @@ static void frame(void)
         }
     }
     read_input();
+
+    /* Fast-forward: no pacing, and only every 8th frame is shown. */
+    static unsigned skipped;
+    pc_turbo = SDL_GetKeyboardState(NULL)[SDL_SCANCODE_TAB];
+    if (pc_turbo && (++skipped & 7) != 0)
+        return;
 
     int w, h;
     gs_read_display(pixels, &w, &h);

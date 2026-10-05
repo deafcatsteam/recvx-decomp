@@ -95,6 +95,7 @@ add_library(cvx_game_env INTERFACE)
 add_library(cvx_host STATIC
     port/src/host/pc_host.c
     port/src/host/pc_diag.c
+    port/src/host/pc_log.c
     port/src/platform/pc_hwregs.c
     port/src/gs/gs.c
     port/src/gs/gs_mem.c
