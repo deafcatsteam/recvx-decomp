@@ -108,4 +108,15 @@
 #define njArcSin(n)      ((Angle)NJM_RAD_ANG(asinf  ((Float)(n)) ))
 #define njArcTan2(y,x)   ((Angle)NJM_RAD_ANG(atan2f ((Float)(y),(Float)(x)) ))
 
+/*
+ * Reads component i (0, 1, 2 in that order) of a motion key. The original
+ * code increments the `key` array itself, which CodeWarrior accepts but
+ * standard C does not; the PC build reads the element directly instead.
+ */
+#ifdef PLATFORM_PC
+#define MKEY(p, i) ((p)->key[i])
+#else
+#define MKEY(p, i) (*(p)->key++)
+#endif
+
 #endif

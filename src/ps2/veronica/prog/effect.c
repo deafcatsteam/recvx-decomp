@@ -1772,7 +1772,12 @@ void bhDrawTrsEffect2D(unsigned int* owp, int ct)
 } 
 
 // 100% matching!
+/* effect.h declares this non-static, which GCC rejects for a static definition. */
+#ifdef PLATFORM_PC
+void bhDrawThunder()
+#else
 static void bhDrawThunder()
+#endif
 {
     NJS_POLYGON_VTX* p; 
     int i;              
