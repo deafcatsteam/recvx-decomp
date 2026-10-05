@@ -61,6 +61,9 @@ typedef port_u128 Uint128;
 #define _TYPEDEF_Sint128
 typedef port_u128 Sint128;
 
+/* PC platform hooks called from game code under #ifdef PLATFORM_PC. */
+void pc_wait_vblank(void);
+
 /* CodeWarrior / EE-gcc specific keywords. */
 #define __inline__ inline
 

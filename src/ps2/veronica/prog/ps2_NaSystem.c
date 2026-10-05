@@ -75,11 +75,20 @@ void Ps2SwapDBuff()
 
     EorFunc(); 
     
+#ifdef PLATFORM_PC
+    /* The V-blank interrupt bumps Ps2_vcount; on PC the wait itself drives
+       it, which also paces the game at 30 frames per second. */
+    while (Ps2_vcount < 2)
+    {
+        pc_wait_vblank();
+    }
+#else
     while (Ps2_vcount < 2) 
     { 
         asm("nop");
         asm("nop");
     } 
+#endif
     
     PS2_swap(); 
     
@@ -89,9 +98,14 @@ void Ps2SwapDBuff()
     
     Ps2_vcount = 0; 
 
+#ifdef PLATFORM_PC
+    /* Debug print of the EE timer 0 count (0x10000000), reset each frame. */
+    *T0_COUNT = 0;
+#else
     printf("TICK = %d\n", *(volatile unsigned int*)SR_CU0); 
     
     *(volatile unsigned int*)SR_CU0 = 0; 
+#endif
     
     VsyncFunc(); 
 } 

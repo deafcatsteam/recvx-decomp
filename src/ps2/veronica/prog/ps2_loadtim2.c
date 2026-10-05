@@ -268,7 +268,11 @@ int LoadToVram(unsigned long tbp, u_long128* addr, int tbw, int psm, int pos, in
 // 100% matching!
 void *UncAddr(void *val)
 {
+#ifdef PLATFORM_PC
+    return val;
+#else
     return (void*)(((u_int)val & UNCMASK)|UNCBASE);
+#endif
 }
 
 // 99.83% matching

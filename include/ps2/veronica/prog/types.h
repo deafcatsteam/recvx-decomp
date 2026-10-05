@@ -2468,7 +2468,12 @@ extern unsigned char port_scratchpad[0x4000];
 #define DISP_HEIGHT 480
 
 #define UNCACHED_BASE 0x20000000
+#ifdef PLATFORM_PC
+/* PC memory has no uncached mirror: use the address as is. */
+#define UNCACHED(x) ((u_int)(x))
+#else
 #define UNCACHED(x) ((u_int)(x)|UNCACHED_BASE)
+#endif
 
 // TODO: include the following define from cpureg.h
 #define	SR_CU0		0x10000000	/* Coprocessor 0 usable */

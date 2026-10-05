@@ -2,7 +2,8 @@
  * PC replacements for the rest of the Sony PS2 libraries the game calls:
  * DVD, IOP communication, GS setup, DMA, controllers and memory cards.
  *
- * DVD reads are served from the disc image (pc_disc.c). The controller is
+ * DVD reads are served from the disc image (pc_disc.c); the IOP side lives in
+ * pc_iop.c. The controller is
  * reported as a DualShock 2 whose state comes from pc_pad (filled by the
  * window/input layer). The rest are placeholders that report success, so the
  * game's init sequences run through; graphics, sound and memory cards get
@@ -49,8 +50,10 @@ int sceCdSearchFile(sceCdlFILE *fp, const char *name)
     unsigned int lsn, size;
 
     if (!pc_disc_find(name, &lsn, &size)) {
-        fprintf(stderr, "cdvd: '%s' not found on the disc\n", name);
-        return 0;
+        /* The game retries forever, as a PS2 would wait for the right disc. */
+        fprintf(stderr, "cdvd: '%s' not found on the disc. Is CVX_ISO an image of "
+                        "Resident Evil Code: Veronica X (SLUS-20184)?\n", name);
+        exit(1);
     }
     fp->lsn = lsn;
     fp->size = size;
@@ -86,50 +89,7 @@ int sceCdStStart(u_int lsn, sceCdRMode *mode) { return 1; }
 
 int sceFsReset(void) { return 0; }
 
-/* ---- IOP communication ------------------------------------------------- */
-
-void sceSifInitRpc(u_int mode) {}
-int sceSifRebootIop(const char *img) { return 1; }
-int sceSifSyncIop(void) { return 1; }
-int sceSifInitIopHeap(void) { return 0; }
-int sceSifLoadModule(const char *filename, int args, const char *argp) { return 1; }
-
-void *sceSifAllocIopHeap(u_int size)
-{
-    /* Addresses in IOP memory are never dereferenced on the EE side. */
-    static unsigned int next = 0x100000;
-    unsigned int addr = next;
-    next += (size + 63) & ~63u;
-    return (void *)addr;
-}
-
-static int sif_serve_dummy;
-
-int sceSifBindRpc(sceSifClientData *bd, u_int request, u_int mode)
-{
-    bd->command = request;
-    bd->serve = (sceSifServeData *)&sif_serve_dummy;
-    return 0;
-}
-
-int sceSifCallRpc(sceSifClientData *bd, u_int fno, u_int mode, void *send, int ssize,
-                  void *receive, int rsize, sceSifEndFunc end_function, void *end_param)
-{
-    /* TODO: route the sound driver's requests to a PC sound driver. For now
-     * every call completes at once without doing anything. */
-    if (end_function != NULL)
-        end_function(end_param);
-    return 0;
-}
-
-int sceSifGetOtherData(sceSifReceiveData *rd, void *src, void *dest, int size, u_int mode)
-{
-    return 0;
-}
-
-u_int sceSifSetDma(sceSifDmaData *sdd, int len) { return 1; }
-u_int isceSifSetDma(sceSifDmaData *sdd, int len) { return 1; }
-int sceSifDmaStat(u_int id) { return -1; /* transfer finished */ }
+/* ---- IOP communication: see pc_iop.c ---------------------------------- */
 
 /* ---- Sound libraries on the IOP --------------------------------------- */
 
@@ -146,7 +106,7 @@ int sceGsSyncPath(int mode, u_short timeout) { return 0; }
 
 int sceGsSyncV(int mode)
 {
-    pc_vblank();
+    pc_wait_vblank();
     field ^= 1;
     return field;
 }

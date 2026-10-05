@@ -41,3 +41,4 @@ config/undefined_syms_auto.txt
 !include/recvx-decomp-ps2_sdk303/.gitkeep
 # PC port build output
 build-pc
+build-dbg

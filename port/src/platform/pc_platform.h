@@ -5,4 +5,11 @@
 /* Runs the game's V-blank interrupt handlers; called once per frame. */
 void pc_vblank(void);
 
+/* Waits for the next 60 Hz tick, then runs pc_vblank(). Setting the
+ * CVX_NO_VSYNC environment variable turns the wait off (tests, benchmarks). */
+void pc_wait_vblank(void);
+
+/* Called once per V-blank: lets the window/input layer pump its events. */
+extern void (*pc_frame_hook)(void);
+
 #endif

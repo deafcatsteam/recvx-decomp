@@ -8,6 +8,8 @@
  */
 #include <eekernel.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
 
 #include "pc_platform.h"
 
@@ -59,6 +61,38 @@ void pc_vblank(void)
         if (intc_enabled[cause] && intc_handler[cause] != NULL)
             intc_handler[cause](cause);
     }
+}
+
+void (*pc_frame_hook)(void);
+
+void pc_wait_vblank(void)
+{
+    /* NTSC field rate: 60000/1001 Hz. */
+    static const int64_t period_ns = 1000000000LL * 1001 / 60000;
+    static int64_t next_ns;
+    static int no_vsync = -1;
+    struct timespec now;
+    int64_t now_ns;
+
+    if (no_vsync < 0)
+        no_vsync = getenv("CVX_NO_VSYNC") != NULL;
+
+    if (!no_vsync) {
+        clock_gettime(CLOCK_MONOTONIC, &now);
+        now_ns = (int64_t)now.tv_sec * 1000000000 + now.tv_nsec;
+        if (next_ns == 0 || now_ns - next_ns > period_ns * 4)
+            next_ns = now_ns; /* first frame, or fell far behind: resync */
+        next_ns += period_ns;
+        if (next_ns > now_ns) {
+            struct timespec wait = { (time_t)((next_ns - now_ns) / 1000000000),
+                                     (long)((next_ns - now_ns) % 1000000000) };
+            nanosleep(&wait, NULL);
+        }
+    }
+
+    if (pc_frame_hook != NULL)
+        pc_frame_hook();
+    pc_vblank();
 }
 
 void ExitHandler(void) {}
