@@ -23,6 +23,24 @@ extern volatile uint32_t pc_diag_vblanks;
  * diagnostics (reset every second). */
 extern volatile int64_t pc_diag_wait_ns, pc_diag_show_ns;
 
+/* ---- Settings file cvx.ini (pc_config.c) ---- */
+
+/* Reads cvx.ini (or writes a commented one); call first in main(). Settings
+ * read as environment variables (iso, saves, ...) are set from there. */
+void pc_config_load(void);
+
+/* Reads settings from text in the cvx.ini format (used by the tests). */
+void pc_config_parse(const char *text);
+
+/* Prints what pc_config_load had to say, once the log is open. */
+void pc_config_report(void);
+
+/* The value of a setting, or NULL when it is not in the file. */
+const char *pc_config_get(const char *name);
+
+/* A yes/no setting, or otherwise when it is not set. */
+int pc_config_yes(const char *name, int otherwise);
+
 /* Copies the console output into cvx_log.txt and keeps the console open when
  * the program ends unexpectedly (see pc_log.c). Call first in main(). */
 void pc_log_start(void);

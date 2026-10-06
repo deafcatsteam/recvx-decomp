@@ -34,6 +34,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
 - [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
+- [x] Fichier de réglages `cvx.ini` (plein écran, taille de fenêtre, touches, chemins, son, vibration), testé
 
 ## Lancer le jeu
 
@@ -49,7 +50,32 @@ CVX_ISO=/chemin/vers/cvx.iso ./cvx_pc          # Linux / WSL
 set CVX_ISO=C:\Jeux\cvx.iso
 cvx_pc.exe
 ```
-(Windows, invite de commandes ; ou mets simplement l'ISO renommée `cvx.iso` à côté de l'exe.)
+(Windows, invite de commandes ; ou mets simplement l'ISO renommée `cvx.iso` à côté de l'exe,
+ou écris son chemin dans `cvx.ini`, voir plus bas.)
+
+## Réglages (`cvx.ini`)
+
+Au premier lancement, le jeu crée un fichier `cvx.ini` à côté de l'exe, avec
+tous les réglages désactivés (une ligne qui commence par `;` ne compte pas).
+Ouvre-le avec le Bloc-notes, enlève le `;` devant ce que tu veux changer, et
+relance le jeu :
+
+| Réglage | Effet |
+|---|---|
+| `iso = C:\Jeux\cvx.iso` | Chemin de l'ISO (par défaut `cvx.iso` à côté de l'exe) |
+| `saves = saves` | Dossier des sauvegardes |
+| `movies = movies` | Dossier des vidéos HD de remplacement |
+| `fullscreen = yes` | Démarrer en plein écran (F11 change toujours) |
+| `window = 1280x960` | Taille de la fenêtre au démarrage |
+| `filter = smooth` | Image lissée quand elle est agrandie (`sharp`, par défaut : pixels nets) |
+| `sound = no` | Pas de son |
+| `vibration = no` | Pas de vibration de la manette |
+| `key_cross = Space` | Touches du clavier, une ligne par bouton (`key_up`, `key_stick_left`, `key_l1`, `key_start`, `key_fast_forward`…, toutes listées dans le fichier). Plusieurs touches : `Space, Return` ; rien après le `=` : aucune touche |
+
+Les variables du tableau suivant peuvent aussi y être écrites telles quelles
+(`CVX_GS_THREADS = 4`). Une variable réglée à la main l'emporte sur le
+fichier. Un réglage mal écrit est signalé au début de `cvx_log.txt` (lignes
+`config:`). Pour revenir aux réglages d'origine, supprime `cvx.ini`.
 
 Variables utiles :
 
@@ -77,7 +103,8 @@ côté de l'exe. En cas de plantage, la console indique où était le jeu et
 reste ouverte jusqu'à un appui sur Entrée : envoie ce fichier pour signaler
 un problème.
 
-Touches (manette PS2 émulée ; pour les vraies manettes, voir plus bas) :
+Touches par défaut (manette PS2 émulée ; elles se changent dans `cvx.ini` ;
+pour les vraies manettes, voir plus bas) :
 
 | Clavier | Bouton PS2 | | Clavier | Bouton PS2 |
 |---|---|---|---|---|

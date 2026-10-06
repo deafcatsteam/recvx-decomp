@@ -5,7 +5,8 @@
  * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and shows the
  * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
  * fullscreen, F12 saves a screenshot, F10 dumps a frame of the GS (see
- * gs_dump_frame), Tab held fast-forwards.
+ * gs_dump_frame), Tab held fast-forwards. The keys, the window's size and
+ * a few other things can be changed in cvx.ini (see pc_config.c).
  *
  * Without SDL2, or with CVX_HEADLESS set, the game runs without a window.
  */
@@ -54,7 +55,9 @@ static struct {
     int sticks; /* plain joystick: bit n, stick n is centred when plugged in */
 } pads[MAX_PADS];
 static int npads;
-static int rumbling;
+static int rumbling, vibration;
+static int turbo;   /* fast-forward key held */
+static int smooth;  /* filter = smooth: the picture is smoothed when enlarged */
 static unsigned int motor_sets, motor_idle;
 static SDL_Texture *screen;
 static int screen_w, screen_h;
@@ -63,26 +66,83 @@ static int overlay_w, overlay_h;
 static unsigned int overlay_serial;
 static uint32_t pixels[GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H];
 
+/* Keyboard: what each key does, from the key_... settings of cvx.ini or
+ * these defaults. The stick directions and fast-forward are not buttons. */
+enum { STICK_UP = 1, STICK_DOWN, STICK_LEFT, STICK_RIGHT, FAST_FORWARD };
+
 static const struct {
-    SDL_Scancode key;
+    const char *setting;
     unsigned short button;
-} key_map[] = {
-    { SDL_SCANCODE_UP, PAD_UP },
-    { SDL_SCANCODE_DOWN, PAD_DOWN },
-    { SDL_SCANCODE_LEFT, PAD_LEFT },
-    { SDL_SCANCODE_RIGHT, PAD_RIGHT },
-    { SDL_SCANCODE_RETURN, PAD_START },
-    { SDL_SCANCODE_BACKSPACE, PAD_SELECT },
-    { SDL_SCANCODE_SPACE, PAD_CROSS },     /* action / confirm */
-    { SDL_SCANCODE_LSHIFT, PAD_SQUARE },   /* run */
-    { SDL_SCANCODE_ESCAPE, PAD_CIRCLE },   /* cancel */
-    { SDL_SCANCODE_E, PAD_TRIANGLE },
-    { SDL_SCANCODE_Q, PAD_L1 },
-    { SDL_SCANCODE_LCTRL, PAD_R1 },        /* aim */
-    { SDL_SCANCODE_1, PAD_L2 },
-    { SDL_SCANCODE_3, PAD_R2 },
+    int other;
+    const char *keys;
+} key_actions[] = {
+    { "key_up", PAD_UP, 0, "Up" },
+    { "key_down", PAD_DOWN, 0, "Down" },
+    { "key_left", PAD_LEFT, 0, "Left" },
+    { "key_right", PAD_RIGHT, 0, "Right" },
+    { "key_stick_up", 0, STICK_UP, "W" },
+    { "key_stick_down", 0, STICK_DOWN, "S" },
+    { "key_stick_left", 0, STICK_LEFT, "A" },
+    { "key_stick_right", 0, STICK_RIGHT, "D" },
+    { "key_cross", PAD_CROSS, 0, "Space" },        /* action / confirm */
+    { "key_circle", PAD_CIRCLE, 0, "Escape" },     /* cancel */
+    { "key_square", PAD_SQUARE, 0, "Left Shift" }, /* run */
+    { "key_triangle", PAD_TRIANGLE, 0, "E" },
+    { "key_l1", PAD_L1, 0, "Q" },
+    { "key_r1", PAD_R1, 0, "Left Ctrl" },          /* aim */
+    { "key_l2", PAD_L2, 0, "1" },
+    { "key_r2", PAD_R2, 0, "3" },
+    { "key_l3", PAD_L3, 0, "" },
+    { "key_r3", PAD_R3, 0, "" },
+    { "key_start", PAD_START, 0, "Return" },
+    { "key_select", PAD_SELECT, 0, "Backspace" },
+    { "key_fast_forward", 0, FAST_FORWARD, "Tab" },
 };
 
+#define MAX_BINDINGS 64
+static struct {
+    SDL_Scancode key;
+    int action; /* index in key_actions */
+} bindings[MAX_BINDINGS];
+static int nbindings;
+
+static void bind_keys(void)
+{
+    for (size_t a = 0; a < sizeof(key_actions) / sizeof(key_actions[0]); a++) {
+        const char *keys = pc_config_get(key_actions[a].setting);
+
+        if (keys == NULL)
+            keys = key_actions[a].keys;
+        /* several keys: "Space, Return" */
+        while (*keys) {
+            char name[32];
+            size_t len = strcspn(keys, ",");
+            const char *s = keys, *e = keys + len;
+            SDL_Scancode key;
+
+            while (s < e && *s == ' ')
+                s++;
+            while (e > s && e[-1] == ' ')
+                e--;
+            keys += len + (keys[len] == ',');
+            if (e == s)
+                continue;
+            snprintf(name, sizeof(name), "%.*s", (int)(e - s), s);
+            key = SDL_GetScancodeFromName(name);
+            if (key == SDL_SCANCODE_UNKNOWN) {
+                printf("config: unknown key '%s' for %s\n", name, key_actions[a].setting);
+                continue;
+            }
+            if (nbindings < MAX_BINDINGS) {
+                bindings[nbindings].key = key;
+                bindings[nbindings].action = (int)a;
+                nbindings++;
+            }
+        }
+    }
+}
+
+/* Settings key_... that match no action (a typo), said once. */
 static const struct {
     SDL_GameControllerButton pad;
     unsigned short button;
@@ -197,6 +257,8 @@ static void rumble(void)
 {
     Uint16 lo = (Uint16)(pc_pad_motor[1] * 257), hi = pc_pad_motor[0] ? 0xffff : 0;
 
+    if (!vibration)
+        return;
     if (pc_pad_motor_sets != motor_sets) {
         motor_sets = pc_pad_motor_sets;
         motor_idle = 0;
@@ -217,15 +279,19 @@ static void read_input(void)
     unsigned short held = 0;
     unsigned char lx = 0x80, ly = 0x80, rx = 0x80, ry = 0x80;
 
-    for (size_t i = 0; i < sizeof(key_map) / sizeof(key_map[0]); i++) {
-        if (keys[key_map[i].key])
-            held |= key_map[i].button;
+    turbo = 0;
+    for (int i = 0; i < nbindings; i++) {
+        if (!keys[bindings[i].key])
+            continue;
+        held |= key_actions[bindings[i].action].button;
+        switch (key_actions[bindings[i].action].other) {
+        case STICK_UP: ly = 0x00; break;
+        case STICK_DOWN: ly = 0xff; break;
+        case STICK_LEFT: lx = 0x00; break;
+        case STICK_RIGHT: lx = 0xff; break;
+        case FAST_FORWARD: turbo = 1; break;
+        }
     }
-    /* WASD as the left stick. */
-    if (keys[SDL_SCANCODE_A]) lx = 0x00;
-    if (keys[SDL_SCANCODE_D]) lx = 0xff;
-    if (keys[SDL_SCANCODE_W]) ly = 0x00;
-    if (keys[SDL_SCANCODE_S]) ly = 0xff;
 
     for (int p = 0; p < npads; p++) {
         SDL_GameController *gc = pads[p].gc;
@@ -360,7 +426,7 @@ static void frame(void)
 
     /* Fast-forward: no pacing, and only every 8th frame is shown. */
     static unsigned skipped;
-    pc_turbo = SDL_GetKeyboardState(NULL)[SDL_SCANCODE_TAB];
+    pc_turbo = turbo;
     if (pc_turbo && (++skipped & 7) != 0)
         return;
 
@@ -371,6 +437,8 @@ static void frame(void)
                 SDL_DestroyTexture(screen);
             screen = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
                                        w, h);
+            if (screen != NULL && smooth)
+                SDL_SetTextureScaleMode(screen, SDL_ScaleModeLinear);
             screen_w = w;
             screen_h = h;
         }
@@ -432,8 +500,38 @@ static void open_audio(void)
     SDL_PauseAudioDevice(dev, 0);
 }
 
+/* fullscreen, window, filter and vibration from cvx.ini. */
+static Uint32 window_settings(int *w, int *h)
+{
+    const char *size = pc_config_get("window");
+    const char *filter = pc_config_get("filter");
+
+    *w = 1280;
+    *h = 960;
+    if (size != NULL && size[0] != 0) {
+        int sw, sh;
+        if (sscanf(size, "%d x %d", &sw, &sh) == 2 && sw >= 320 && sh >= 240 && sw <= 16384 && sh <= 16384) {
+            *w = sw;
+            *h = sh;
+        } else {
+            printf("config: window should be like 1280x960, not '%s'\n", size);
+        }
+    }
+    if (filter != NULL && filter[0] != 0) {
+        if (SDL_strcasecmp(filter, "smooth") == 0)
+            smooth = 1;
+        else if (SDL_strcasecmp(filter, "sharp") != 0)
+            printf("config: filter should be sharp or smooth, not '%s'\n", filter);
+    }
+    vibration = pc_config_yes("vibration", 1);
+    return pc_config_yes("fullscreen", 0) ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
+}
+
 int pc_window_open(void)
 {
+    Uint32 flags;
+    int w, h;
+
     if (getenv("CVX_HEADLESS") != NULL)
         return 0;
     /* Keep Ctrl+C working even while the game is busy between frames. */
@@ -446,8 +544,9 @@ int pc_window_open(void)
         fprintf(stderr, "window: SDL_Init failed (%s), running without a window\n", SDL_GetError());
         return 0;
     }
+    flags = window_settings(&w, &h);
     window = SDL_CreateWindow("Resident Evil Code: Veronica X", SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED, 1280, 960, SDL_WINDOW_RESIZABLE);
+                              SDL_WINDOWPOS_CENTERED, w, h, SDL_WINDOW_RESIZABLE | flags);
     if (window == NULL) {
         fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
         SDL_Quit();
@@ -463,6 +562,7 @@ int pc_window_open(void)
         return 0;
     }
     printf("window: SDL %s video\n", SDL_GetCurrentVideoDriver());
+    bind_keys();
     load_mappings();
     open_audio();
     pc_frame_hook = frame;

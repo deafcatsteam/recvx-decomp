@@ -107,6 +107,7 @@ add_library(cvx_host STATIC
     port/src/host/pc_host.c
     port/src/host/pc_diag.c
     port/src/host/pc_log.c
+    port/src/host/pc_config.c
     port/src/host/pc_audio.c
     port/src/host/pc_sound.c
     port/src/host/pc_memcard.c
@@ -341,6 +342,10 @@ target_link_libraries(test_memcard PRIVATE cvx_game cvx_game_env m)
 add_test(NAME memory_card COMMAND test_memcard)
 set_tests_properties(memory_card PROPERTIES
     ENVIRONMENT CVX_SAVES=${CMAKE_BINARY_DIR}/test_saves)
+
+add_executable(test_config port/tests/test_config.c)
+target_link_libraries(test_config PRIVATE cvx_host)
+add_test(NAME config COMMAND test_config)
 
 add_executable(test_sound port/tests/test_sound.c)
 target_link_libraries(test_sound PRIVATE cvx_game cvx_game_env m)
