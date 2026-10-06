@@ -68,6 +68,9 @@ static const char template_text[] =
     "\n"
     "; Son et vibration de la manette\n"
     ";sound = no\n"
+    "; Son 3D en jeu : headphones (casque : devant, derrière, côtés),\n"
+    "; speakers (enceintes : toute la largeur), off (comme la PS2)\n"
+    ";sound_3d = headphones\n"
     ";vibration = no\n"
     "\n"
     "; Touches du clavier. Noms : A..Z, 0..9, Space, Return, Escape, Tab,\n"
@@ -215,7 +218,7 @@ static int known(const char *name)
 {
     static const char *const names[] = {
         "iso", "saves", "movies", "fullscreen", "window", "filter", "sound", "vibration", "renderer",
-        "upscale", "launcher", "widescreen",
+        "upscale", "launcher", "widescreen", "sound_3d",
         /* the keys, see key_actions in pc_window.c */
         "key_up", "key_down", "key_left", "key_right", "key_stick_up", "key_stick_down",
         "key_stick_left", "key_stick_right", "key_cross", "key_circle", "key_square",

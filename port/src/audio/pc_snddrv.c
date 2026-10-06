@@ -92,6 +92,7 @@ typedef struct {
     uint32_t flags;
     uint8_t se, note, vol, pan;
     uint16_t pitch;
+    float dir[4]; /* where the sound is, [3] = 1 when known (3D sound) */
 } TqSlot;
 
 typedef struct {
@@ -99,6 +100,9 @@ typedef struct {
 } SeEntry;
 
 static TqSlot tq[SE_PORTS][16];
+/* Directions given by pc_snddrv_dir, for the next request of each slot
+ * (and each sequence port). */
+static float dir_next[SE_PORTS][16][4], bgm_dir_next[HSEQ_PORTS][4];
 static uint16_t tq_busy[SE_PORTS];
 static SeEntry *se_tbl[SE_PORTS];
 static int se_max[SE_PORTS] = { -1, -1, -1, -1, -1, -1 };
@@ -148,6 +152,7 @@ static void tq_req(int port, int se, int ch, int vol, int pan, int pitch)
     t->vol = (uint8_t)vol;
     t->pan = (uint8_t)pan;
     t->pitch = (uint16_t)pitch;
+    memcpy(t->dir, dir_next[port][ch], sizeof(t->dir));
     /* a busy slot is cut first (TQ_CANCEL), then restarted */
     t->flags = (t->flags & TQ_ACTIVE ? TQ_CANCEL : 0) | TQ_ACTIVE | TQ_START | TQ_VOL | TQ_PAN | TQ_PITCH;
     tq_busy[port] |= 1 << ch;
@@ -168,6 +173,7 @@ static void tq_chg(int port, int se, int ch, int vol, int pan, int pitch)
     }
     if (pan >= 0) {
         t->pan = (uint8_t)pan;
+        memcpy(t->dir, dir_next[port][ch], sizeof(t->dir));
         t->flags |= TQ_PAN;
     }
     if (pitch >= 0) {
@@ -220,6 +226,7 @@ static void tq_tick(void)
             if (t->flags & TQ_START) {
                 hsyn_volume(sp, c, 127);
                 hsyn_program(sp, c, t->se);
+                hsyn_dir(sp, c, t->dir[3] != 0.0f ? t->dir : NULL);
                 hsyn_note_on(sp, c, t->note, 127);
                 t->flags &= ~TQ_START;
             }
@@ -230,8 +237,10 @@ static void tq_tick(void)
             }
             if (t->flags & TQ_VOL)
                 hsyn_volume(sp, c, t->vol > 127 ? 127 : t->vol);
-            if (t->flags & TQ_PAN)
+            if (t->flags & TQ_PAN) {
                 hsyn_pan(sp, c, t->pan > 127 ? 127 : t->pan);
+                hsyn_dir(sp, c, t->dir[3] != 0.0f ? t->dir : NULL);
+            }
             if (t->flags & TQ_PITCH)
                 hsyn_bend(sp, c, t->pitch > 16383 ? 16383 : t->pitch);
             t->flags &= ~(TQ_VOL | TQ_PAN | TQ_PITCH);
@@ -288,6 +297,7 @@ static void bgm_req(int port, int bank, int vol, int block)
     }
     hsyn_port_volume(port, vol);
     hsyn_port_pan(port, 64);
+    hsyn_port_dir(port, bgm_dir_next[port][3] != 0.0f ? bgm_dir_next[port] : NULL);
     hsyn_port_bend(port, 0x2000);
     if (!hseq_start(port, sq[bank].data, sq[bank].size, block)) {
         printf("snd: sequence bank %d has no block %d\n", bank, block);
@@ -511,6 +521,7 @@ static void do_cmd(const uint8_t *p, const PcIopView *iop)
         if (port < HSEQ_PORTS && bgm[port].on) {
             hsyn_port_volume(port, p[4]);
             hsyn_port_pan(port, p[5]);
+            hsyn_port_dir(port, bgm_dir_next[port][3] != 0.0f ? bgm_dir_next[port] : NULL);
             hsyn_port_bend(port, p[7] << 7 | p[6]);
         }
         break;
@@ -545,6 +556,29 @@ static void do_cmd(const uint8_t *p, const PcIopView *iop)
         /* the rest: not done yet */
         break;
     }
+}
+
+void pc_snddrv_dir(int midi, int port, int ch, const float *dir)
+{
+    float *d;
+
+    if (midi) {
+        if (port < 0 || port >= HSEQ_PORTS)
+            return;
+        d = bgm_dir_next[port];
+    } else {
+        if (port < 0 || port >= SE_PORTS)
+            return;
+        d = dir_next[port][ch & 15];
+    }
+    if (dir == NULL) {
+        d[3] = 0.0f;
+        return;
+    }
+    d[0] = dir[0];
+    d[1] = dir[1];
+    d[2] = dir[2];
+    d[3] = 1.0f;
 }
 
 void pc_snddrv_requests(const unsigned char *buf, int size, const PcIopView *iop)

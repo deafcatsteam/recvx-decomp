@@ -59,13 +59,14 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
   de la répartition gauche/droite : c'est elle qu'on remplacera pour le son
   spatial moderne, au choix **HRTF** (son 3D au casque, par exemple avec
   OpenAL Soft ou Steam Audio) ou **5.1/7.1** (plus de canaux de sortie).
-  Ce qui reste à faire pour en profiter :
-  - donner leur position aux sons : le jeu la connaît (`Get3DSoundParameter`,
-    `SetupSeGenericParm`, `PlayVoiceEx2` dans `sdfunc.c` reçoivent la
-    position de la source et celle de la caméra) ; un petit relais PC peut
-    la transmettre au lieu du seul panoramique ;
-  - sortir chaque bruitage du synthétiseur comme une voix séparée du moteur
-    (aujourd'hui `pc_hsyn.c` mélange ses 48 voix lui-même) ;
+  **Son 3D** ✔ (`sound_3d`, `src/host/pc_spatial.c`) : les endroits du
+  jeu qui placent un bruit (pas et armes du joueur, ennemis, objets,
+  événements) donnent aussi sa position (`pc_snd_at`, `src/game/pc_sound3d.c`),
+  qui suit la demande jusqu'au pilote et au synthétiseur ; chaque voix est
+  alors placée au casque (délai entre les oreilles, ombre de la tête,
+  derrière plus sourd) ou sur toute la largeur des enceintes. Reste :
+  - 5.1/7.1 (plus de canaux de sortie) et des HRTF mesurées (élévation) ;
+  - les voix ADX placées (`PlayVoiceEx2`), que le jeu ne panoramique pas ;
   - la réverbération par pièce : celle du SPU2 est refaite
     (`src/audio/pc_spu2rev.c`, niveau par salle venant de `Room_SoundEnv`) ;
     un effet moderne pourrait la remplacer au même endroit ;
@@ -98,8 +99,8 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 
 ## Phase C — Son et confort
 
-- Son 3D positionnel (HRTF au casque, 5.1/7.1), réverbération moderne par
-  pièce : voir « Ce qui prépare déjà la suite » ci-dessus.
+- Son 3D ✔ au casque et aux enceintes ; reste 5.1/7.1 et une réverbération
+  moderne par pièce : voir « Ce qui prépare déjà la suite » ci-dessus.
 - Musiques et voix de meilleure qualité (remplacement des ADX par des
   fichiers refaits, comme pour les vidéos).
 - Contrôles modernes : déplacement libre, visée souris, touches configurables.

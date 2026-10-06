@@ -13,6 +13,7 @@
 #include "ps2_dummy.h"
 #include "main.h"
 #include "njplus.h"
+#include "sdfunc.h"
 
 #include "../src/gs/gs.h"
 #include "../src/gs/gs_mem.h"
@@ -188,6 +189,36 @@ static void test_skin(void)
 }
 
 int pc_widescreen_on(unsigned int tk_flg, unsigned int ts_flg);
+extern NJS_POINT3 CameraPos; /* sdfunc.c */
+
+/* 3D sound (pc_sound3d.c): a sound's position, seen from the camera, has
+ * the same left and right as the game's own pan (Get3DSoundParameter), and
+ * tells in front from behind. It lasts one frame and is used once. */
+static void test_sound3d(void)
+{
+    NJS_POINT3 right = { 10, 0, 0 }, front = { 0, 0, -10 }, behind = { 0, 0, 10 }, up = { 0, 10, -10 };
+    char pan, vol;
+    float dist, d[3];
+
+    njUnitMatrix(cam.mtx);
+    cam.ay = 0;
+    CameraPos.x = CameraPos.y = CameraPos.z = 0;
+    Get3DSoundParameter(&CameraPos, &right, &pan, &vol, &dist, 1);
+    printf("sound on the right: game pan %d\n", pan);
+    CHECK(pan > 0);
+    pc_snd_at(&right.x);
+    CHECK(pc_snd_take(d) && d[0] > 9.9f && fabsf(d[1]) < 0.1f && fabsf(d[2]) < 0.1f);
+    pc_snd_at(&front.x);
+    CHECK(pc_snd_take(d) && d[2] > 9.9f);
+    pc_snd_at(&behind.x);
+    CHECK(pc_snd_take(d) && d[2] < -9.9f);
+    pc_snd_at(&up.x);
+    CHECK(pc_snd_take(d) && d[1] > 9.9f);
+    CHECK(!pc_snd_take(d));
+    pc_snd_at(&right.x);
+    Ps2_sys_cnt++;
+    CHECK(!pc_snd_take(d));
+}
 
 /* 16:9 (pc_widescreen.c): the 3D is drawn 3/4 as wide, and what was just
  * off the sides in 4:3 is now drawn, not culled or cut away. */
@@ -324,6 +355,7 @@ int main(void)
     CHECK(fb(320, 300) != 0);
 
     test_widescreen(quad);
+    test_sound3d();
     test_skin();
 
     if (failures == 0)

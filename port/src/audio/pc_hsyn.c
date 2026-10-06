@@ -23,6 +23,8 @@
  */
 #include "pc_hsyn.h"
 
+#include "../host/pc_spatial.h"
+
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -38,12 +40,14 @@ typedef struct {
 typedef struct {
     uint8_t prog, vol, pan, expr;
     uint16_t bend;
+    float dir[4]; /* 3D sound: where it is, [3] = 1 when known */
 } Chan;
 
 typedef struct {
     int master;       /* 0-0x3fff */
     uint8_t vol, pan; /* port volume, pan offset (centre 64) */
     uint16_t bend;    /* added to every channel's bend, 0x2000 centre */
+    float dir[4];     /* for the channels without their own */
 } Port;
 
 enum { ENV_OFF, ENV_ATTACK, ENV_DECAY, ENV_SUSTAIN, ENV_RELEASE };
@@ -74,6 +78,10 @@ typedef struct {
     int pan;      /* -64..63 before the channel's pan */
     int32_t vol_l, vol_r;
     int fx;   /* sent to the reverb of this SPU2 core + 1, 0 if not */
+    /* 3D sound for headphones: vol_c is the gain before any pan */
+    int spatial;
+    int32_t vol_c;
+    PcSpatial sp;
 } Voice;
 
 static Bank banks[HSYN_PORTS];
@@ -420,6 +428,25 @@ static void voice_volume(Voice *v)
         pan = 127;
     g = (int64_t)v->gain * c->vol * c->expr * pt->vol / (127 * 127 * 127);
     g = g * pt->master / 0x3fff * master / 0x3fff;
+    v->spatial = 0;
+    if (c->dir[3] != 0.0f || pt->dir[3] != 0.0f) {
+        /* 3D sound: the direction instead of the pan */
+        const float *dir = c->dir[3] != 0.0f ? c->dir : pt->dir;
+        float lr[2];
+
+        switch (pc_spatial_mode()) {
+        case PC_3D_HEADPHONES:
+            pc_spatial_aim(&v->sp, dir);
+            v->spatial = 1;
+            v->vol_c = (int32_t)g;
+            return;
+        case PC_3D_SPEAKERS:
+            pc_spatial_pan(dir, lr);
+            v->vol_l = (int32_t)(g * lr[0]);
+            v->vol_r = (int32_t)(g * lr[1]);
+            return;
+        }
+    }
     v->vol_l = (int32_t)(g * (pan <= 64 ? 64 : 127 - pan) / 64);
     v->vol_r = (int32_t)(g * (pan >= 64 ? 64 : pan) / 64);
 }
@@ -606,6 +633,26 @@ void hsyn_pan(int port, int ch, int pan)
     chan_update(port, ch, 0);
 }
 
+static void set_dir(float d[4], const float *dir)
+{
+    if (dir == NULL) {
+        d[3] = 0.0f;
+        return;
+    }
+    d[0] = dir[0];
+    d[1] = dir[1];
+    d[2] = dir[2];
+    d[3] = 1.0f;
+}
+
+void hsyn_dir(int port, int ch, const float *dir)
+{
+    if (!chans_ready)
+        chans_init();
+    set_dir(chans[port][ch].dir, dir);
+    chan_update(port, ch, 0);
+}
+
 void hsyn_bend(int port, int ch, int bend)
 {
     if (!chans_ready)
@@ -651,6 +698,14 @@ void hsyn_port_pan(int port, int pan)
     if (!chans_ready)
         chans_init();
     ports[port].pan = (uint8_t)pan;
+    port_update(port, 0);
+}
+
+void hsyn_port_dir(int port, const float *dir)
+{
+    if (!chans_ready)
+        chans_init();
+    set_dir(ports[port].dir, dir);
     port_update(port, 0);
 }
 
@@ -718,8 +773,16 @@ void hsyn_mix(int32_t *out, int32_t *fx, int n)
             int32_t l, r;
 
             s = s * v->env >> 15;
-            l = s * v->vol_l >> 15;
-            r = s * v->vol_r >> 15;
+            if (v->spatial) {
+                float ears[2];
+
+                pc_spatial_run(&v->sp, (float)s, ears);
+                l = (int32_t)(ears[0] * v->vol_c * (1.0f / 32768.0f));
+                r = (int32_t)(ears[1] * v->vol_c * (1.0f / 32768.0f));
+            } else {
+                l = s * v->vol_l >> 15;
+                r = s * v->vol_r >> 15;
+            }
             out[2 * k] += l;
             out[2 * k + 1] += r;
             if (v->fx && fx != NULL) {

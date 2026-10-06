@@ -34,7 +34,8 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Réverbération des pièces (`SdrSetRev`) : l'écho « Hall » du SPU2 refait en logiciel (`src/audio/pc_spu2rev.c`), testé ; reste à valider sur le jeu
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
-- [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
+- [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio
+- [x] Son 3D (`sound_3d`) : les bruits placés dans la pièce (pas, armes, ennemis, objets, événements) sont mis autour de toi, au casque (devant, derrière, côtés) ou sur toute la largeur des enceintes ; testé (sens gauche/droite du jeu, délai entre les oreilles) ; reste à valider sur le jeu
 - [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
 - [x] Fichier de réglages `cvx.ini` (plein écran, taille de fenêtre, touches, chemins, son, vibration), testé
 - [x] Fenêtre de réglages avant le jeu (choix de l'ISO, image, son, manette, touches), enregistrée dans `cvx.ini` ; reste à valider sur Windows
@@ -97,6 +98,7 @@ le jeu :
 | `renderer = opengl` | Dessin par la carte graphique au lieu du processeur (il faut OpenGL 3.3, présent sur toute carte depuis 2010 ; sinon le jeu reprend le dessin par le processeur et le dit dans `cvx_log.txt`) |
 | `upscale = 2` | Avec `renderer = opengl` : résolution 2, 3 ou 4 fois celle de la PS2 (1 par défaut, l'image exacte de la PS2) |
 | `sound = no` | Pas de son |
+| `sound_3d = headphones` | Son 3D en jeu : `headphones` (casque : on entend si un bruit vient de devant, de derrière ou d'un côté), `speakers` (enceintes : les bruits vont d'un bout à l'autre), `off` (par défaut, comme la PS2) |
 | `vibration = no` | Pas de vibration de la manette |
 | `launcher = no` | Pas de fenêtre de réglages au démarrage (Maj enfoncée en lançant le jeu : elle s'ouvre quand même) |
 | `key_cross = Space` | Touches du clavier, une ligne par bouton (`key_up`, `key_stick_left`, `key_l1`, `key_start`, `key_fast_forward`…, toutes listées dans le fichier). Plusieurs touches : `Space, Return` ; rien après le `=` : aucune touche |

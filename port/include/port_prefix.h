@@ -79,6 +79,16 @@ void pc_widescreen_frame(void);
 void pc_set_wide(float k);
 void pc_wide_text(float *xy, int n);
 
+/* 3D sound (pc_sound3d.c): pc_snd_at gives the world position (x, y, z) of
+   the sound the game is about to start or move this frame; pc_snd_take
+   hands it over, seen from the camera, and forgets it. pc_sd_take_dir
+   (ps2_sg_sd.c) gives it to a sound handle at a request, and the handle's
+   requests carry it to the sound driver (pc_snddrv_dir). */
+void pc_snd_at(const float *pos);
+int pc_snd_take(float dir[3]);
+void pc_sd_take_dir(void *handle, int midi, int mode);
+void pc_snddrv_dir(int midi, int port, int ch, const float *dir);
+
 /* CodeWarrior / EE-gcc specific keywords. */
 #define __inline__ inline
 

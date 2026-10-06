@@ -96,6 +96,7 @@ set(PORT_SOURCES
     port/src/game/pc_movie.c
     port/src/game/pc_render3d.c
     port/src/game/pc_widescreen.c
+    port/src/game/pc_sound3d.c
 )
 
 # Settings for code that sees the game's headers: the game itself, the port's
@@ -111,6 +112,7 @@ add_library(cvx_host STATIC
     port/src/host/pc_config.c
     port/src/host/pc_audio.c
     port/src/host/pc_sound.c
+    port/src/host/pc_spatial.c
     port/src/host/pc_memcard.c
     port/src/audio/pc_hsyn.c
     port/src/audio/pc_spu2rev.c

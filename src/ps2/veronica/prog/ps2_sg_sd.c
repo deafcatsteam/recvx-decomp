@@ -45,6 +45,49 @@ static void* __snd_end_func_arg__;
 static int snd_data_down_load;
 int __sg_sd_snd_init__;
 char sound_flag;
+
+#ifdef PLATFORM_PC
+/* 3D sound (port/src/game/pc_sound3d.c): where the sound of each handle is,
+   seen from the camera, [3] = 1 when known; sent with its requests. */
+static float pc_snd_dir[40][4];
+
+/* At a request: mode 0 takes the position the game gave (pc_snd_at), or
+   none, 1 keeps the handle's (the pan does not change), 2 forgets it (the
+   sound is centred). The position is used up either way. */
+void pc_sd_take_dir(void* handle, int midi, int mode)
+{
+    float v[3];
+    int have = pc_snd_take(v);
+    SND_WORK* w;
+    int i;
+
+    if (handle == NULL || *(SND_WORK**)handle == NULL || mode == 1)
+    {
+        return;
+    }
+
+    w = *(SND_WORK**)handle;
+    i = w - __snd_work__;
+
+    if (i < 0 || i >= 40)
+    {
+        return;
+    }
+
+    pc_snd_dir[i][0] = v[0];
+    pc_snd_dir[i][1] = v[1];
+    pc_snd_dir[i][2] = v[2];
+    pc_snd_dir[i][3] = (mode == 0) && have;
+}
+
+static void pc_sd_send_dir(SND_WORK* w, int midi)
+{
+    int i = w - __snd_work__;
+    const float* dir = (i >= 0) && (i < 40) && (pc_snd_dir[i][3] != 0) && (sound_flag == 0) ? pc_snd_dir[i] : NULL;
+
+    pc_snddrv_dir(midi, w->port_num, w->channel_num, dir);
+}
+#endif
 /* unused below */
 /*int AdxTInfoBack[10][4];
 unsigned int old_trans_size;
@@ -1700,6 +1743,9 @@ SDE_ERR	sdSysServer( Void)
         {
             if (chk_snd_work->req == 1) 
             {
+#ifdef PLATFORM_PC
+                pc_sd_send_dir(chk_snd_work, 0);
+#endif
                 SdrSeReq(chk_snd_work->channel_num | ((chk_snd_work->port_num << 16) | (chk_snd_work->bank_num << 8)), chk_snd_work->vol, chk_snd_work->pan, chk_snd_work->pitch);
                 
                 get_iop_snddata.se_info[chk_snd_work->port_num] |= 1 << chk_snd_work->channel_num;
@@ -1742,6 +1788,9 @@ SDE_ERR	sdSysServer( Void)
                     pan = 64;
                 }
                 
+#ifdef PLATFORM_PC
+                pc_sd_send_dir(chk_snd_work, 0);
+#endif
                 SdrSeChg(req, vol, pan, pitch);
                 
                 chk_snd_work->req = 255;
@@ -1760,6 +1809,9 @@ SDE_ERR	sdSysServer( Void)
         {
             if (chk_snd_work->req == 1) 
             {
+#ifdef PLATFORM_PC
+                pc_sd_send_dir(chk_snd_work, 1);
+#endif
                 SdrBgmReq(chk_snd_work->port_num, chk_snd_work->bank_num, chk_snd_work->vol, chk_snd_work->channel_num);
                 
                 get_iop_snddata.midi_info |= 1 << chk_snd_work->port_num;
@@ -1784,6 +1836,9 @@ SDE_ERR	sdSysServer( Void)
                     chk_snd_work->pitch = Pitch_Control(chk_snd_work);
                 }
                 
+#ifdef PLATFORM_PC
+                pc_sd_send_dir(chk_snd_work, 1);
+#endif
                 SdrBgmChg(chk_snd_work->port_num, chk_snd_work->vol, chk_snd_work->pan, chk_snd_work->pitch);
                 
                 chk_snd_work->req = 255;

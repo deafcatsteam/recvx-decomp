@@ -16,6 +16,12 @@ void pc_snddrv_init(void);
 /* Handles a request stream sent by SdrSendReq(). */
 void pc_snddrv_requests(const unsigned char *buf, int size, const PcIopView *iop);
 
+/* 3D sound: where the sound of the next request for effect slot ch of
+ * bank port (midi = 0), or for sequence port port (midi = 1), is, seen from
+ * the camera (x right, y up, z forward); NULL: the game gives no position.
+ * Called by the game (ps2_sg_sd.c) just before it queues that request. */
+void pc_snddrv_dir(int midi, int port, int ch, const float *dir);
+
 /* Copies the driver's status block (SND_STATUS, 0x42 bytes) to dst, the IOP
  * memory that get_iopsnd_info() reads. */
 void pc_snddrv_status(void *dst);

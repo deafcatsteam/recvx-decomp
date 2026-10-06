@@ -12,6 +12,7 @@
 #include "../src/audio/pc_snddrv.h"
 #include "../src/host/pc_host.h"
 #include "../src/host/pc_sound.h"
+#include "../src/host/pc_spatial.h"
 
 static int failures;
 
@@ -263,6 +264,79 @@ static int peak(int n, int ch)
     return p;
 }
 
+/* Delay of the left ear behind the right one, in samples, over frames
+ * from..to of the last pull: the lag where they match best. */
+static int ear_lag(int from, int to)
+{
+    double best = -1e30;
+    int lag, best_lag = 0, i;
+
+    for (lag = -50; lag <= 50; lag++) {
+        double c = 0;
+
+        for (i = from; i < to; i++)
+            c += (double)out[i * 2] * out[(i - lag) * 2 + 1];
+        if (c > best) {
+            best = c;
+            best_lag = lag;
+        }
+    }
+    return best_lag;
+}
+
+/* The binaural filter alone, on white noise: energy of its highs (the
+ * differences between samples) per ear. */
+static void noise_highs(const float dir[3], double highs[2], int *lag)
+{
+    static float l[9600], r[9600];
+    PcSpatial sp;
+    unsigned seed = 1;
+    int i;
+    double best = -1e30;
+
+    pc_spatial_reset(&sp);
+    pc_spatial_aim(&sp, dir);
+    for (i = 0; i < 9600; i++) {
+        float ears[2];
+
+        seed = seed * 1103515245u + 12345u;
+        pc_spatial_run(&sp, (float)((int)(seed >> 16 & 0x7fff) - 16384), ears);
+        l[i] = ears[0];
+        r[i] = ears[1];
+    }
+    highs[0] = highs[1] = 0;
+    for (i = 101; i < 9600; i++) {
+        highs[0] += (l[i] - l[i - 1]) * (l[i] - l[i - 1]);
+        highs[1] += (r[i] - r[i - 1]) * (r[i] - r[i - 1]);
+    }
+    for (int d = -40; d <= 40; d++) {
+        double c = 0;
+        for (i = 100; i < 9500; i++)
+            c += (double)l[i] * r[i - d];
+        if (c > best) {
+            best = c;
+            *lag = d;
+        }
+    }
+}
+
+static void test_spatial(void)
+{
+    static const float front[3] = { 0, 0, 1 }, back[3] = { 0, 0, -1 }, right[3] = { 1, 0, 0 };
+    double hf[2], hb[2], hr[2];
+    int lf, lb, lr;
+
+    noise_highs(front, hf, &lf);
+    noise_highs(back, hb, &lb);
+    noise_highs(right, hr, &lr);
+    printf("binaural: front %.3g/%.3g lag %d, behind %.3g/%.3g lag %d, right %.3g/%.3g lag %d\n", hf[0], hf[1],
+           lf, hb[0], hb[1], lb, hr[0], hr[1], lr);
+    CHECK(lf == 0 && lb == 0 && fabs(hf[0] - hf[1]) < hf[0] * 1e-3);
+    CHECK(hb[0] < hf[0] * 0.8);          /* behind: duller */
+    CHECK(lr >= 29 && lr <= 33);         /* right: the left ear 0.65 ms later */
+    CHECK(hr[0] < hr[1] * 0.3);          /* and in the head's shadow */
+}
+
 int main(void)
 {
     static short sine[22050];
@@ -375,6 +449,48 @@ int main(void)
     send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
     pull(14400);
     CHECK(peak_from(10800, 14400, 0) == 0);
+
+    /* 3D sound: a direction given for slot 3 (pc_snddrv_dir) goes with
+     * its next request. Headphones: a sound on the right reaches the left
+     * ear 0.65 ms later (31.5 samples), and the head's shadow delays a 441
+     * Hz sine on that side by 8.9 samples more; in front, both at once. */
+    send((const unsigned char[]){ 0x44, 1 << 6 | 0, 0, 0, 0, 0 }, 6);
+    send((const unsigned char[]){ 0x44, 2 << 6 | 0, 0, 0, 0, 0 }, 6);
+    test_spatial();
+    pc_spatial_set_mode(PC_3D_HEADPHONES);
+    pc_snddrv_dir(0, 0, 3, (const float[]){ 3, 0, 0 });
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(4800);
+    i = ear_lag(1000, 4000);
+    printf("3D headphones, right: lag %d, left %d, right %d\n", i, peak(4800, 0), peak(4800, 1));
+    CHECK(i >= 38 && i <= 43);
+    CHECK(peak(4800, 1) > 5000 && peak(4800, 0) > peak(4800, 1) / 2);
+    pull(9600);
+    pc_snddrv_dir(0, 0, 3, (const float[]){ 0, 1, 5 });
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(4800);
+    CHECK(ear_lag(1000, 4000) == 0 && abs(peak(4800, 0) - peak(4800, 1)) < 100);
+    pull(9600);
+    /* Speakers: the whole width, from the direction. */
+    pc_spatial_set_mode(PC_3D_SPEAKERS);
+    pc_snddrv_dir(0, 0, 3, (const float[]){ -2, 0, 0 });
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(4800);
+    printf("3D speakers, left: left %d, right %d\n", peak(4800, 0), peak(4800, 1));
+    CHECK(peak(4800, 0) > 5000 && peak(4800, 1) < 50);
+    pull(9600);
+    /* Without a direction, and with 3D sound off, the game's pan. */
+    pc_snddrv_dir(0, 0, 3, NULL);
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(4800);
+    CHECK(abs(peak(4800, 0) - peak(4800, 1)) < 100);
+    pull(9600);
+    pc_spatial_set_mode(PC_3D_OFF);
+    pc_snddrv_dir(0, 0, 3, (const float[]){ 3, 0, 0 });
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(4800);
+    CHECK(ear_lag(1000, 4000) == 0 && abs(peak(4800, 0) - peak(4800, 1)) < 100);
+    pull(9600);
 
     if (failures == 0)
         printf("test_snddrv: all checks passed\n");

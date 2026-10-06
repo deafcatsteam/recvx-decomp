@@ -40,6 +40,11 @@ void hsyn_port_volume(int port, int vol); /* 0-127 */
 void hsyn_port_pan(int port, int pan);    /* 0-127, centre 64 */
 void hsyn_port_bend(int port, int bend);  /* 14 bits, 0x2000 centre */
 void hsyn_master_volume(int vol);         /* 0-0x3fff */
+/* 3D sound (pc_spatial.h): where a channel's, or a whole port's, sound is
+ * (x right, y up, z forward), NULL when unknown. A channel's direction
+ * comes before its port's. */
+void hsyn_dir(int port, int ch, const float *dir);
+void hsyn_port_dir(int port, const float *dir);
 
 /* Set while a voice of this channel still sounds. */
 int hsyn_channel_active(int port, int ch);

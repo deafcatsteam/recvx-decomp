@@ -49,7 +49,7 @@ enum {
 /* What can be clicked or focused */
 enum {
     ID_NONE, ID_TAB0, ID_TAB1, ID_TAB2, ID_TAB3, ID_ISO, ID_BROWSE, ID_FULLSCREEN, ID_WINDOW,
-    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_SOUND, ID_VIBRATION, ID_KEYS_DEFAULT,
+    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_SOUND, ID_SOUND3D, ID_VIBRATION, ID_KEYS_DEFAULT,
     ID_QUIT, ID_PLAY, ID_KEY0 = 100,
 };
 
@@ -58,7 +58,7 @@ enum {
 typedef struct {
     char iso[512];
     char window[32];
-    int fullscreen, launcher, renderer, upscale, filter, widescreen, sound, vibration;
+    int fullscreen, launcher, renderer, upscale, filter, widescreen, sound, sound3d, vibration;
     char keys[MAX_KEYS][96];
 } Settings;
 
@@ -85,6 +85,9 @@ static const char *const window_sizes[2][6] = {
     { "640x480", "960x720", "1280x960", "1600x1200", "1920x1440", "2560x1920" },
     { "854x480", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160" },
 };
+/* sound_3d: off, headphones, speakers (pc_spatial.h) */
+static const char *const sound3d_values[] = { "off", "headphones", "speakers" };
+static const char *const sound3d_names[] = { "Non  (comme la PS2)", "Casque", "Enceintes" };
 static const char *const upscale_names[] = {
     "×1  (640×448, la PS2)", "×2  (1280×896)", "×3  (1920×1344)", "×4  (2560×1792)",
 };
@@ -385,6 +388,12 @@ static void read_settings(void)
     v = pc_config_get("filter");
     now.filter = v != NULL && SDL_strcasecmp(v, "smooth") == 0;
     now.sound = yes("sound", 1);
+    v = pc_config_get("sound_3d");
+    now.sound3d = 0;
+    for (int i = 1; i < 3; i++) {
+        if (v != NULL && SDL_strcasecmp(v, sound3d_values[i]) == 0)
+            now.sound3d = i;
+    }
     now.vibration = yes("vibration", 1);
     for (nkeys = 0; nkeys < MAX_KEYS; nkeys++) {
         key_setting[nkeys] = pc_window_key_setting(nkeys, &key_default[nkeys]);
@@ -423,6 +432,7 @@ static void save_settings(void)
     SET(filter, "filter", now.filter ? "smooth" : "sharp")
     SET(widescreen, "widescreen", now.widescreen ? "yes" : "no")
     SET(sound, "sound", now.sound ? "yes" : "no")
+    SET(sound3d, "sound_3d", sound3d_values[now.sound3d])
     SET(vibration, "vibration", now.vibration ? "yes" : "no")
 #undef SET
     for (int i = 0; i < nkeys; i++) {
@@ -638,6 +648,7 @@ static void activate(int id, int dir)
     case ID_FULLSCREEN: now.fullscreen ^= 1; break;
     case ID_LAUNCHER: now.launcher ^= 1; break;
     case ID_SOUND: now.sound ^= 1; break;
+    case ID_SOUND3D: now.sound3d = (now.sound3d + dir + 3) % 3; break;
     case ID_VIBRATION: now.vibration ^= 1; break;
     case ID_FILTER: now.filter ^= 1; break;
     case ID_WIDESCREEN:
@@ -681,7 +692,7 @@ static void activate(int id, int dir)
 /* Left and right on a setting change it; elsewhere they move the focus. */
 static int changes(int id)
 {
-    return id == ID_FULLSCREEN || id == ID_LAUNCHER || id == ID_SOUND || id == ID_VIBRATION
+    return id == ID_FULLSCREEN || id == ID_LAUNCHER || id == ID_SOUND || id == ID_SOUND3D || id == ID_VIBRATION
            || id == ID_FILTER || id == ID_WIDESCREEN || id == ID_RENDERER || id == ID_UPSCALE || id == ID_WINDOW;
 }
 
@@ -780,14 +791,16 @@ static void page_picture(void)
 
 static void page_sound(void)
 {
-    int y = 300, n = SDL_NumJoysticks();
+    int y = 360, n = SDL_NumJoysticks();
 
     label(156, "Son", NULL);
     toggle(ID_SOUND, 520, 156, now.sound);
-    label(210, "Vibration de la manette", NULL);
-    toggle(ID_VIBRATION, 520, 210, now.vibration);
+    label(210, "Son 3D", now.sound3d == 1 ? "Devant, derrière : mieux au casque" : "Bruits placés autour de toi en jeu");
+    choice(ID_SOUND3D, 520, 210, 320, sound3d_names[now.sound3d], now.sound);
+    label(270, "Vibration de la manette", NULL);
+    toggle(ID_VIBRATION, 520, 270, now.vibration);
 
-    draw_text(&text, 40, 272, "Manettes branchées", C_TEXT);
+    draw_text(&text, 40, 332, "Manettes branchées", C_TEXT);
     if (n <= 0) {
         draw_text(&text, 40, y, "Aucune pour l'instant : tu peux la brancher même pendant le jeu.", C_DIM);
         y += 22;

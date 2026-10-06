@@ -225,6 +225,10 @@ void PlayMidi(unsigned int SlotNo, char BankNo, char ListNo, char Priority)
 // 100% matching! 
 void ExPlayMidi(SND_REQ* pRequestInfo)
 {
+#ifdef PLATFORM_PC
+    pc_sd_take_dir(MidiInfo[pRequestInfo->SlotNo].Flag != 0 ? MidiHandle[pRequestInfo->SlotNo] : NULL, 1,
+                   pRequestInfo->PanDelayTime == -1 ? 1 : pRequestInfo->PanDelayTime == -2 ? 2 : 0);
+#endif
     if (MidiInfo[pRequestInfo->SlotNo].Flag != 0)
     {
         switch (pRequestInfo->PanDelayTime)
@@ -454,6 +458,11 @@ void PlaySe(unsigned int SlotNo, char BankNo, char ListNo, char Priority)
 // 100% matching! 
 void ExPlaySe(SND_REQ* pRequestInfo)
 {
+#ifdef PLATFORM_PC
+    /* 3D sound: where the sound is, if the game said (pc_snd_at) */
+    pc_sd_take_dir(SeInfo[pRequestInfo->SlotNo].Flag != 0 ? SeHandle[pRequestInfo->SlotNo] : NULL, 0,
+                   pRequestInfo->PanDelayTime == -1 ? 1 : pRequestInfo->PanDelayTime == -2 ? 2 : 0);
+#endif
     if (SeInfo[pRequestInfo->SlotNo].Flag != 0) 
     {
         switch (pRequestInfo->PanDelayTime) 

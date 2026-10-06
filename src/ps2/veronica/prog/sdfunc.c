@@ -897,6 +897,9 @@ int SetupSeGenericParm(int SlotNo, int SeNo, NJS_POINT3* pPos, int Flag, unsigne
     float Distance; 
     
     ReturnCode = Get3DSoundParameter(&CameraPos, pPos, &RequestInfo.Pan, &RequestInfo.Volume, &Distance, 0);
+#ifdef PLATFORM_PC
+    pc_snd_at(&pPos->x);
+#endif
     
     RequestInfo.SlotNo = SlotNo;
     
@@ -1456,6 +1459,9 @@ void CallPlayerFootStepSeEx(int FloorType, int Type, int Flag, int Id, NJS_POINT
     float Distance; 
 
     Get3DSoundParameter(&CameraPos, pPos, &RequestInfo.Pan, &RequestInfo.Volume, &Distance, 0);
+#ifdef PLATFORM_PC
+    pc_snd_at(&pPos->x);
+#endif
     
     SetSyukanModeSoundParam();
     
@@ -1858,6 +1864,9 @@ int CallNativeEventSe(int SlotNo, NJS_POINT3* pPos, int SeNo, int Mode)
     {                               
     case 0:
         Get3DSoundParameter(&CameraPos, pPos, &RequestInfo.Pan, &RequestInfo.Volume, &Distance, 0);
+#ifdef PLATFORM_PC
+        pc_snd_at(&pPos->x);
+#endif
         
         RequestInfo.PanDelayTime = 0;
         RequestInfo.VolumeDelayTime = 0;
@@ -2482,6 +2491,9 @@ void ExecEnemySeManager()
                     {
                         RegistEnemySlot(SlotNo, j, eip->SeNo);
                         
+#ifdef PLATFORM_PC
+                        pc_snd_at(&eip->Pos.x);
+#endif
                         CallEnemySeMain(SlotNo, eip->SeNo, eip->Pan, eip->Vol, eip->CallFlag, eip->FadeRate);
                     }
                 } 
@@ -2489,6 +2501,9 @@ void ExecEnemySeManager()
                 {
                     RegistEnemySlot(SlotNo, j, eip->SeNo);
                     
+#ifdef PLATFORM_PC
+                    pc_snd_at(&eip->Pos.x);
+#endif
                     CallEnemySeMain(SlotNo, eip->SeNo, eip->Pan, eip->Vol, eip->CallFlag, eip->FadeRate);
                 }
             }
@@ -2506,6 +2521,9 @@ void ExecEnemySeManager()
                     {
                         RegistEnemySlot(SlotNo, j, eip->SeNoV);
                         
+#ifdef PLATFORM_PC
+                        pc_snd_at(&eip->Pos.x);
+#endif
                         CallEnemySeMain(SlotNo, eip->SeNoV, eip->Pan, eip->Vol, eip->CallFlagV, eip->FadeRate);
                     }
                 } 
@@ -2513,6 +2531,9 @@ void ExecEnemySeManager()
                 {
                     RegistEnemySlot(SlotNo, j, eip->SeNoV);
                     
+#ifdef PLATFORM_PC
+                    pc_snd_at(&eip->Pos.x);
+#endif
                     CallEnemySeMain(SlotNo, eip->SeNoV, eip->Pan, eip->Vol, eip->CallFlagV, eip->FadeRate);
                 }
             }
@@ -2578,6 +2599,9 @@ void CallObjectSe2(unsigned int SlotNo, Object* oip, int Flag)
 {
     if (oip->Type == 0) 
     {
+#ifdef PLATFORM_PC
+        pc_snd_at(&oip->pos.x);
+#endif
         RequestInfo.SlotNo = DefObj[SlotNo];
         
         if (Flag == 0) 
