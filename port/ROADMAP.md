@@ -49,10 +49,9 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 - **Haute résolution** : en attendant ce rendu, le GS logiciel pourra
   dessiner à 2× ou 4× la résolution (étape intermédiaire simple), et passer
   sur la carte graphique.
-- **Vidéos** : les images sont décodées en pleine qualité avant le GS ; elles
-  pourront être affichées directement en plein écran par la carte graphique,
-  et remplacées par des versions refaites en HD (FFmpeg n'a qu'à activer
-  d'autres décodeurs, H.264 par exemple).
+- **Vidéos** ✔ remplaçables par des versions refaites en HD
+  (`movies/MV_000.mp4`, voir le README) : affichées par la fenêtre à leur
+  propre résolution, par-dessus l'image du jeu, avec le son d'origine.
 - **Son** : tout passe par le moteur `src/host/pc_sound.c`, où chaque son
   est une voix avec un volume, un panoramique et, en option, une **position
   3D** par rapport à l'auditeur. Une seule fonction, `spatialize()`, décide

@@ -10,6 +10,13 @@
  * uploaded to GS memory and drawn as a sprite stretched to the screen.
  *
  * Start, Select or Circle (Enter, Backspace or Escape) ends any movie.
+ *
+ * Replacement movies: a video file named after the movie in the "movies"
+ * folder (or the folder in CVX_MOVIES), such as movies/MV_000.mp4, is shown
+ * instead of the movie's picture, at its own resolution, over the movie's
+ * area of the screen. The .PSS file still plays underneath: it gives the
+ * sound, the timing and the end, so the replacement must keep the
+ * original's length and frame timing (an upscaled copy does).
  */
 #include "ps2_MovieFunc.h"
 #include "ps2_dummy.h"
@@ -71,6 +78,9 @@ static struct {
     const uint32_t* frame;
     int w, h;
     int uploaded;
+
+    /* Replacement movie */
+    PcHdMovie* hd;
 } mv;
 
 /* ---- Reading the file ------------------------------------------------------ */
@@ -447,6 +457,79 @@ static int next_frame_ready(void)
     return 1;
 }
 
+/* ---- Replacement movies --------------------------------------------------------- */
+
+/* Opens movies/<name>.<ext> for the movie in infile, if there is one. */
+static void hd_open(void)
+{
+    static const char* const exts[] = { "mp4", "mkv", "webm", "mov", "avi" };
+    const char* dir = getenv("CVX_MOVIES");
+    char base[16], path[512];
+    int i;
+
+    /* "MV_000.PSS;1" -> "MV_000" */
+    for (i = 0; i < 15 && infile.fp.name[i] != 0 && infile.fp.name[i] != '.' && infile.fp.name[i] != ';'; i++)
+    {
+        base[i] = infile.fp.name[i];
+    }
+    base[i] = 0;
+    if (i == 0)
+    {
+        return;
+    }
+    if (dir == NULL || dir[0] == 0)
+    {
+        dir = "movies";
+    }
+
+    for (i = 0; i < (int)(sizeof(exts) / sizeof(exts[0])); i++)
+    {
+        FILE* f;
+
+        snprintf(path, sizeof(path), "%s/%s.%s", dir, base, exts[i]);
+        f = fopen(path, "rb");
+        if (f == NULL)
+        {
+            continue;
+        }
+        fclose(f);
+        mv.hd = pc_hdmovie_open(path);
+        if (mv.hd != NULL)
+        {
+            return;
+        }
+    }
+}
+
+/* Shows the replacement's picture for the movie's current time. */
+static void hd_show(void)
+{
+    const uint32_t* rgba;
+    int w, h, changed;
+
+    if (mv.hd == NULL)
+    {
+        return;
+    }
+    rgba = pc_hdmovie_frame(mv.hd, (double)mv.clock_ns / 1e9, &w, &h, &changed);
+    if (rgba == NULL)
+    {
+        return;
+    }
+    pc_overlay.rgba = rgba;
+    pc_overlay.w = w;
+    pc_overlay.h = h;
+    /* Where vbrank_draw() puts the original picture. */
+    pc_overlay.x = 0;
+    pc_overlay.y = mdSize.sDispY;
+    pc_overlay.cw = mdSize.sWidth != 0 ? mdSize.sWidth : 640;
+    pc_overlay.ch = mdSize.sHeight != 0 ? mdSize.sHeight : 448;
+    if (changed)
+    {
+        pc_overlay.serial++;
+    }
+}
+
 /* ---- The game's interface ---------------------------------------------------- */
 
 void initAll()
@@ -472,12 +555,18 @@ void initAll()
     mv.size = infile.size;
     mv.fps = 30000.0 / 1001.0;
     mv.open = 1;
+    hd_open();
 
     pc_audio_clear();
 }
 
 void termAll()
 {
+    pc_overlay.rgba = NULL;
+    if (mv.hd != NULL)
+    {
+        pc_hdmovie_close(mv.hd);
+    }
     if (mv.open)
     {
         pc_video_close(mv.video);
@@ -532,6 +621,7 @@ void readMpeg()
         mv.last_ns = now;
         rmi.iMovieState = 2;
         movie_draw = 1;
+        hd_show();
         return;
     }
 
@@ -566,6 +656,7 @@ void readMpeg()
         }
     }
 
+    hd_show();
     movie_draw = 1;
 }
 

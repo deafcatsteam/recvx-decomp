@@ -57,6 +57,34 @@ const uint32_t *pc_video_take(PcVideo *v, int *w, int *h);
 
 double pc_video_fps(PcVideo *v);
 
+/* ---- Replacement movies (pc_video.c, FFmpeg) ----
+ * A video file made by the player (an upscaled movie, in MP4, MKV, WebM...)
+ * shown instead of the picture of a game movie. */
+
+typedef struct PcHdMovie PcHdMovie;
+
+/* Returns NULL when the file cannot be played. */
+PcHdMovie *pc_hdmovie_open(const char *path);
+void pc_hdmovie_close(PcHdMovie *m);
+
+/* The picture to show t seconds from the start (RGBA, valid until the next
+ * call), or NULL before the first one. *changed is set when it is not the
+ * picture returned last time. */
+const uint32_t *pc_hdmovie_frame(PcHdMovie *m, double t, int *w, int *h, int *changed);
+
+/* ---- Picture shown over the game's screen (pc_host.c) ----
+ * Used for replacement movies: drawn by the window at its own resolution
+ * over the area (x, y, cw, ch) of the game's 640x448 picture. serial
+ * changes whenever the pixels do. rgba NULL: nothing is shown. */
+typedef struct {
+    const uint32_t *rgba;
+    int w, h;
+    int x, y, cw, ch;
+    unsigned int serial;
+} PcOverlay;
+
+extern PcOverlay pc_overlay;
+
 /* ---- Sound output (pc_audio.c, played by the window's audio device) ---- */
 
 #define PC_AUDIO_RATE 48000

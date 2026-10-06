@@ -59,6 +59,14 @@ int sceCdSearchFile(sceCdlFILE *fp, const char *name)
     }
     fp->lsn = lsn;
     fp->size = size;
+    /* The name without its directories, like "MV_000.PSS;1". */
+    {
+        const char *base = strrchr(name, '\\');
+
+        base = base != NULL ? base + 1 : name;
+        strncpy(fp->name, base, sizeof(fp->name) - 1);
+        fp->name[sizeof(fp->name) - 1] = 0;
+    }
     return 1;
 }
 

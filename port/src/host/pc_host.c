@@ -35,3 +35,5 @@ void pc_host_sleep_ns(int64_t ns)
     nanosleep(&wait, NULL);
 #endif
 }
+
+PcOverlay pc_overlay;

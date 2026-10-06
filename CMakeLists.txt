@@ -119,9 +119,11 @@ if(NOT WIN32)
 endif()
 
 # Movies: MPEG-2 video decoded by FFmpeg (LGPL), downloaded and built with
-# only the MPEG video decoders. It is used by the host side only
-# (port/src/host/pc_video.c), whose headers are not affected by the game's
-# `long` remapping.
+# only what the port uses: the MPEG video decoders for the game's movies,
+# and for the replacement movies the player can add (upscaled copies), the
+# MP4/MKV/WebM/AVI readers, the usual video decoders and libswscale. It is
+# used by the host side only (port/src/host/pc_video.c), whose headers are
+# not affected by the game's `long` remapping.
 option(CVX_WITH_FFMPEG "Play the game's movies (MPEG-2 decoded by FFmpeg)" ON)
 if(CVX_WITH_FFMPEG)
     include(ExternalProject)
@@ -131,10 +133,20 @@ if(CVX_WITH_FFMPEG)
     set(FFMPEG_ARGS
         --prefix=<INSTALL_DIR> --arch=x86
         --disable-everything --disable-autodetect --disable-programs --disable-doc
-        --disable-network --disable-avdevice --disable-avformat --disable-swscale
-        --disable-swresample --disable-avfilter --disable-asm --disable-debug
-        --enable-static --disable-shared
-        --enable-decoder=mpeg2video,mpeg1video --enable-parser=mpegvideo)
+        --disable-network --disable-avdevice --disable-swresample --disable-avfilter
+        --disable-debug --enable-static --disable-shared
+        --enable-decoder=mpeg2video,mpeg1video,h264,hevc,vp8,vp9,mpeg4,prores,ffv1,rawvideo
+        --enable-parser=mpegvideo,h264,hevc,vp8,vp9,mpeg4video
+        --enable-demuxer=mov,matroska,avi --enable-protocol=file)
+    # The SIMD code (much faster HD decoding) needs nasm. It is used for the
+    # Windows build; the 32-bit Linux build is only for development and
+    # tests, and stays without assembly (position-independent executables).
+    find_program(NASM_PROGRAM nasm)
+    if(WIN32 AND NASM_PROGRAM)
+        message(STATUS "FFmpeg: SIMD code with ${NASM_PROGRAM}")
+    else()
+        list(APPEND FFMPEG_ARGS --disable-asm)
+    endif()
     if(WIN32)
         list(APPEND FFMPEG_ARGS --target-os=mingw32)
         if(CMAKE_CROSSCOMPILING)
@@ -155,7 +167,8 @@ if(CVX_WITH_FFMPEG)
         CONFIGURE_COMMAND <SOURCE_DIR>/configure ${FFMPEG_ARGS}
         BUILD_COMMAND ${MAKE_PROGRAM} -j${CVX_NCPU}
         INSTALL_COMMAND ${MAKE_PROGRAM} install
-        BUILD_BYPRODUCTS ${FFMPEG_PREFIX}/lib/libavcodec.a ${FFMPEG_PREFIX}/lib/libavutil.a)
+        BUILD_BYPRODUCTS ${FFMPEG_PREFIX}/lib/libavformat.a ${FFMPEG_PREFIX}/lib/libavcodec.a
+                         ${FFMPEG_PREFIX}/lib/libswscale.a ${FFMPEG_PREFIX}/lib/libavutil.a)
     file(MAKE_DIRECTORY ${FFMPEG_PREFIX}/include)
     add_library(cvx_avutil STATIC IMPORTED)
     set_target_properties(cvx_avutil PROPERTIES
@@ -166,9 +179,21 @@ if(CVX_WITH_FFMPEG)
         IMPORTED_LOCATION ${FFMPEG_PREFIX}/lib/libavcodec.a
         INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_PREFIX}/include
         INTERFACE_LINK_LIBRARIES cvx_avutil)
+    add_library(cvx_swscale STATIC IMPORTED)
+    set_target_properties(cvx_swscale PROPERTIES
+        IMPORTED_LOCATION ${FFMPEG_PREFIX}/lib/libswscale.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_PREFIX}/include
+        INTERFACE_LINK_LIBRARIES cvx_avutil)
+    add_library(cvx_avformat STATIC IMPORTED)
+    set_target_properties(cvx_avformat PROPERTIES
+        IMPORTED_LOCATION ${FFMPEG_PREFIX}/lib/libavformat.a
+        INTERFACE_INCLUDE_DIRECTORIES ${FFMPEG_PREFIX}/include
+        INTERFACE_LINK_LIBRARIES cvx_avcodec)
     add_dependencies(cvx_avutil ffmpeg)
     add_dependencies(cvx_avcodec ffmpeg)
-    target_link_libraries(cvx_host PRIVATE cvx_avcodec)
+    add_dependencies(cvx_swscale ffmpeg)
+    add_dependencies(cvx_avformat ffmpeg)
+    target_link_libraries(cvx_host PRIVATE cvx_avformat cvx_avcodec cvx_swscale)
     target_link_libraries(cvx_host PUBLIC atomic)
     if(WIN32)
         target_link_libraries(cvx_host PUBLIC bcrypt ole32 user32)
@@ -280,10 +305,14 @@ target_link_libraries(test_movie PRIVATE cvx_game cvx_game_env m)
 add_test(NAME movie_make_image
          COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/port/tests/make_test_iso.py
                  ${CMAKE_BINARY_DIR}/test_movie.iso ${CMAKE_SOURCE_DIR}/port/tests/data/test.pss)
+add_test(NAME movie_make_replacement
+         COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/port/tests/make_test_avi.py
+                 ${CMAKE_BINARY_DIR}/test_movies/MV_000.avi)
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/test_movies)
 add_test(NAME movie COMMAND test_movie)
 set_tests_properties(movie PROPERTIES
-    DEPENDS movie_make_image
-    ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_movie.iso)
+    DEPENDS "movie_make_image;movie_make_replacement"
+    ENVIRONMENT "CVX_ISO=${CMAKE_BINARY_DIR}/test_movie.iso;CVX_TEST_MOVIES=${CMAKE_BINARY_DIR}/test_movies")
 
 add_executable(test_snddrv port/tests/test_snddrv.c)
 target_link_libraries(test_snddrv PRIVATE cvx_host m)

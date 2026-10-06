@@ -31,6 +31,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
 - [ ] Réverbération des pièces (`SdrSetRev`) : pas encore faite
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
+- [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
 - [ ] Cartes mémoire : sauvegardes dans des fichiers
 
@@ -61,6 +62,7 @@ Variables utiles :
 | `CVX_NO_LOG` | Ne pas écrire `cvx_log.txt` |
 | `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
 | `CVX_NO_AUDIO` | Pas de son |
+| `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`) |
 
 Tout ce qui s'affiche dans la console est aussi écrit dans `cvx_log.txt`, à
 côté de l'exe. En cas de plantage, la console indique où était le jeu et
@@ -80,6 +82,44 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
 | Entrée, Retour arrière ou Échap | Passer une vidéo (Start, Select ou ○ à la manette) | | | |
 | | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`) |
+
+## Vidéos en HD (remplacement)
+
+Une vidéo du jeu peut être remplacée par une version agrandie : mets un
+fichier du même nom dans un dossier `movies` à côté de l'exe, par exemple
+`movies/MV_000.mp4` pour `MOVIE/MV_000.PSS`. Le portage l'affiche à sa
+propre résolution (jusqu'à 3840×2160) à la place de l'image d'origine. Le
+**son** reste celui du `.PSS` d'origine, ainsi que le rythme et la fin de la
+vidéo : la version HD n'a donc pas besoin de son, mais elle doit garder
+**la même durée et le même nombre d'images par seconde** (29,97).
+
+Formats lus : MP4, MKV, WebM, MOV, AVI ; vidéo H.264, H.265/HEVC, VP9, VP8,
+MPEG-4, ProRes, FFV1. La console indique `movie: replacement ...` quand un
+fichier est trouvé. Ces fichiers sont à toi : ils ne vont jamais sur GitHub.
+
+Fabriquer les vidéos agrandies, gratuitement, avec **Video2X** (le plus
+simple) :
+
+1. Copie le dossier `MOVIE` de l'ISO ailleurs (par exemple `MOVIE_HD`).
+   Dans cette copie, renomme les `.PSS` en `.mpg` pour que les logiciels de
+   vidéo les reconnaissent : clique dans la barre d'adresse de l'explorateur,
+   tape `cmd`, Entrée, puis `ren *.PSS *.mpg`. (Le son des `.PSS` n'est pas
+   lu par ces logiciels : c'est normal, il n'est pas utile ici.)
+2. Installe Video2X (gratuit, https://github.com/k4yt3x/video2x, page
+   *Releases*, l'installateur Windows). Il utilise la carte graphique.
+3. Ajoute les fichiers `.mpg`, choisis **Real-ESRGAN** avec le modèle
+   **realesrgan-plus** (×4, fait pour les images réalistes), sortie en MP4.
+   **N'active pas l'interpolation d'images** (RIFE) : le nombre d'images par
+   seconde doit rester le même.
+4. Renomme chaque résultat comme l'original (`MV_000.mp4`, …) et mets-les
+   dans `movies` à côté de `cvx_pc.exe`.
+
+Commence par une petite vidéo (`MV_004`, 5 Mo) pour voir le résultat et le
+temps que ça prend. Avec **ComfyUI**, c'est aussi possible (nœuds *Load
+Video* et *Video Combine* de VideoHelperSuite, *Upscale Image (using
+Model)* avec un modèle ×4) ; il faut alors régler la sortie à 29,97 images
+par seconde et traiter les longues vidéos par morceaux (ComfyUI garde
+toutes les images en mémoire).
 
 ## Récupérer l'exécutable Windows
 
@@ -143,7 +183,7 @@ une couche « plateforme » écrite pour le PC.
 | `src/game/pc_game_asm.c` | Fonctions du jeu en assembleur : traduites en C, ou vides en attendant le rendu |
 | `src/game/pc_movie.c` | Lecteur vidéo : lit le `.PSS` sur le disque, sépare image et son |
 | `src/game/pc_render3d.c` | 3D : couleurs des sommets, découpage, paquets GS (code VU0 traduit) |
-| `src/host/pc_video.c` | Décodage MPEG-2 avec FFmpeg (LGPL, téléchargé et compilé par CMake avec le strict nécessaire) |
+| `src/host/pc_video.c` | Décodage MPEG-2 avec FFmpeg (LGPL, téléchargé et compilé par CMake avec le strict nécessaire), et lecture des vidéos de remplacement |
 | `src/host/pc_audio.c` | Sortie son : mélange du moteur de son et de la file des vidéos, jouée par la fenêtre (SDL) |
 | `src/host/pc_sound.c` | Moteur de son : voix (flux ou sources), rééchantillonnage, volume, panoramique, position 3D |
 | `src/ninja/` | Maths Ninja en C (remplacent les fichiers VU0) |

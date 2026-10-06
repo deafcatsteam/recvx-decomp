@@ -25,7 +25,7 @@ jobs:
       - name: Install toolchains
         run: |
           sudo apt-get update
-          sudo apt-get install -y gcc-multilib gcc-mingw-w64-i686 g++-mingw-w64-i686 cmake ninja-build
+          sudo apt-get install -y gcc-multilib gcc-mingw-w64-i686 g++-mingw-w64-i686 cmake ninja-build nasm
 
       - name: Build and test (Linux, 32-bit)
         run: |

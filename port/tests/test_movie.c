@@ -3,8 +3,13 @@
  * MPEG-2 pictures and a PCM sine, no game data) from the test ISO with the
  * PC movie player, the way the game drives it, and checks the pictures
  * uploaded to GS memory, the sound, the end of the movie and skipping.
+ * Then again with a replacement movie (movies/MV_000.avi, made by
+ * make_test_avi.py: green then yellow) shown over the picture.
  */
 #include "ps2_MovieFunc.h"
+
+#include <stdlib.h>
+#include <string.h>
 
 #include "../src/gs/gs.h"
 #include "../src/gs/gs_mem.h"
@@ -46,6 +51,7 @@ static void start(void)
     CHECK(pc_disc_find("\\MOVIE\\MV_000.PSS;1", &lsn, &size));
     infile.fp.lsn = lsn;
     infile.size = size;
+    strcpy(infile.fp.name, "MV_000.PSS;1");
     initAll();
 }
 
@@ -103,6 +109,7 @@ int main(void)
     CHECK(red && blue);
     /* 0.5 s of sound at 8 kHz, resampled to 48 kHz. */
     CHECK(pc_audio_queued() > PC_AUDIO_RATE / 3);
+    CHECK(pc_overlay.rgba == NULL); /* no replacement movie */
     termAll();
 
     /* Skipping: a button held at the start does nothing until released. */
@@ -119,6 +126,46 @@ int main(void)
     exec_server();
     CHECK(rmi.iMovieState == 3);
     termAll();
+
+    /* With a replacement movie: its pictures are shown over the movie's
+     * area, in time with the movie, at their own size. */
+    if (getenv("CVX_TEST_MOVIES") != NULL)
+    {
+        static char env[600];
+        unsigned int serial;
+        int green = 0, yellow = 0;
+
+        snprintf(env, sizeof(env), "CVX_MOVIES=%s", getenv("CVX_TEST_MOVIES"));
+        putenv(env);
+        pc_audio_clear();
+        pc_pad_buttons = 0xFFFF;
+        start();
+        exec_server();
+        CHECK(pc_overlay.rgba != NULL);
+        if (pc_overlay.rgba != NULL)
+        {
+            printf("replacement: %dx%d at (%d, %d) %dx%d, first pixel %08X\n", pc_overlay.w, pc_overlay.h,
+                   pc_overlay.x, pc_overlay.y, pc_overlay.cw, pc_overlay.ch, pc_overlay.rgba[0]);
+            CHECK(pc_overlay.w == 64 && pc_overlay.h == 48);
+            CHECK(pc_overlay.cw == 640 && pc_overlay.ch == 448);
+        }
+        serial = pc_overlay.serial;
+        for (i = 0; i < 300 && rmi.iMovieState != 3; i++)
+        {
+            if (pc_overlay.rgba != NULL)
+            {
+                green |= pc_overlay.rgba[100] == 0xFF00FF00u;
+                yellow |= pc_overlay.rgba[100] == 0xFF00FFFFu;
+            }
+            pc_host_sleep_ns(16666667);
+            exec_server();
+        }
+        printf("replacement: green %d, yellow %d, %u pictures\n", green, yellow, pc_overlay.serial - serial);
+        CHECK(green && yellow);
+        CHECK(pc_overlay.serial - serial >= 10);
+        termAll();
+        CHECK(pc_overlay.rgba == NULL);
+    }
 
     if (failures == 0)
         printf("test_movie: all checks passed\n");

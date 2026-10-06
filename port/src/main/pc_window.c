@@ -41,6 +41,9 @@ static SDL_Renderer *renderer;
 static SDL_GameController *controller;
 static SDL_Texture *screen;
 static int screen_w, screen_h;
+static SDL_Texture *overlay; /* replacement movie picture (pc_overlay) */
+static int overlay_w, overlay_h;
+static unsigned int overlay_serial;
 static uint32_t pixels[GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H];
 
 static const struct {
@@ -143,6 +146,38 @@ static void save_screenshot(void)
     SDL_FreeSurface(shot);
 }
 
+/* A replacement movie's picture, over its area of the game's picture
+ * (640x448, shown stretched to the 640x480 logical screen). It is drawn
+ * from its own pixels, so an HD picture stays sharp in a large window. */
+static void draw_overlay(void)
+{
+    SDL_Rect dst;
+
+    if (pc_overlay.rgba == NULL)
+        return;
+    if (overlay == NULL || pc_overlay.w != overlay_w || pc_overlay.h != overlay_h) {
+        if (overlay != NULL)
+            SDL_DestroyTexture(overlay);
+        overlay = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_RGBA32, SDL_TEXTUREACCESS_STREAMING,
+                                    pc_overlay.w, pc_overlay.h);
+        if (overlay == NULL)
+            return;
+        SDL_SetTextureScaleMode(overlay, SDL_ScaleModeLinear);
+        overlay_w = pc_overlay.w;
+        overlay_h = pc_overlay.h;
+        overlay_serial = pc_overlay.serial - 1;
+    }
+    if (overlay_serial != pc_overlay.serial) {
+        SDL_UpdateTexture(overlay, NULL, pc_overlay.rgba, pc_overlay.w * 4);
+        overlay_serial = pc_overlay.serial;
+    }
+    dst.x = pc_overlay.x;
+    dst.y = pc_overlay.y * 480 / 448;
+    dst.w = pc_overlay.cw;
+    dst.h = pc_overlay.ch * 480 / 448;
+    SDL_RenderCopy(renderer, overlay, NULL, &dst);
+}
+
 static void frame(void)
 {
     SDL_Event ev;
@@ -205,6 +240,7 @@ static void frame(void)
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, screen, NULL, NULL); /* stretched to 4:3 */
+    draw_overlay();
     SDL_RenderPresent(renderer);
 }
 
