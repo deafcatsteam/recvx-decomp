@@ -74,6 +74,24 @@ static inline void gs_wr32(uint32_t a, uint32_t v) { __builtin_memcpy(gs_vram + 
 static inline uint32_t gs_rd16(uint32_t a) { uint16_t v; __builtin_memcpy(&v, gs_vram + a, 2); return v; }
 static inline void gs_wr16(uint32_t a, uint32_t v) { uint16_t h = (uint16_t)v; __builtin_memcpy(gs_vram + a, &h, 2); }
 
+/*
+ * Write generations: each 8 KB page records when it was last written
+ * (gs_gen counts writes), so caches of what pages hold (decoded textures)
+ * know when to decode again. gs_write_pixel marks its page; code that writes
+ * gs_vram directly marks what it wrote with gs_mark_pages or gs_mark_all.
+ */
+#define GS_PAGES (GS_MEM_SIZE / 8192)
+extern uint64_t gs_page_gen[GS_PAGES];
+extern uint64_t gs_gen;
+
+/* Marks the pages holding the rectangle x0..x1, y0..y1 (inclusive) of the
+ * buffer at bp/bw in format psm, or every page. */
+void gs_mark_pages(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1);
+void gs_mark_all(void);
+
+/* 1 if a page of that rectangle was written after generation gen. */
+int gs_pages_newer(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, uint64_t gen);
+
 /* Raw pixel value of format psm at (x, y) of the buffer at bp/bw. 24-bit
  * formats return the low 24 bits, the 4/8-bit "H" formats the index. */
 uint32_t gs_read_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y);

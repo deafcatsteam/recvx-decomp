@@ -94,6 +94,8 @@ static uint32_t expand16(uint32_t c, int use_texa)
 
 /* ---- CLUT -------------------------------------------------------------- */
 
+static uint64_t clut_gen = 1; /* counts CLUT loads */
+
 static void load_clut(uint64_t tex0)
 {
     int psm = BITS(tex0, 20, 6);
@@ -120,6 +122,7 @@ static void load_clut(uint64_t tex0)
     else
         return;
 
+    clut_gen++; /* decoded indexed textures use the CLUT they were made with */
     if (csm == 0) {
         /* CSM1: 8x2 blocks of entries; for 256 colours, bits 3 and 4 of the
          * index are swapped in the 16x16 arrangement. */
@@ -289,6 +292,8 @@ enum { K_TME = 1, K_ABE = 2, K_ZTE = 4, K_CT32 = 8, K_BIL = 16 };
 
 static DrawState ds;
 
+static void tc_bind(void);
+
 static void setup_draw(void)
 {
     uint64_t attrs = BITS(gs.prmodecont, 0, 1) ? gs.prim : gs.prmode;
@@ -376,6 +381,7 @@ static void setup_draw(void)
         uint32_t t0 = ds.tbp * 256, t1 = t0 + GS_ROW64(ds.tbw) * 64 * 4 * ds.th;
         ds.feedback = t0 < f1 && f0 < t1;
     }
+    tc_bind();
 }
 
 /* ---- Texture sampling -------------------------------------------------- */
@@ -403,12 +409,10 @@ static inline uint32_t tex16(uint32_t c)
     return rgb | ((uint32_t)a << 24);
 }
 
-static inline uint32_t texel(int u, int v)
+/* Texel at wrapped coordinates (u, v), as RGBA. */
+static inline uint32_t texel_raw(int u, int v)
 {
     uint32_t c, idx;
-
-    u = wrap_coord(u, ds.tw, ds.wms, ds.minu, ds.maxu) & 2047;
-    v = wrap_coord(v, ds.th, ds.wmt, ds.minv, ds.maxv) & 2047;
 
     switch (ds.tpsm) {
     case GS_PSMCT32:
@@ -444,63 +448,121 @@ static inline uint32_t texel(int u, int v)
     return ds.cpsm == 0 ? c : tex16(c);
 }
 
-/* Texels of the current primitive's texture area, converted to RGBA once
- * before drawing (bilinear filtering reads each texel up to four times). */
-static struct {
-    uint32_t *buf;
-    size_t cap;
-    int on, u0, v0, w, h;
-} tc;
+/* Decoded textures. Each entry holds a texture as RGBA, decoded lazily by
+ * blocks of 8x8 texels as primitives reach them, and stays valid until GS
+ * memory under it is written (page write generations, gs_mem.h) or, for
+ * indexed textures, another CLUT is loaded. Worker threads may decode the
+ * same block at once: they write the same values, and the block's flag is
+ * set after its texels. */
+#define TC_ENTRIES 48
+#define TC_MAX_TEXELS (1024 * 1024)
 
-static void decode_rows(void *ctx, int r0, int r1)
+typedef struct {
+    int used;
+    uint64_t key, texa, clut;
+    uint64_t stamp; /* gs_gen when the entry was (re)started */
+    uint64_t last_use;
+    int w, h, bw;   /* texels, and blocks per row */
+    uint32_t *texels;
+    uint8_t *valid; /* per block */
+    size_t cap;     /* texels allocated */
+} TexEntry;
+
+static TexEntry tcache[TC_ENTRIES];
+static TexEntry *tcur; /* texture of the current primitive, or NULL */
+static uint64_t tc_clock;
+
+static void tc_flush(void)
 {
-    (void)ctx;
-    for (int r = r0; r < r1; r++) {
-        uint32_t *row = tc.buf + (size_t)r * tc.w;
-        for (int c = 0; c < tc.w; c++)
-            row[c] = texel(tc.u0 + c, tc.v0 + r);
-    }
+    for (int i = 0; i < TC_ENTRIES; i++)
+        tcache[i].used = 0;
+    tcur = NULL;
 }
 
-/* Decodes the texels a primitive can reach: u, v in 1/16 texel, pixels the
- * size of the primitive (no decoding when it would read far fewer texels
- * than the area holds). */
-static void decode_texture(float umin, float umax, float vmin, float vmax, int64_t pixels)
+static void tc_restart(TexEntry *t)
 {
-    tc.on = 0;
-    if (!ds.tme || !(umin > -65536.0f && umax < 65536.0f && vmin > -65536.0f && vmax < 65536.0f))
+    memset(t->valid, 0, (size_t)t->bw * ((t->h + 7) / 8));
+    t->stamp = gs_gen;
+}
+
+/* Picks the cache entry for the texture of the primitive being set up. */
+static void tc_bind(void)
+{
+    uint64_t tex0 = gs.tex0[ds.ctx], key, texa, clut;
+    int indexed = ds.tpsm == GS_PSMT8 || ds.tpsm == GS_PSMT4 || ds.tpsm == GS_PSMT8H ||
+                  ds.tpsm == GS_PSMT4HL || ds.tpsm == GS_PSMT4HH;
+    int w = ds.tw < 8 ? 8 : ds.tw, h = ds.th < 8 ? 8 : ds.th;
+    TexEntry *t = NULL, *lru = &tcache[0];
+
+    tcur = NULL;
+    /* A texture read from the picture being drawn is read as it changes. */
+    if (!ds.tme || ds.feedback || (size_t)w * h > TC_MAX_TEXELS)
         return;
-    int u0 = (int)floorf(umin / 16.0f) - 1, u1 = (int)floorf(umax / 16.0f) + 2;
-    int v0 = (int)floorf(vmin / 16.0f) - 1, v1 = (int)floorf(vmax / 16.0f) + 2;
-    int64_t area = (int64_t)(u1 - u0) * (v1 - v0);
-    if (area > pixels * 2 + 4096 || area > (1 << 22))
-        return;
-    if ((size_t)area > tc.cap) {
-        free(tc.buf);
-        tc.cap = (size_t)area + 65536;
-        tc.buf = malloc(tc.cap * 4);
-        if (tc.buf == NULL) {
-            tc.cap = 0;
-            return;
+    key = tex0 & ((1ull << 34) - 1);                 /* TBP, TBW, PSM, TW, TH */
+    if (indexed)
+        key |= tex0 & (0x3full << 51) & ~(1ull << 55); /* CPSM, CSA */
+    texa = (ds.tpsm == GS_PSMCT32) ? 0 : (uint64_t)ds.ta0 | (uint64_t)ds.aem << 8 | (uint64_t)ds.ta1 << 16;
+    clut = indexed ? clut_gen : 0;
+
+    for (int i = 0; i < TC_ENTRIES; i++) {
+        TexEntry *e = &tcache[i];
+        if (e->used && e->key == key && e->texa == texa && e->clut == clut) {
+            t = e;
+            break;
         }
+        if (!e->used || (lru->used && e->last_use < lru->last_use))
+            lru = e;
     }
-    tc.u0 = u0;
-    tc.v0 = v0;
-    tc.w = u1 - u0;
-    tc.h = v1 - v0;
-    gs_parallel(decode_rows, NULL, 0, tc.h, (int)area);
-    tc.on = 1;
+    if (t == NULL) {
+        t = lru;
+        if (t->cap < (size_t)w * h) {
+            free(t->texels);
+            free(t->valid);
+            t->texels = malloc((size_t)w * h * 4);
+            t->valid = malloc((size_t)(w / 8) * (h / 8));
+            t->cap = t->texels != NULL && t->valid != NULL ? (size_t)w * h : 0;
+            if (t->cap == 0) {
+                t->used = 0;
+                return;
+            }
+        }
+        t->used = 1;
+        t->key = key;
+        t->texa = texa;
+        t->clut = clut;
+        t->w = w;
+        t->h = h;
+        t->bw = w / 8;
+        tc_restart(t);
+    } else if (gs_pages_newer(ds.tpsm, ds.tbp, ds.tbw, 0, 0, w - 1, h - 1, t->stamp)) {
+        tc_restart(t);
+    }
+    t->last_use = ++tc_clock;
+    tcur = t;
+}
+
+static void tc_decode_block(TexEntry *t, int bx, int by)
+{
+    for (int y = by * 8; y < by * 8 + 8; y++) {
+        uint32_t *row = t->texels + (size_t)y * t->w;
+        for (int x = bx * 8; x < bx * 8 + 8; x++)
+            row[x] = texel_raw(x, y);
+    }
+    __atomic_store_n(&t->valid[by * t->bw + bx], 1, __ATOMIC_RELEASE);
 }
 
 static inline uint32_t fetch(int u, int v)
 {
-    if (!tc.on)
-        return texel(u, v);
-    u -= tc.u0;
-    v -= tc.v0;
-    u = u < 0 ? 0 : u >= tc.w ? tc.w - 1 : u;
-    v = v < 0 ? 0 : v >= tc.h ? tc.h - 1 : v;
-    return tc.buf[v * tc.w + u];
+    const TexEntry *t = tcur;
+
+    u = wrap_coord(u, ds.tw, ds.wms, ds.minu, ds.maxu) & 2047;
+    v = wrap_coord(v, ds.th, ds.wmt, ds.minv, ds.maxv) & 2047;
+    if (t != NULL && u < t->w && v < t->h) {
+        if (!__atomic_load_n(&t->valid[(v >> 3) * t->bw + (u >> 3)], __ATOMIC_ACQUIRE))
+            tc_decode_block((TexEntry *)t, u >> 3, v >> 3);
+        return t->texels[v * t->w + u];
+    }
+    return texel_raw(u, v);
 }
 
 static ALWAYS_INLINE uint32_t sample(int k, int u16, int v16)
@@ -512,20 +574,8 @@ static ALWAYS_INLINE uint32_t sample(int k, int u16, int v16)
      * weighted two at a time (the weights add up to 256). */
     int us = u16 - 8, vs = v16 - 8;
     int u0 = us >> 4, v0 = vs >> 4, fu = us & 15, fv = vs & 15;
-    uint32_t c00, c10, c01, c11;
-    if (tc.on) {
-        /* The decoded area holds at least 3x3 texels around what the
-         * primitive reads; clamping keeps the 2x2 block inside it. */
-        u0 -= tc.u0;
-        v0 -= tc.v0;
-        u0 = u0 < 0 ? 0 : u0 > tc.w - 2 ? tc.w - 2 : u0;
-        v0 = v0 < 0 ? 0 : v0 > tc.h - 2 ? tc.h - 2 : v0;
-        const uint32_t *p = tc.buf + v0 * tc.w + u0;
-        c00 = p[0]; c10 = p[1]; c01 = p[tc.w]; c11 = p[tc.w + 1];
-    } else {
-        c00 = texel(u0, v0); c10 = texel(u0 + 1, v0);
-        c01 = texel(u0, v0 + 1); c11 = texel(u0 + 1, v0 + 1);
-    }
+    uint32_t c00 = fetch(u0, v0), c10 = fetch(u0 + 1, v0);
+    uint32_t c01 = fetch(u0, v0 + 1), c11 = fetch(u0 + 1, v0 + 1);
     uint32_t w00 = (16 - fu) * (16 - fv), w10 = fu * (16 - fv), w01 = (16 - fu) * fv, w11 = fu * fv;
     uint32_t rb = (c00 & 0xff00ff) * w00 + (c10 & 0xff00ff) * w10 +
                   (c01 & 0xff00ff) * w01 + (c11 & 0xff00ff) * w11;
@@ -585,6 +635,25 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
 {
     int write_rgb = 1, write_a = 1, write_z = !ds.zmsk;
 
+    /* Depth test first: a hidden pixel needs no texture lookup (the tests
+     * only decide what is written, so their order does not matter). */
+    uint32_t za = 0;
+    if (k & K_ZTE) {
+        if (ds.ztst == 0)
+            return;
+        if (z > ds.zmax)
+            z = ds.zmax;
+        za = z_addr(x, y);
+        if (ds.ztst >= 2) {
+            uint32_t zd = (ds.zpsm & 2) ? gs_rd16(za)
+                        : ds.zpsm == GS_PSMZ24 ? gs_rd32(za) & 0xffffff : gs_rd32(za);
+            if (ds.ztst == 2 ? z < zd : z <= zd)
+                return;
+        }
+    } else {
+        write_z = 0;
+    }
+
     if (k & K_TME) {
         uint32_t t = sample(k, u, v);
         int tr = t & 255, tg = (t >> 8) & 255, tb = (t >> 16) & 255, ta = t >> 24;
@@ -625,24 +694,6 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
         case 2: write_rgb = write_a = 0; break;    /* ZB_ONLY */
         default: write_a = 0; write_z = 0; break;  /* RGB_ONLY */
         }
-    }
-
-    /* Depth test */
-    uint32_t za = 0;
-    if (k & K_ZTE) {
-        if (ds.ztst == 0)
-            return;
-        if (z > ds.zmax)
-            z = ds.zmax;
-        za = z_addr(x, y);
-        if (ds.ztst >= 2) {
-            uint32_t zd = (ds.zpsm & 2) ? gs_rd16(za)
-                        : ds.zpsm == GS_PSMZ24 ? gs_rd32(za) & 0xffffff : gs_rd32(za);
-            if (ds.ztst == 2 ? z < zd : z <= zd)
-                return;
-        }
-    } else {
-        write_z = 0;
     }
 
     uint32_t fa = (k & K_CT32) ? gs_addr32(0, ds.fbp, ds.fbw, x, y) : frame_addr(x, y), raw, dst;
@@ -710,6 +761,15 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
         else
             gs_wr32(za, z);
     }
+}
+
+/* Marks the frame and depth buffer pages that pixels x0..x1, y0..y1 of a
+ * primitive may have written, for the texture cache. */
+static void mark_drawn(int x0, int y0, int x1, int y1)
+{
+    gs_mark_pages(ds.fpsm, ds.fbp, ds.fbw, x0, y0, x1, y1);
+    if (!ds.zmsk)
+        gs_mark_pages(ds.zpsm, ds.zbp, ds.fbw, x0, y0, x1, y1);
 }
 
 /* One pixel anywhere (points and lines). */
@@ -805,14 +865,8 @@ static void draw_sprite(const Vertex *a, const Vertex *b)
     j.v0 = v0;
     j.du = x1 != x0 ? (u1 - u0) / (float)(x1 - x0) : 0.0f;
     j.dv = y1 != y0 ? (v1 - v0) / (float)(y1 - y0) : 0.0f;
-    {
-        float ua = u0 + (((px0 << 4) - x0)) * j.du, ub = u0 + (((px1 - 1) << 4) - x0) * j.du;
-        float va = v0 + (((py0 << 4) - y0)) * j.dv, vb = v0 + (((py1 - 1) << 4) - y0) * j.dv;
-        decode_texture(fminf(ua, ub), fmaxf(ua, ub), fminf(va, vb), fmaxf(va, vb),
-                       (int64_t)(px1 - px0) * (py1 - py0));
-    }
     gs_parallel(sprite_rows, &j, py0, py1, ds.feedback ? 0 : (px1 - px0) * (py1 - py0));
-    tc.on = 0;
+    mark_drawn(px0, py0, px1 - 1, py1 - 1);
 }
 
 static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
@@ -820,13 +874,17 @@ static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
     return (int64_t)(bx - ax) * (py - ay) - (int64_t)(by - ay) * (px - ax);
 }
 
+/* Attributes interpolated over a triangle, as planes around its first
+ * vertex: value = a0 + gx * (sx - x0) + gy * (sy - y0), in 1/16 pixel. */
+enum { A_R, A_G, A_B, A_A, A_F, A_U, A_V, A_Q, A_COUNT };
+
 typedef struct {
     const Vertex *v[3], *last;
-    int64_t area;
     int px0, px1;
     int bias[3]; /* 1 for edges whose pixels are left out (right, bottom) */
-    float att[3][9];
-    double z[3];
+    int x0, y0;
+    float a0[A_COUNT], gx[A_COUNT], gy[A_COUNT];
+    double z0, zgx, zgy;
 } TriangleJob;
 
 static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0, int py1)
@@ -835,34 +893,69 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
     uint32_t drawn = 0;
 
     for (int py = py0; py < py1; py++) {
-        int sy = py << 4;
-        for (int px = j->px0; px <= j->px1; px++) {
-            int sx = px << 4;
-            int64_t w0 = edge(v[1]->x, v[1]->y, v[2]->x, v[2]->y, sx, sy);
-            int64_t w1 = edge(v[2]->x, v[2]->y, v[0]->x, v[0]->y, sx, sy);
-            int64_t w2 = edge(v[0]->x, v[0]->y, v[1]->x, v[1]->y, sx, sy);
-            if (w0 < j->bias[0] || w1 < j->bias[1] || w2 < j->bias[2])
-                continue;
-            float b0 = (float)w0 / j->area, b1 = (float)w1 / j->area, b2 = (float)w2 / j->area;
-            float at[9];
-            for (int k = 0; k < 9; k++)
-                at[k] = j->att[0][k] * b0 + j->att[1][k] * b1 + j->att[2][k] * b2;
-            float qq = at[8] != 0.0f ? at[8] : 1.0f;
+        int sy = py << 4, xs = j->px0, xe = j->px1;
+
+        /* The pixels of this row inside all three edges: each edge function
+         * changes by a constant step from one pixel to the next. */
+        for (int e = 0; e < 3 && xs <= xe; e++) {
+            const Vertex *a = v[(e + 1) % 3], *b = v[(e + 2) % 3];
+            int64_t w = edge(a->x, a->y, b->x, b->y, j->px0 << 4, sy) - j->bias[e];
+            int64_t dw = -(int64_t)(b->y - a->y) * 16;
+            if (dw == 0) {
+                if (w < 0)
+                    xe = xs - 1;
+            } else if (dw > 0) {
+                if (w < 0) {
+                    int64_t kmin = (-w + dw - 1) / dw;
+                    if (j->px0 + kmin > xs)
+                        xs = (int)(j->px0 + (kmin < 100000 ? kmin : 100000));
+                }
+            } else {
+                if (w < 0) {
+                    xe = xs - 1;
+                } else {
+                    int64_t kmax = w / -dw;
+                    if (j->px0 + kmax < xe)
+                        xe = (int)(j->px0 + kmax);
+                }
+            }
+        }
+        if (xs > xe)
+            continue;
+
+        float dx = (float)((xs << 4) - j->x0), dy = (float)(sy - j->y0);
+        float at[A_COUNT], step[A_COUNT];
+        for (int i = 0; i < A_COUNT; i++) {
+            at[i] = j->a0[i] + j->gx[i] * dx + j->gy[i] * dy;
+            step[i] = j->gx[i] * 16.0f;
+        }
+        double z = j->z0 + j->zgx * ((xs << 4) - j->x0) + j->zgy * (sy - j->y0) + 0.5;
+        double zstep = j->zgx * 16.0;
+
+        for (int px = xs; px <= xe; px++) {
             int r, g, b, a;
             /* Rounding errors must not take a value below what all three
              * vertices hold: colours get a small bias, and depth (up to 32
-             * bits, compared exactly) is computed in double and rounded. */
+             * bits, compared exactly) is interpolated in double. */
             if (ds.iip) {
-                r = (int)(at[0] + 0.01f); g = (int)(at[1] + 0.01f);
-                b = (int)(at[2] + 0.01f); a = (int)(at[3] + 0.01f);
+                r = (int)(at[A_R] + 0.01f); g = (int)(at[A_G] + 0.01f);
+                b = (int)(at[A_B] + 0.01f); a = (int)(at[A_A] + 0.01f);
             } else {
                 r = j->last->r; g = j->last->g; b = j->last->b; a = j->last->a;
             }
-            double z = (j->z[0] * w0 + j->z[1] * w1 + j->z[2] * w2) / (double)j->area + 0.5;
-            shade(k, px, py, z >= 4294967295.0 ? 0xffffffffu : (uint32_t)z, r, g, b, a,
-                  (int)(at[5] + 0.01f), (int)(at[6] / qq), (int)(at[7] / qq));
-            drawn++;
+            int u = 0, tv = 0;
+            if (k & K_TME) {
+                float qq = at[A_Q] != 0.0f ? at[A_Q] : 1.0f;
+                u = (int)(at[A_U] / qq);
+                tv = (int)(at[A_V] / qq);
+            }
+            shade(k, px, py, z <= 0.0 ? 0u : z >= 4294967295.0 ? 0xffffffffu : (uint32_t)z,
+                  r, g, b, a, (int)(at[A_F] + 0.01f), u, tv);
+            for (int i = 0; i < A_COUNT; i++)
+                at[i] += step[i];
+            z += zstep;
         }
+        drawn += (uint32_t)(xe - xs + 1);
     }
     return drawn;
 }
@@ -895,7 +988,6 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
         const Vertex *t = v[1]; v[1] = v[2]; v[2] = t;
         area = -area;
     }
-    j.area = area;
 
     /* Top-left rule, as on the GS: a pixel exactly on an edge belongs to the
      * triangle only on its top and left edges. Without it, a polygon whose
@@ -928,36 +1020,45 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
 
     /* Per-vertex attributes; texture coordinates are interpolated as s/q, t/q
      * and 1/q for perspective correction (STQ), or linearly (UV). */
+    float att[3][A_COUNT];
     for (int i = 0; i < 3; i++) {
         const Vertex *p = v[i];
         float q = (ds.fst || p->q == 0.0f) ? 1.0f : p->q;
-        float u, w;
+        att[i][A_R] = (float)p->r; att[i][A_G] = (float)p->g; att[i][A_B] = (float)p->b;
+        att[i][A_A] = (float)p->a; att[i][A_F] = (float)p->f;
         if (ds.fst) {
-            u = (float)p->u;
-            w = (float)p->v;
+            att[i][A_U] = (float)p->u;
+            att[i][A_V] = (float)p->v;
         } else {
-            u = p->s * ds.tw * 16.0f;
-            w = p->t * ds.th * 16.0f;
+            att[i][A_U] = p->s * ds.tw * 16.0f;
+            att[i][A_V] = p->t * ds.th * 16.0f;
         }
-        j.att[i][0] = (float)p->r; j.att[i][1] = (float)p->g; j.att[i][2] = (float)p->b;
-        j.att[i][3] = (float)p->a; j.att[i][4] = (float)p->z; j.att[i][5] = (float)p->f;
-        j.att[i][6] = u; j.att[i][7] = w; j.att[i][8] = ds.fst ? 1.0f : q;
-        j.z[i] = (double)p->z;
+        att[i][A_Q] = q;
     }
+    /* Planes from the differences to the first vertex: an attribute equal at
+     * all three vertices is exactly that value everywhere. */
+    {
+        double dx1 = v[1]->x - v[0]->x, dy1 = v[1]->y - v[0]->y;
+        double dx2 = v[2]->x - v[0]->x, dy2 = v[2]->y - v[0]->y;
+        double det = (double)area;
+        for (int i = 0; i < A_COUNT; i++) {
+            double d1 = (double)att[1][i] - att[0][i], d2 = (double)att[2][i] - att[0][i];
+            j.a0[i] = att[0][i];
+            j.gx[i] = (float)((d1 * dy2 - d2 * dy1) / det);
+            j.gy[i] = (float)((d2 * dx1 - d1 * dx2) / det);
+        }
+        double z1 = (double)v[1]->z - v[0]->z, z2 = (double)v[2]->z - v[0]->z;
+        j.z0 = (double)v[0]->z;
+        j.zgx = (z1 * dy2 - z2 * dy1) / det;
+        j.zgy = (z2 * dx1 - z1 * dx2) / det;
+    }
+    j.x0 = v[0]->x;
+    j.y0 = v[0]->y;
     /* Flat shading uses the colour of the last vertex sent. */
     j.last = v2;
-    {
-        float umin = 1e30f, umax = -1e30f, vmin = 1e30f, vmax = -1e30f;
-        for (int i = 0; i < 3; i++) {
-            float u = j.att[i][6] / j.att[i][8], w = j.att[i][7] / j.att[i][8];
-            umin = fminf(umin, u); umax = fmaxf(umax, u);
-            vmin = fminf(vmin, w); vmax = fmaxf(vmax, w);
-        }
-        decode_texture(umin, umax, vmin, vmax, (int64_t)(px1 - px0 + 1) * (py1 - py0 + 1));
-    }
     gs_parallel(triangle_rows, &j, py0, py1 + 1,
                 ds.feedback ? 0 : (px1 - px0 + 1) * (py1 - py0 + 1) / 2);
-    tc.on = 0;
+    mark_drawn(px0, py0, px1, py1);
 }
 
 static void draw_line(const Vertex *a, const Vertex *b)
@@ -980,6 +1081,7 @@ static void draw_line(const Vertex *a, const Vertex *b)
                    b->f, (int)(u0 + (u1 - u0) * t), (int)(v0 + (v1 - v0) * t));
     }
     count_pixels(steps + 1);
+    mark_drawn(x0 < x1 ? x0 : x1, y0 < y1 ? y0 : y1, x0 < x1 ? x1 : x0, y0 < y1 ? y1 : y0);
 }
 
 /* ---- Vertex queue ------------------------------------------------------ */
@@ -1049,7 +1151,11 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
         gs_stats.prims++;
         changes++;
         switch (type) {
-        case 0: draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v); count_pixels(1); break;
+        case 0:
+            draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v);
+            count_pixels(1);
+            mark_drawn(v.x >> 4, v.y >> 4, v.x >> 4, v.y >> 4);
+            break;
         case 1: case 2: draw_line(&gs.queue[0], &gs.queue[1]); break;
         case 3: case 4: case 5: draw_triangle(&gs.queue[0], &gs.queue[1], &gs.queue[2]); break;
         case 6: draw_sprite(&gs.queue[0], &gs.queue[1]); break;
@@ -1306,6 +1412,8 @@ int gs_replay(const char *path)
         fread(&trx, sizeof(trx), 1, f) == 1 && fread(&gif, sizeof(gif), 1, f) == 1 &&
         fread(gs_vram, GS_MEM_SIZE, 1, f) == 1) {
         changes++;
+        tc_flush();
+        gs_mark_all();
         while (fread(&type, 4, 1, f) == 1) {
             if (type == DUMP_GIF) {
                 if (fread(&count, 4, 1, f) != 1)
@@ -1492,6 +1600,8 @@ void gs_reset(void)
     memset(&trx, 0, sizeof(trx));
     memset(&gif, 0, sizeof(gif));
     changes++;
+    tc_flush();
+    gs_mark_all();
     gs.q = 1.0f;
     gs.prmodecont = 1;
     gs.colclamp = 1;

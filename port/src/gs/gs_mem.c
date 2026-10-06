@@ -163,7 +163,7 @@ uint32_t gs_read_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y)
     return 0;
 }
 
-void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
+static void write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
 {
     uint32_t a;
 
@@ -202,6 +202,96 @@ void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
         gs_wr32(a, (gs_rd32(a) & 0x0fffffff) | ((v & 15) << 28));
         return;
     }
+}
+
+/* ---- Write generations --------------------------------------------------- */
+
+uint64_t gs_page_gen[GS_PAGES];
+uint64_t gs_gen;
+
+/* Page size in pixels and pages per buffer row, by format. */
+static void page_shape(int psm, uint32_t bw, int *pw, int *ph, uint32_t *row)
+{
+    switch (psm) {
+    case GS_PSMCT16: case GS_PSMCT16S: case GS_PSMZ16: case GS_PSMZ16S:
+        *pw = 64; *ph = 64; *row = GS_ROW64(bw); break;
+    case GS_PSMT8:
+        *pw = 128; *ph = 64; *row = GS_ROW128(bw); break;
+    case GS_PSMT4:
+        *pw = 128; *ph = 128; *row = GS_ROW128(bw); break;
+    default:
+        *pw = 64; *ph = 32; *row = GS_ROW64(bw); break;
+    }
+}
+
+/* Calls fn on each page of the rectangle (a buffer that does not start on
+ * a page boundary straddles one more page per row). Stops when fn returns
+ * nonzero, and returns that. */
+static int for_pages(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1,
+                     int (*fn)(uint32_t page, uint64_t arg), uint64_t arg)
+{
+    int pw, ph;
+    uint32_t row;
+
+    x0 = x0 < 0 ? 0 : x0 > 2047 ? 2047 : x0;
+    y0 = y0 < 0 ? 0 : y0 > 2047 ? 2047 : y0;
+    x1 = x1 < x0 ? x0 : x1 > 2047 ? 2047 : x1;
+    y1 = y1 < y0 ? y0 : y1 > 2047 ? 2047 : y1;
+    page_shape(psm, bw, &pw, &ph, &row);
+    for (int py = y0 / ph; py <= y1 / ph; py++) {
+        uint32_t p0 = bp / 32 + py * row + x0 / pw;
+        uint32_t p1 = bp / 32 + py * row + x1 / pw + (bp % 32 != 0);
+        if (p1 - p0 >= GS_PAGES)
+            p1 = p0 + GS_PAGES - 1;
+        for (uint32_t p = p0; p <= p1; p++) {
+            int r = fn(p % GS_PAGES, arg);
+            if (r)
+                return r;
+        }
+    }
+    return 0;
+}
+
+static int set_gen(uint32_t page, uint64_t gen)
+{
+    gs_page_gen[page] = gen;
+    return 0;
+}
+
+static int newer(uint32_t page, uint64_t gen)
+{
+    return gs_page_gen[page] > gen;
+}
+
+void gs_mark_pages(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1)
+{
+    for_pages(psm, bp, bw, x0, y0, x1, y1, set_gen, ++gs_gen);
+}
+
+void gs_mark_all(void)
+{
+    ++gs_gen;
+    for (int p = 0; p < GS_PAGES; p++)
+        gs_page_gen[p] = gs_gen;
+}
+
+int gs_pages_newer(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, uint64_t gen)
+{
+    return for_pages(psm, bp, bw, x0, y0, x1, y1, newer, gen);
+}
+
+void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
+{
+    int pw, ph;
+    uint32_t row;
+
+    write_pixel(psm, bp, bw, x, y, v);
+    page_shape(psm, bw, &pw, &ph, &row);
+    /* The pixel's page, and the next one for a buffer not on a boundary. */
+    uint32_t p = bp / 32 + (uint32_t)(y / ph) * row + (uint32_t)(x / pw);
+    gs_page_gen[p % GS_PAGES] = ++gs_gen;
+    if (bp % 32 != 0)
+        gs_page_gen[(p + 1) % GS_PAGES] = gs_gen;
 }
 
 #ifdef GS_MEM_SELFTEST

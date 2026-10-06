@@ -17,6 +17,12 @@ set(CMAKE_C_FLAGS_INIT "-m32")
 
 project(cvx_pc C)
 
+# Floating point in SSE2 registers instead of the old x87 unit, which 32-bit
+# x86 compilers use by default: x87 needs a slow mode switch for every float
+# to integer conversion (the software GS does several per pixel), and keeps
+# more precision than the PS2's single-precision floats.
+add_compile_options(-msse2 -mfpmath=sse)
+
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING "Build type" FORCE)
 endif()
