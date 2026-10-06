@@ -23,6 +23,11 @@ int gs_gpu_init(void *(*getproc)(const char *name), int scale);
  * is black. smooth: linear filtering. */
 void gs_gpu_present(int fb_w, int fb_h, int x, int y, int w, int h, int smooth);
 
+/* Copies the displayed picture at the GPU's resolution (scale times the
+ * PS2's) into dst, RGBA (R in the low byte), rows from the top; for
+ * screenshots. Returns 0 if it has more than max_pixels pixels. */
+int gs_gpu_read_display(uint32_t *dst, int max_pixels, int *w, int *h);
+
 /* Draws an RGBA picture (R in the low byte) over the rectangle x, y, w, h
  * of the window, after gs_gpu_present (replacement movies). changed: the
  * pixels are not those of the previous call. */

@@ -22,15 +22,24 @@ int64_t (*gs_clock_ns)(void);
 
 /* ---- Register state ---------------------------------------------------- */
 
+/* 64-bit values aligned on 8 bytes in structures, as on Windows, also on
+ * 32-bit Linux (4 there): the state saved in frame dumps (gs_dump_frame) is
+ * then the same on both. */
+#if defined(__GNUC__) || defined(__clang__)
+typedef uint64_t reg64 __attribute__((aligned(8)));
+#else
+typedef uint64_t reg64;
+#endif
+
 static struct {
-    uint64_t prim, prmode, prmodecont;
-    uint64_t rgbaq, st, uv, fog;
+    reg64 prim, prmode, prmodecont;
+    reg64 rgbaq, st, uv, fog;
     float q;
-    uint64_t tex0[2], clamp[2], tex1[2], xyoffset[2], scissor[2], alpha[2];
-    uint64_t test[2], fba[2], frame[2], zbuf[2];
-    uint64_t texa, fogcol, texclut, dthe, colclamp, pabe, dimx;
-    uint64_t bitbltbuf, trxpos, trxreg, trxdir;
-    uint64_t dispfb, display;
+    reg64 tex0[2], clamp[2], tex1[2], xyoffset[2], scissor[2], alpha[2];
+    reg64 test[2], fba[2], frame[2], zbuf[2];
+    reg64 texa, fogcol, texclut, dthe, colclamp, pabe, dimx;
+    reg64 bitbltbuf, trxpos, trxreg, trxdir;
+    reg64 dispfb, display;
 
     Vertex queue[3];
     int queued;     /* vertices waiting for a primitive */
@@ -52,7 +61,7 @@ static struct {
 
 /* GIF state across DMA transfers. */
 static struct {
-    uint64_t tag_lo, tag_hi;
+    reg64 tag_lo, tag_hi;
     uint32_t nloop, nreg, reg, flg;
     int in_tag;
 } gif;

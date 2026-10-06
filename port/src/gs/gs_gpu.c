@@ -46,12 +46,14 @@ static const char draw_vs[] =
     "layout(location = 0) in vec3 a_pos;\n"   /* x, y in GS pixels, z */
     "layout(location = 1) in vec4 a_color;\n" /* 0..255 */
     "layout(location = 2) in vec4 a_tex;\n"   /* U, V in 1/16 texel, Q, fog */
+    "layout(location = 3) in vec4 a_clamp;\n" /* U, V limits (see uv_limits) */
     "uniform vec2 u_size;\n"                  /* the target, in GS pixels */
     "out vec4 v_color;\n"
     "flat out vec4 v_flat;\n"
     "out vec3 v_uvq;\n"
     "out float v_fog;\n"
     "out float v_z;\n"
+    "flat out vec4 v_clamp;\n"
     "void main() {\n"
     /* GS pixel x is sampled at x; OpenGL samples pixel centres (+0.5). */
     "    gl_Position = vec4((a_pos.xy + 0.5) / u_size * 2.0 - 1.0, 0.0, 1.0);\n"
@@ -60,6 +62,7 @@ static const char draw_vs[] =
     "    v_uvq = a_tex.xyz;\n"
     "    v_fog = a_tex.w;\n"
     "    v_z = a_pos.z;\n"
+    "    v_clamp = a_clamp;\n"
     "}\n";
 
 static const char draw_fs[] =
@@ -69,6 +72,7 @@ static const char draw_fs[] =
     "in vec3 v_uvq;\n"
     "in float v_fog;\n"
     "in float v_z;\n"
+    "flat in vec4 v_clamp;\n"
     "layout(location = 0, index = 0) out vec4 o_color;\n"
     "layout(location = 0, index = 1) out vec4 o_factor;\n"
     "uniform sampler2D u_tex;\n"   /* the texture (decoded, or a target) */
@@ -108,7 +112,7 @@ static const char draw_fs[] =
     "}\n"
     "ivec4 sample_tex() {\n"
     "    float q = v_uvq.z != 0.0 ? v_uvq.z : 1.0;\n"
-    "    vec2 uv = vec2(ivec2(v_uvq.xy / q)) / 16.0;\n" /* 1/16 texel, truncated as on the GS */
+    "    vec2 uv = vec2(ivec2(clamp(v_uvq.xy / q, v_clamp.xy, v_clamp.zw))) / 16.0;\n" /* 1/16 texel, truncated as on the GS */
     "    float s = float(u_tscale);\n"
     "    if (u_bilinear == 0)\n"
     "        return fetch(ivec2(floor(uv * s + (s - 1.0) * 0.5)));\n"
@@ -975,7 +979,12 @@ typedef struct {
 
 typedef struct {
     float x, y, z, r, g, b, a, u, v, q, f;
+    float umin, vmin, umax, vmax;
 } GpuVertex;
+
+/* Limits of U and V (1/16 texel) for the vertices of the primitive being
+ * added (see uv_limits). */
+static float limits[4] = { -1e30f, -1e30f, 1e30f, 1e30f };
 
 static struct {
     GpuState st;
@@ -1365,6 +1374,10 @@ static void batch_vertex(float x, float y, const float *a)
     g->v = a[6];
     g->q = a[7];
     g->f = a[8];
+    g->umin = limits[0];
+    g->vmin = limits[1];
+    g->umax = limits[2];
+    g->vmax = limits[3];
 }
 
 /* Texture coordinates of a vertex in 1/16 texel, and Q. */
@@ -1385,6 +1398,65 @@ static void tex_coords(const DrawState *s, const Vertex *p, int divide, float *u
             *q = 1.0f;
         }
     }
+}
+
+/* At a higher resolution, the pixels at the edges of a primitive are
+ * sampled between the PS2's pixels: up to a pixel further than the PS2
+ * reads its texture. The game's 2D pictures are drawn from parts of larger
+ * textures (font letters, menu pieces), with texture coordinates that stop
+ * a fraction of a texel past the part, which the PS2 never reaches: a
+ * sliver of the next letter would show beside each one. For a primitive
+ * whose U goes along x and V along y (2D pictures), the limits are the
+ * values at its first and last PS2 pixels; otherwise there are none.
+ * a: per vertex as in gs_gpu_prim; n: 2 for sprites (corners), 3 otherwise. */
+static void uv_limits(const Vertex *v, float a[3][9], int n, int scax0, int scax1, int scay0, int scay1)
+{
+    double x[3], y[3], u[3], w[3], gu, gv;
+    int minx = 1 << 30, maxx = -(1 << 30), miny = 1 << 30, maxy = -(1 << 30);
+
+    limits[0] = limits[1] = -1e30f;
+    limits[2] = limits[3] = 1e30f;
+    for (int i = 0; i < n; i++) {
+        if (a[i][7] != a[0][7])
+            return; /* perspective */
+        x[i] = v[i].x / 16.0;
+        y[i] = v[i].y / 16.0;
+        u[i] = a[i][5] / a[i][7];
+        w[i] = a[i][6] / a[i][7];
+        minx = v[i].x < minx ? v[i].x : minx;
+        maxx = v[i].x > maxx ? v[i].x : maxx;
+        miny = v[i].y < miny ? v[i].y : miny;
+        maxy = v[i].y > maxy ? v[i].y : maxy;
+    }
+    if (n == 2) {
+        gu = x[1] != x[0] ? (u[1] - u[0]) / (x[1] - x[0]) : 0.0;
+        gv = y[1] != y[0] ? (w[1] - w[0]) / (y[1] - y[0]) : 0.0;
+    } else {
+        double dx1 = x[1] - x[0], dy1 = y[1] - y[0], dx2 = x[2] - x[0], dy2 = y[2] - y[0];
+        double det = dx1 * dy2 - dx2 * dy1;
+        double du1 = u[1] - u[0], du2 = u[2] - u[0], dv1 = w[1] - w[0], dv2 = w[2] - w[0];
+        double uy = (du2 * dx1 - du1 * dx2) / det, vx = (dv1 * dy2 - dv2 * dy1) / det;
+        /* U along y or V along x by less than 1/32 texel over the primitive */
+        if (fabs(uy) * (maxy - miny) / 16.0 >= 0.5 || fabs(vx) * (maxx - minx) / 16.0 >= 0.5)
+            return;
+        gu = (du1 * dy2 - du2 * dy1) / det;
+        gv = (dv2 * dx1 - dv1 * dx2) / det;
+    }
+    /* First and last pixels drawn on the PS2 (top-left rule) */
+    int c0 = (minx + 15) >> 4, c1 = ((maxx + 15) >> 4) - 1;
+    int r0 = (miny + 15) >> 4, r1 = ((maxy + 15) >> 4) - 1;
+    c0 = c0 > scax0 ? c0 : scax0;
+    c1 = c1 < scax1 ? c1 : scax1;
+    r0 = r0 > scay0 ? r0 : scay0;
+    r1 = r1 < scay1 ? r1 : scay1;
+    if (c1 < c0 || r1 < r0)
+        return;
+    double ua = u[0] + gu * (c0 - x[0]), ub = u[0] + gu * (c1 - x[0]);
+    double va = w[0] + gv * (r0 - y[0]), vb = w[0] + gv * (r1 - y[0]);
+    limits[0] = (float)(ua < ub ? ua : ub);
+    limits[2] = (float)(ua < ub ? ub : ua);
+    limits[1] = (float)(va < vb ? va : vb);
+    limits[3] = (float)(va < vb ? vb : va);
 }
 
 void gs_gpu_prim(const DrawState *s, int type, const Vertex *v)
@@ -1459,6 +1531,10 @@ void gs_gpu_prim(const DrawState *s, int type, const Vertex *v)
         tex_coords(s, &v[i], type < 3 || type == 6, &a[i][5], &a[i][6], &a[i][7]);
         a[i][8] = (float)p->f;
     }
+    if (scale > 1 && s->tme && type >= 3)
+        uv_limits(v, a, type == 6 ? 2 : 3, s->scax0, s->scax1, s->scay0, s->scay1);
+    else
+        limits[0] = limits[1] = -1e30f, limits[2] = limits[3] = 1e30f;
     if (type == 6) {
         float ax = v[0].x / 16.0f, ay = v[0].y / 16.0f, bx = v[1].x / 16.0f, by = v[1].y / 16.0f;
         float c[4][9];
@@ -1563,6 +1639,29 @@ void gs_gpu_present(int fb_w, int fb_h, int x, int y, int w, int h, int smooth)
     check_gl("present");
 }
 
+int gs_gpu_read_display(uint32_t *dst, int max_pixels, int *w, int *h)
+{
+    uint32_t fbp, fbw;
+    int psm, dw, dh;
+    Target *t;
+
+    batch_flush();
+    gs_display_area(&fbp, &fbw, &psm, &dw, &dh);
+    if (dw * scale * dh * scale > max_pixels)
+        return 0;
+    t = target_get(0, fbp, fbw, psm, dh);
+    sync_target(t, 0, 0, dw - 1, dh - 1);
+    glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
+    glReadPixels(0, 0, dw * scale, dh * scale, GL_RGBA, GL_UNSIGNED_BYTE, dst); /* rows from GS row 0 */
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    check_gl("read display");
+    for (int i = 0; i < dw * scale * dh * scale; i++)
+        dst[i] |= 0xff000000u;
+    *w = dw * scale;
+    *h = dh * scale;
+    return 1;
+}
+
 void gs_gpu_draw_picture(const uint32_t *rgba, int pw, int ph, int changed, int fb_w, int fb_h, int x, int y,
                          int w, int h)
 {
@@ -1647,6 +1746,8 @@ int gs_gpu_init(void *(*getproc)(const char *name), int scale_)
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(GpuVertex), (void *)0);
     glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, sizeof(GpuVertex), (void *)(3 * sizeof(float)));
     glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(GpuVertex), (void *)(7 * sizeof(float)));
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 4, GL_FLOAT, GL_FALSE, sizeof(GpuVertex), (void *)(11 * sizeof(float)));
     glGenVertexArrays(1, &blit_vao);
     glGenBuffers(1, &blit_vbo);
     glBindVertexArray(blit_vao);

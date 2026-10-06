@@ -26,7 +26,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Rendu 3D par le GS logiciel : sommets, éclairage, découpage traduits du VU0 (`src/game/pc_render3d.c`), testé ; reste à valider sur le jeu
 - [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
 - [x] Animation des visages (`_fmCnkCalc*`) : muscles, mâchoire, langue et yeux
-- [x] Rendu par la carte graphique (OpenGL 3.3, `renderer = opengl` dans `cvx.ini`), jusqu'à 4 fois la résolution de la PS2 ; comparé pixel par pixel au rendu logiciel dans les tests ; reste à valider sur le jeu
+- [x] Rendu par la carte graphique (OpenGL 3.3, `renderer = opengl` dans `cvx.ini`), jusqu'à 4 fois la résolution de la PS2 (sans liseré de la lettre voisine autour du texte) ; comparé pixel par pixel au rendu logiciel dans les tests ; testé sur le jeu (RTX 4070 SUPER, ×4)
 - [ ] Rendu 3D natif (la vraie scène 3D, pour D3D9 et RTX Remix), voir `ROADMAP.md`
 - [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
@@ -141,9 +141,9 @@ pour les vraies manettes, voir plus bas) :
 | Retour arrière | Select | | E | △ |
 | Ctrl gauche | R1 (viser) | | Q | L1 |
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
-| Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
+| Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…, à la résolution de la carte graphique avec `renderer = opengl`) |
 | Entrée, Retour arrière ou Échap | Passer une vidéo (Start, Select ou ○ à la manette) | | | |
-| | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`) |
+| | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`, ou `CVX_REPLAY_SCALE=4 gs_replay …` pour la dessiner par la carte graphique en ×4) |
 
 Manettes : Xbox, PlayStation (DualShock 4, DualSense), Switch Pro et la
 plupart des autres marchent, branchées avant ou pendant le jeu, en USB ou en

@@ -318,10 +318,12 @@ add_test(NAME gs_gpu_compare COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_compare PROPERTIES SKIP_RETURN_CODE 77)
 add_test(NAME gs_gpu_compare_exact COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_compare_exact PROPERTIES ENVIRONMENT CVX_GPU_EXACT=1 SKIP_RETURN_CODE 77)
+add_test(NAME gs_gpu_letters COMMAND test_gs_gpu)
+set_tests_properties(gs_gpu_letters PROPERTIES ENVIRONMENT CVX_TEST_LETTERS=1 SKIP_RETURN_CODE 77)
 
 # Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
 add_executable(gs_replay port/tools/gs_replay.c)
-target_link_libraries(gs_replay PRIVATE cvx_host)
+target_link_libraries(gs_replay PRIVATE cvx_host ${CMAKE_DL_LIBS})
 
 add_executable(test_disc port/tests/test_disc.c)
 target_link_libraries(test_disc PRIVATE cvx_game cvx_game_env m)

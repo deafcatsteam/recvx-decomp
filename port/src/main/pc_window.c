@@ -353,17 +353,26 @@ static void save_screenshot(void)
     static int count;
     char name[64];
 
-    if (gl != NULL) /* the picture is on the GPU: copied back at the PS2's size */
-        gs_read_display(pixels, &screen_w, &screen_h);
-    SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(pixels, screen_w, screen_h, 32, screen_w * 4,
-                                                           SDL_PIXELFORMAT_RGBA32);
+    uint32_t *src = pixels, *big = NULL;
+    int w = screen_w, h = screen_h;
 
-    if (shot == NULL)
-        return;
-    snprintf(name, sizeof(name), "cvx_screenshot_%03d.bmp", count++);
-    if (SDL_SaveBMP(shot, name) == 0)
-        printf("window: saved %s\n", name);
-    SDL_FreeSurface(shot);
+    if (gl != NULL) { /* the picture is on the GPU: copied back at its resolution */
+        int max = GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H * 16;
+        big = malloc((size_t)max * 4);
+        if (big != NULL && gs_gpu_read_display(big, max, &w, &h))
+            src = big;
+        else
+            gs_read_display(pixels, &w, &h);
+    }
+    SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(src, w, h, 32, w * 4, SDL_PIXELFORMAT_RGBA32);
+
+    if (shot != NULL) {
+        snprintf(name, sizeof(name), "cvx_screenshot_%03d.bmp", count++);
+        if (SDL_SaveBMP(shot, name) == 0)
+            printf("window: saved %s (%dx%d)\n", name, w, h);
+        SDL_FreeSurface(shot);
+    }
+    free(big);
 }
 
 /* A replacement movie's picture, over its area of the game's picture

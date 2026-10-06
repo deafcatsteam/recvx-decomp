@@ -348,6 +348,82 @@ static int channel_diff(uint32_t a, uint32_t b, int is16)
     return worst;
 }
 
+/* Letters as the game draws them (bhDispFont, njDrawPolygon2DM): a 14x14
+ * texel cell of the font drawn on 14x14 pixels as a fan of two triangles
+ * (and as a sprite), with texture coordinates from 1/2 texel inside the
+ * cell to 1/4 texel past it. The PS2 never samples past the cell (the
+ * letters are at whole pixels); at 4 times its resolution neither may the
+ * GPU (the next letter's pixels, red here, would show at its edges). */
+static int letters_test(void)
+{
+    static uint32_t font[64 * 64], px[W * 4 * H * 4];
+    int w, h, red = 0, green = 0;
+
+    gs_reset();
+    for (int i = 0; i < 64 * 64; i++)
+        font[i] = (i % 64 >= 14 && i % 64 < 28 && i / 64 >= 14 && i / 64 < 28) ? 0x8000ff00u : 0x800000ffu;
+    upload(GS_PSMCT32, TEX_BP, 1, 64, 64, font, sizeof(font));
+    tag(8, 1, 0, 1, 0xe);
+    ad(0x4c, FBP | (2ull << 16) | ((uint64_t)GS_PSMCT32 << 24));
+    ad(0x4e, ZBP | (1ull << 32));                                          /* ZBUF_1, not written */
+    ad(0x18, (1000ull * 16) | ((1000ull * 16) << 32));
+    ad(0x40, 0 | ((uint64_t)(W - 1) << 16) | (0ull << 32) | ((uint64_t)(H - 1) << 48));
+    ad(0x47, 0);
+    ad(0x06, (uint64_t)TEX_BP | (1ull << 14) | ((uint64_t)GS_PSMCT32 << 20) | (6ull << 26) | (6ull << 30) |
+                 (1ull << 34) | (1ull << 35));                                /* TEX0: 64x64, decal */
+    ad(0x14, 0);
+    ad(0x08, 0);
+    send();
+    tag(3, 1, 0, 1, 0xe); /* black background */
+    ad(0x00, 6);
+    ad(0x01, 0x80000000u);
+    ad(0x05, (1000 << 4) | ((uint64_t)(1000 << 4) << 16));
+    send();
+    tag(1, 1, 0, 1, 0xe);
+    ad(0x05, ((1000 + W) << 4) | ((uint64_t)((1000 + H) << 4) << 16));
+    send();
+    for (int k = 0; k < 32; k++) {
+        int x = (1000 + 2 + (k % 8) * 16) * 16, y = (1000 + 2 + (k / 8) * 20) * 16;
+        int u0 = 14 * 16 + 8, v0 = 14 * 16 + 8, u1 = 28 * 16 + 4, v1 = 28 * 16 + 4;
+        if (k < 16) {
+            tag(10, 1, 0, 1, 0xe);
+            ad(0x00, 5 | (1 << 4) | (1 << 8));                                  /* fan, textured, UV */
+            ad(0x01, 0x80808080u);
+            ad(0x03, (uint64_t)u0 | ((uint64_t)v0 << 16));
+            ad(0x05, (uint64_t)x | ((uint64_t)y << 16));
+            ad(0x03, (uint64_t)u1 | ((uint64_t)v0 << 16));
+            ad(0x05, (uint64_t)(x + 14 * 16) | ((uint64_t)y << 16));
+            ad(0x03, (uint64_t)u1 | ((uint64_t)v1 << 16));
+            ad(0x05, (uint64_t)(x + 14 * 16) | ((uint64_t)(y + 14 * 16) << 16));
+            ad(0x03, (uint64_t)u0 | ((uint64_t)v1 << 16));
+        } else {
+            tag(6, 1, 0, 1, 0xe);
+            ad(0x00, 6 | (1 << 4) | (1 << 8));                                  /* sprite */
+            ad(0x01, 0x80808080u);
+            ad(0x03, (uint64_t)u0 | ((uint64_t)v0 << 16));
+            ad(0x05, (uint64_t)x | ((uint64_t)y << 16));
+            ad(0x03, (uint64_t)u1 | ((uint64_t)v1 << 16));
+        }
+        ad(0x05, (uint64_t)(k < 16 ? x : x + 14 * 16) | ((uint64_t)(y + 14 * 16) << 16));
+        send();
+    }
+    gs_set_display(FBP | (2ull << 9), ((uint64_t)(W - 1) << 32) | ((uint64_t)(H - 1) << 44));
+    if (!gs_gpu_read_display(px, W * 4 * H * 4, &w, &h) || w != W * 4 || h != H * 4)
+        return 1;
+    for (int i = 0; i < w * h; i++) {
+        red += (px[i] & 0xff) > 0x40;
+        green += ((px[i] >> 8) & 0xff) > 0x40;
+    }
+    FILE *f = getenv("CVX_TEST_ALL") != NULL ? fopen("letters.ppm", "wb") : NULL; /* to look at it */
+    if (f != NULL) {
+        fprintf(f, "P6 %d %d 255\n", w, h);
+        for (int i = 0; i < w * h; i++) { fputc(px[i] & 255, f); fputc((px[i] >> 8) & 255, f); fputc((px[i] >> 16) & 255, f); }
+        fclose(f);
+    }
+    printf("letters at 4x: %d pixels of the letters, %d of the next ones\n", green, red);
+    return red != 0 || green < 32 * 13 * 13 * 16;
+}
+
 int main(void)
 {
     static const struct {
@@ -383,6 +459,13 @@ int main(void)
     const char *only = getenv("CVX_TEST_SCENE"); /* for debugging: one scene, CVX_TEST_PRIMS primitives */
     int failures = 0;
 
+    if (getenv("CVX_TEST_LETTERS") != NULL) { /* a test of its own: at 4 times the resolution */
+        if (!open_gl() || !gs_gpu_init(get_proc, 4)) {
+            printf("test_gs_gpu: no OpenGL 3.3 here, skipped\n");
+            return 77;
+        }
+        return letters_test();
+    }
     if (getenv("CVX_TEST_PRIMS") != NULL)
         prims = atoi(getenv("CVX_TEST_PRIMS"));
 
