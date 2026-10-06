@@ -16,7 +16,8 @@
  *         +16 volume, +17 pan, +18 transpose, +19 detune
  *   sset  +3 count, +4 u16 sample index[]
  *   smpl  +0 vag index, +2/+4 velocity range, +11 base note, +12 detune, +13 pan,
- *         +16 volume, +18 ADSR1, +20 ADSR2
+ *         +16 volume, +18 ADSR1, +20 ADSR2, +41 SPU attributes (4/8 effect
+ *         send left/right, 0x10/0x20 core 0/1)
  *   vagi  +0 BD offset, +4 sample rate, +6 loop
  * BD: PS-ADPCM, 16-byte blocks of 28 samples (flags: 1 end, 2 repeat, 4 loop start).
  */
@@ -72,6 +73,7 @@ typedef struct {
     int32_t gain; /* 0..32767 from program, split, sample and velocity */
     int pan;      /* -64..63 before the channel's pan */
     int32_t vol_l, vol_r;
+    int fx;   /* sent to the reverb of this SPU2 core + 1, 0 if not */
 } Voice;
 
 static Bank banks[HSYN_PORTS];
@@ -155,6 +157,29 @@ static Hd hd_of(const uint8_t *hd)
     if (h.size == 0 && hd != NULL)
         h.size = rd32(hd + 0x10 + 12);
     return h;
+}
+
+void hsyn_hd_attrs(const uint8_t *hd, uint32_t size, int counts[4])
+{
+    Hd h = { hd, size };
+    const uint8_t *ck = hsyn_hd_valid(hd, size) ? chunk(&h, 28) : NULL;
+    int i, max;
+
+    memset(counts, 0, 4 * sizeof(int));
+    if (ck == NULL)
+        return;
+    max = (int)rd32(ck + 12);
+    for (i = 0; i <= max && i < 4096; i++) {
+        const uint8_t *sm = entry(&h, ck, i, 42);
+
+        if (sm == NULL)
+            continue;
+        counts[0]++;
+        if ((sm[41] & ~0x3f) != 0)
+            counts[3]++;
+        else if ((sm[41] & 0x0c) != 0)
+            counts[sm[41] & 0x20 ? 2 : 1]++;
+    }
 }
 
 int hsyn_hd_max_program(const uint8_t *hd)
@@ -423,6 +448,16 @@ static int pan_rel(uint8_t p) /* HD pans: 0-127 centre 64, 0x80+ reversed */
     return p > 127 ? 64 - (p - 127) - 64 : p - 64;
 }
 
+/* Whether a sample is sent to the reverb, and of which core. */
+static int sample_fx(const Hd *h, const uint8_t *sm)
+{
+    const uint8_t *a = at(h, (uint32_t)(sm - h->hd) + 41, 1);
+
+    if (a == NULL || (*a & ~0x3f) != 0 || (*a & 0x0c) == 0)
+        return 0;
+    return *a & 0x20 ? 2 : 1;
+}
+
 void hsyn_note_on(int port, int ch, int note, int vel)
 {
     Bank *b;
@@ -490,6 +525,7 @@ void hsyn_note_on(int port, int ch, int note, int vel)
             v->gain = (int32_t)((int64_t)32767 * p[6] * split[16] * sm[16] * vel /
                                 (127LL * 127 * 127 * 127));
             v->pan = pan_rel(p[7]) + pan_rel(split[17]) + pan_rel(sm[13]);
+            v->fx = sample_fx(&h, sm);
             v->s0 = next_sample(v);
             v->s1 = next_sample(v);
             voice_pitch(v);
@@ -666,7 +702,7 @@ void hsyn_master_volume(int vol)
 
 /* ---- Mixing ------------------------------------------------------------- */
 
-void hsyn_mix(int32_t *out, int n)
+void hsyn_mix(int32_t *out, int32_t *fx, int n)
 {
     int i, k;
 
@@ -679,9 +715,19 @@ void hsyn_mix(int32_t *out, int n)
             int32_t f = v->frac >> 4; /* 12 bits */
             int32_t s = v->s0 + ((v->s1 - v->s0) * f >> 12);
 
+            int32_t l, r;
+
             s = s * v->env >> 15;
-            out[2 * k] += s * v->vol_l >> 15;
-            out[2 * k + 1] += s * v->vol_r >> 15;
+            l = s * v->vol_l >> 15;
+            r = s * v->vol_r >> 15;
+            out[2 * k] += l;
+            out[2 * k + 1] += r;
+            if (v->fx && fx != NULL) {
+                int32_t *e = fx + (v->fx - 1) * 2 * n;
+
+                e[2 * k] += l;
+                e[2 * k + 1] += r;
+            }
             env_tick(v);
             v->frac += v->step;
             while (v->frac >= 0x10000) {

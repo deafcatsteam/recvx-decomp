@@ -30,6 +30,7 @@
 #include "../host/pc_sound.h"
 #include "pc_hseq.h"
 #include "pc_hsyn.h"
+#include "pc_spu2rev.h"
 
 typedef struct {
     uint16_t se_info[6];
@@ -308,8 +309,12 @@ static void log_bank(const char *kind, int n, const Blob *hd, uint32_t bd_size)
                hd->size > 6 ? hd->data[6] : 0, hd->size > 7 ? hd->data[7] : 0);
     } else if (log_budget > 0) {
         log_budget--;
-        printf("snd: %s bank %d loaded (header %u bytes, samples %u bytes)\n", kind, n, hd->size,
-               bd_size);
+        int a[4];
+
+        hsyn_hd_attrs(hd->data, hd->size, a);
+        printf("snd: %s bank %d loaded (header %u bytes, samples %u bytes; %d sounds, reverb "
+               "%d/%d, odd %d)\n",
+               kind, n, hd->size, bd_size, a[0], a[1], a[2], a[3]);
     }
 }
 
@@ -509,6 +514,9 @@ static void do_cmd(const uint8_t *p, const PcIopView *iop)
             hsyn_port_bend(port, p[7] << 7 | p[6]);
         }
         break;
+    case 0x44: /* SdrSetRev: (core + 1) << 6 | mode, depth (big-endian), delay, feedback */
+        spu2rev_set((p[1] >> 6) - 1, p[1] & 0x3f, p[2] << 8 | p[3]);
+        break;
     case 0x4b: /* SdrMasterVol */
         hsyn_master_volume((p[1] << 8 | p[2]) >> 1);
         break;
@@ -534,7 +542,7 @@ static void do_cmd(const uint8_t *p, const PcIopView *iop)
             else
                 tq_req(port, se, ch, vol < 0 ? 127 : vol, pan < 0 ? 64 : pan, pitch < 0 ? 8192 : pitch);
         }
-        /* reverb (0x44) and the rest: not done yet */
+        /* the rest: not done yet */
         break;
     }
 }
@@ -581,8 +589,8 @@ static void tick(void)
 static void mix(float *lr, int frames)
 {
     static int tick_pos;
-    int32_t buf[512 * 2];
-    int done = 0, i;
+    int32_t buf[512 * 2], fx[SPU2REV_CORES * 512 * 2];
+    int done = 0, i, c;
 
     while (done < frames) {
         int n = HSYN_RATE / 240 - tick_pos;
@@ -592,7 +600,10 @@ static void mix(float *lr, int frames)
         if (n > 512)
             n = 512;
         memset(buf, 0, (size_t)n * 2 * sizeof(int32_t));
-        hsyn_mix(buf, n);
+        memset(fx, 0, (size_t)SPU2REV_CORES * n * 2 * sizeof(int32_t));
+        hsyn_mix(buf, fx, n);
+        for (c = 0; c < SPU2REV_CORES; c++)
+            spu2rev_mix(c, fx + c * n * 2, buf, n);
         for (i = 0; i < n * 2; i++)
             lr[done * 2 + i] += (float)buf[i];
         done += n;

@@ -29,7 +29,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [ ] Rendu 3D par la carte graphique (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
 - [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
-- [ ] Réverbération des pièces (`SdrSetRev`) : pas encore faite
+- [x] Réverbération des pièces (`SdrSetRev`) : l'écho « Hall » du SPU2 refait en logiciel (`src/audio/pc_spu2rev.c`), testé ; reste à valider sur le jeu
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
@@ -195,6 +195,7 @@ une couche « plateforme » écrite pour le PC.
 | `src/audio/pc_adx.c` | CRI ADXF (fichiers et archives AFS) ; ADXT : décodage des flux ADX (musique, voix) |
 | `src/audio/pc_snddrv.c` | Remplaçant du pilote son `TSNDDRV` : banques, bruitages, séquences, état renvoyé au jeu |
 | `src/audio/pc_hsyn.c`, `pc_hseq.c` | Synthétiseur (banques Sony HD/BD, ADPCM, enveloppes du SPU2) et lecteur de séquences SQ, adaptés de [recvx-vita](https://github.com/shoui520/recvx-vita) (licence MIT) |
+| `src/audio/pc_spu2rev.c` | Réverbération du SPU2 (préréglage « Hall » que le jeu règle pièce par pièce), d'après la description de psx-spx |
 | `src/game/pc_game_asm.c` | Fonctions du jeu en assembleur : traduites en C, ou vides en attendant le rendu |
 | `src/game/pc_movie.c` | Lecteur vidéo : lit le `.PSS` sur le disque, sépare image et son |
 | `src/game/pc_render3d.c` | 3D : couleurs des sommets, découpage, paquets GS (code VU0 traduit) |

@@ -44,8 +44,9 @@ void hsyn_master_volume(int vol);         /* 0-0x3fff */
 /* Set while a voice of this channel still sounds. */
 int hsyn_channel_active(int port, int ch);
 
-/* Adds n stereo frames at HSYN_RATE. */
-void hsyn_mix(int32_t *out, int n);
+/* Adds n stereo frames at HSYN_RATE to out, and the part of them sent to
+ * the reverb to fx (2 SPU2 cores of n stereo frames each), unless NULL. */
+void hsyn_mix(int32_t *out, int32_t *fx, int n);
 
 /* HD helpers */
 typedef struct {
@@ -57,6 +58,9 @@ typedef struct {
 /* Checks that a header looks like a Sony HD bank ("IECSsreV"). */
 int hsyn_hd_valid(const uint8_t *hd, uint32_t size);
 int hsyn_hd_max_program(const uint8_t *hd);
+/* For the log: samples, those sent to the reverb of core 0 and of core 1,
+ * and those whose attributes do not look like SPU attributes. */
+void hsyn_hd_attrs(const uint8_t *hd, uint32_t size, int counts[4]);
 int hsyn_hd_program_sample(const uint8_t *hd, uint32_t bdsize, int prog, HsynSampleInfo *out);
 
 #endif

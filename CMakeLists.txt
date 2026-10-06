@@ -111,6 +111,7 @@ add_library(cvx_host STATIC
     port/src/host/pc_sound.c
     port/src/host/pc_memcard.c
     port/src/audio/pc_hsyn.c
+    port/src/audio/pc_spu2rev.c
     port/src/audio/pc_hseq.c
     port/src/audio/pc_snddrv.c
     port/src/host/pc_video.c

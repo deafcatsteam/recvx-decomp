@@ -32,8 +32,8 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    (phase B), à partir des mêmes données.
 3. **Son** ✔ musique et voix (flux ADX), bruitages et ambiances (remplaçant
    du pilote IOP `TSNDDRV` : banques Sony HD/BD, séquences SQ, adapté de
-   recvx-vita). Reste : la réverbération des pièces, et la validation sur
-   le jeu.
+   recvx-vita), et la réverbération des pièces (l'écho « Hall » du SPU2,
+   refait en logiciel). Reste : la validation sur le jeu.
 4. **Vidéos** ✔ `.PSS` lues sur le disque : image MPEG-2 (FFmpeg) et son ;
    toutes peuvent être passées.
 5. **Sauvegardes** ✔ carte mémoire émulée par un dossier (`saves`),
@@ -66,8 +66,9 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
     la transmettre au lieu du seul panoramique ;
   - sortir chaque bruitage du synthétiseur comme une voix séparée du moteur
     (aujourd'hui `pc_hsyn.c` mélange ses 48 voix lui-même) ;
-  - la réverbération par pièce (le jeu envoie déjà un niveau par salle,
-    `Room_SoundEnv`) avec un effet moderne au lieu de celui du SPU2 ;
+  - la réverbération par pièce : celle du SPU2 est refaite
+    (`src/audio/pc_spu2rev.c`, niveau par salle venant de `Room_SoundEnv`) ;
+    un effet moderne pourrait la remplacer au même endroit ;
   - un rééchantillonnage de meilleure qualité (les voix du moteur sont
     déjà interpolées en Hermite ; celles du synthétiseur en linéaire).
 - **Performances** : le GS logiciel dessine sur plusieurs cœurs ; la

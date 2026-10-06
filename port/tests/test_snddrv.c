@@ -343,6 +343,39 @@ int main(void)
     CHECK(status_word(0x0c) == 0);
     CHECK(peak(4800, 0) == 0);
 
+    /* Room reverb (SdrSetRev, the hall the game uses) on SPU2 core 1, for
+     * a sound its bank sends there: it rings on after the sound, then dies
+     * away. */
+    hd[0xe4 + 41] = 0x2f; /* direct and effect sends, core 1 */
+    memcpy(ram + DATA_BUFF, hd, hd_size);
+    view.last_dma_size = hd_size;
+    header(0x29, 0, hd_size);
+    bd_size = adpcm(sine, 4410, ram + DATA_BUFF, 0);
+    samples(0, bd_size);
+    send((const unsigned char[]){ 0x2b, 0 }, 2);
+    send((const unsigned char[]){ 0x44, 2 << 6 | 5, 0x40, 0x00, 0, 0 }, 6);
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(14400);
+    printf("reverb: sound %d, tail %d/%d\n", peak(4800, 0), peak_from(10800, 14400, 0),
+           peak_from(10800, 14400, 1));
+    CHECK(status_word(0) == 0); /* the sound itself is over */
+    CHECK(peak_from(10800, 14400, 0) > 300 && peak_from(10800, 14400, 1) > 300);
+    for (i = 0; i < 8; i++)
+        pull(24000);
+    CHECK(peak(24000, 0) < 8 && peak(24000, 1) < 8);
+
+    /* Reverb off: no tail. */
+    send((const unsigned char[]){ 0x44, 2 << 6 | 0, 0, 0, 0, 0 }, 6);
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(14400);
+    CHECK(peak(4800, 0) > 5000 && peak_from(10800, 14400, 0) == 0);
+
+    /* The reverb of the other core does not get this sound. */
+    send((const unsigned char[]){ 0x44, 1 << 6 | 5, 0x7f, 0x00, 0, 0 }, 6);
+    send((const unsigned char[]){ 0x03, 0, 0, 3, 127, 64 }, 6);
+    pull(14400);
+    CHECK(peak_from(10800, 14400, 0) == 0);
+
     if (failures == 0)
         printf("test_snddrv: all checks passed\n");
     return failures != 0;
