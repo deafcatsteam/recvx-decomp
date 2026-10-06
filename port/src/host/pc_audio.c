@@ -1,12 +1,20 @@
 /*
- * Sound output: a queue of 16-bit stereo samples at PC_AUDIO_RATE, filled by
- * the game side (movies for now) and emptied by the window's audio device
- * (SDL callback, another thread). One writer and one reader, so the queue
- * only needs atomic positions.
+ * Sound output. The window's audio device (SDL callback, another thread)
+ * pulls PC_AUDIO_RATE stereo frames from here. They are the sum of:
+ *  - the mixer hook (pc_sound.c: the game's music, voices and effects),
+ *    called with the audio lock held;
+ *  - a queue of 16-bit samples filled by the movie player. One writer and
+ *    one reader, so the queue only needs atomic positions.
  */
 #include "pc_host.h"
 
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <pthread.h>
+#endif
 
 #define QUEUE_FRAMES 131072 /* 2.7 seconds, a power of two for the wrapping */
 
@@ -61,23 +69,83 @@ void pc_audio_push(const int16_t *lr, int frames, int rate)
     }
 }
 
+/* ---- Lock shared by the game thread and the audio thread ---- */
+
+#ifdef _WIN32
+static CRITICAL_SECTION lock;
+static volatile LONG lock_init; /* 0, 1 = initialising, 2 = ready */
+
+void pc_audio_lock(void)
+{
+    if (lock_init != 2) {
+        if (InterlockedCompareExchange(&lock_init, 1, 0) == 0) {
+            InitializeCriticalSection(&lock);
+            InterlockedExchange(&lock_init, 2);
+        }
+        while (lock_init != 2)
+            Sleep(0);
+    }
+    EnterCriticalSection(&lock);
+}
+
+void pc_audio_unlock(void)
+{
+    LeaveCriticalSection(&lock);
+}
+#else
+static pthread_mutex_t lock = PTHREAD_MUTEX_INITIALIZER;
+
+void pc_audio_lock(void)
+{
+    pthread_mutex_lock(&lock);
+}
+
+void pc_audio_unlock(void)
+{
+    pthread_mutex_unlock(&lock);
+}
+#endif
+
+void (*pc_audio_mix_hook)(float *lr, int frames);
+
+static int16_t clamp16(float v)
+{
+    if (v > 32767.0f)
+        return 32767;
+    if (v < -32768.0f)
+        return -32768;
+    return (int16_t)v;
+}
+
 void pc_audio_pull(int16_t *out, int frames)
 {
     uint32_t rd = __atomic_load_n(&read_pos, __ATOMIC_RELAXED);
     uint32_t w = __atomic_load_n(&write_pos, __ATOMIC_ACQUIRE);
-    int i;
+    float mix[512 * 2];
+    int done = 0, i;
 
     if (__atomic_exchange_n(&clear_requested, 0, __ATOMIC_ACQ_REL))
         rd = w;
 
-    for (i = 0; i < frames; i++) {
-        if (rd == w) {
-            memset(out + i * 2, 0, (size_t)(frames - i) * 4);
-            break;
+    while (done < frames) {
+        int n = frames - done > 512 ? 512 : frames - done;
+
+        memset(mix, 0, (size_t)n * 2 * sizeof(float));
+        if (pc_audio_mix_hook != NULL) {
+            pc_audio_lock();
+            pc_audio_mix_hook(mix, n);
+            pc_audio_unlock();
         }
-        out[i * 2] = queue[rd % QUEUE_FRAMES][0];
-        out[i * 2 + 1] = queue[rd % QUEUE_FRAMES][1];
-        rd++;
+        for (i = 0; i < n; i++) {
+            if (rd != w) {
+                mix[i * 2] += queue[rd % QUEUE_FRAMES][0];
+                mix[i * 2 + 1] += queue[rd % QUEUE_FRAMES][1];
+                rd++;
+            }
+            out[(done + i) * 2] = clamp16(mix[i * 2]);
+            out[(done + i) * 2 + 1] = clamp16(mix[i * 2 + 1]);
+        }
+        done += n;
     }
     __atomic_store_n(&read_pos, rd, __ATOMIC_RELEASE);
 }

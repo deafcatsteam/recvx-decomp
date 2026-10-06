@@ -3,11 +3,10 @@
  *
  * On the PS2 the game hands work to programs running on the IOP: data goes
  * over SIF DMA into IOP memory and requests go through SIF RPC. Here the IOP
- * is a block of memory plus a minimal model of the game's sound driver
- * (TSNDDRV, whose code is not available): it answers the state queries and
- * acknowledges sound bank uploads with the checksum the game expects, so the
- * game's loading code goes through. Sound itself is still silent.
- * TODO: replace the model with a PC sound driver that plays the banks.
+ * is a block of memory, and the game's sound driver (TSNDDRV, whose code is
+ * not available) is replaced by port/src/audio/pc_snddrv.c: its requests
+ * are passed there, and this file answers the state queries that locate
+ * the driver's blocks in IOP memory.
  */
 #include <eekernel.h>
 #include <sif.h>
@@ -15,6 +14,8 @@
 
 #include <stdio.h>
 #include <string.h>
+
+#include "../audio/pc_snddrv.h"
 
 #define IOP_RAM_SIZE 0x200000
 #define IOP_ADDR(a) ((unsigned int)(a) & (IOP_RAM_SIZE - 1))
@@ -26,9 +27,7 @@
 #define SND_SQ_AREA 0x140000
 #define SND_DATA_AREA 0x160000
 
-/* SND_STATUS from ps2_snddrv.h: the checksums the game compares with its own. */
-#define SND_STATUS_MIDI_SUM 0x1e
-#define SND_STATUS_SE_SUM 0x26
+#define SND_STATUS_SIZE 0x42 /* SND_STATUS in ps2_snddrv.h */
 
 static unsigned char iop_ram[IOP_RAM_SIZE];
 static unsigned int heap_next = 0x8000;
@@ -78,6 +77,9 @@ int sceSifGetOtherData(sceSifReceiveData *rd, void *src, void *dest, int size, u
 
     if (addr + size > IOP_RAM_SIZE)
         return -1;
+    /* The sound driver's status changes on the audio thread. */
+    if (addr < SND_STATUS_ADDR + SND_STATUS_SIZE && addr + size > SND_STATUS_ADDR)
+        pc_snddrv_status(iop_ram + SND_STATUS_ADDR);
     memcpy(dest, iop_ram + addr, size);
     return 0;
 }
@@ -93,88 +95,11 @@ static int serve_dummy;
 
 int sceSifBindRpc(sceSifClientData *bd, u_int request, u_int mode)
 {
+    if (request == 0)
+        pc_snddrv_init(); /* the game binds to its sound driver */
     bd->command = request;
     bd->serve = (sceSifServeData *)&serve_dummy;
     return 0;
-}
-
-static void put_short(unsigned int addr, short v)
-{
-    memcpy(iop_ram + addr, &v, sizeof(v));
-}
-
-/* Same sum as the game computes before sending a sound bank header. */
-static short block_sum(unsigned int size)
-{
-    short sum = 0;
-
-    if (size > last_dma_size)
-        size = last_dma_size;
-    for (unsigned int i = 0; i < size; i++)
-        sum += (signed char)iop_ram[last_dma_addr + i];
-    return sum;
-}
-
-/* Length of one request in the driver's command stream, as built by
- * sending_req() in ps2_snddrv.c; 0 when it cannot be known. */
-static int request_length(int cd)
-{
-    if (cd < 0x10)
-        return 4 + (cd & 1) + ((cd >> 1) & 1) + ((cd >> 2) & 1) * 2;
-    switch (cd & 0xf0) {
-    case 0x10:
-        return cd == 0x11 ? 3 : 1;
-    case 0x20:
-        if (cd >= 0x22 && cd <= 0x25)
-            return 3;
-        if (cd == 0x26)
-            return 4;
-        if (cd == 0x20)
-            return 5;
-        if (cd == 0x27 || cd == 0x28 || cd == 0x29 || cd == 0x2c || cd == 0x2d)
-            return 8;
-        return 2;
-    case 0x40:
-        if ((cd >= 0x47 && cd <= 0x4a) || cd == 0x41 || cd == 0x42)
-            return 2;
-        if (cd == 0x4b)
-            return 3;
-        if (cd == 0x45 || cd == 0x4c)
-            return 4;
-        if (cd == 0x44)
-            return 6;
-        if (cd >= 0x4d)
-            return 0; /* variable-length forms */
-        return 1;
-    case 0x50:
-    case 0x60:
-        return (cd >= 0x51 && cd <= 0x54) ? 8 : 2;
-    }
-    return 0;
-}
-
-static void sound_driver_requests(const unsigned char *buf, int size)
-{
-    int pos = 0;
-
-    while (pos < size && buf[pos] != 0xff) {
-        int cd = buf[pos];
-        int len = request_length(cd);
-
-        if (len == 0 || pos + len > size)
-            break;
-        if (cd == 0x28 || cd == 0x29) {
-            /* Sound bank header received: report its checksum. */
-            int port = buf[pos + 1];
-            unsigned int bytes = buf[pos + 4] | (buf[pos + 5] << 8) |
-                                 (buf[pos + 6] << 16) | ((unsigned int)buf[pos + 7] << 24);
-            int sum_offset = cd == 0x28 ? SND_STATUS_MIDI_SUM : SND_STATUS_SE_SUM;
-
-            if (port < (cd == 0x28 ? 4 : 5))
-                put_short(SND_STATUS_ADDR + sum_offset + port * 2, block_sum(bytes));
-        }
-        pos += len;
-    }
 }
 
 int sceSifCallRpc(sceSifClientData *bd, u_int fno, u_int mode, void *send, int ssize,
@@ -182,7 +107,9 @@ int sceSifCallRpc(sceSifClientData *bd, u_int fno, u_int mode, void *send, int s
 {
     if (bd->command == 0 && send != NULL) {
         /* TSNDDRV request stream */
-        sound_driver_requests(send, ssize);
+        PcIopView view = { iop_ram, IOP_RAM_SIZE, last_dma_addr, last_dma_size, SND_DATA_AREA };
+
+        pc_snddrv_requests(send, ssize, &view);
     } else if (bd->command == 1 && receive != NULL && rsize >= 4) {
         /* TSNDDRV state query: 18 and 19 locate its blocks in IOP memory. */
         unsigned int table[16] = { SND_HD_AREA, SND_SQ_AREA, SND_DATA_AREA };

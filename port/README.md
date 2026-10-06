@@ -27,9 +27,11 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
 - [ ] Animation des visages (`_fmCnkCalc*`) : les visages gardent leur pose de repos
 - [ ] Rendu 3D par la carte graphique (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
-- [ ] Son : pilote IOP `TSNDDRV` (effets, musique) et flux ADX (voix, BGM)
+- [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
+- [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
+- [ ] Réverbération des pièces (`SdrSetRev`) : pas encore faite
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
-- [x] Sortie son (SDL) : utilisée par les vidéos pour l'instant
+- [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
 - [ ] Cartes mémoire : sauvegardes dans des fichiers
 
 ## Lancer le jeu
@@ -131,19 +133,22 @@ une couche « plateforme » écrite pour le PC.
 | `src/gs/` | GS logiciel : mémoire vidéo au format PS2, paquets GIF, DMA, dessin |
 | `src/main/` | Point d'entrée PC (`pc_main.c`) et fenêtre/entrées SDL2 (`pc_window.c`) |
 | `src/platform/pc_disc.c` | Lecture de l'ISO (ISO 9660) secteur par secteur, comme le lecteur DVD |
-| `src/platform/pc_iop.c` | Mémoire et RPC de l'IOP, modèle minimal du pilote son |
+| `src/platform/pc_iop.c` | Mémoire et RPC de l'IOP ; les requêtes du pilote son vont à `src/audio/pc_snddrv.c` |
 | `src/platform/pc_kernel.c` | Noyau EE : sémaphores, interruptions V-blank, cadence 60 Hz |
 | `src/platform/pc_sdk.c` | DVD, GS, DMA, manette, carte mémoire |
 | `src/platform/pc_vu0.c` | Fonctions vectorielles `libvu0` en C |
-| `src/audio/pc_adx.c` | CRI ADXF (fichiers et archives AFS) ; ADXT (flux audio) muet |
+| `src/audio/pc_adx.c` | CRI ADXF (fichiers et archives AFS) ; ADXT : décodage des flux ADX (musique, voix) |
+| `src/audio/pc_snddrv.c` | Remplaçant du pilote son `TSNDDRV` : banques, bruitages, séquences, état renvoyé au jeu |
+| `src/audio/pc_hsyn.c`, `pc_hseq.c` | Synthétiseur (banques Sony HD/BD, ADPCM, enveloppes du SPU2) et lecteur de séquences SQ, adaptés de [recvx-vita](https://github.com/shoui520/recvx-vita) (licence MIT) |
 | `src/game/pc_game_asm.c` | Fonctions du jeu en assembleur : traduites en C, ou vides en attendant le rendu |
 | `src/game/pc_movie.c` | Lecteur vidéo : lit le `.PSS` sur le disque, sépare image et son |
 | `src/game/pc_render3d.c` | 3D : couleurs des sommets, découpage, paquets GS (code VU0 traduit) |
 | `src/host/pc_video.c` | Décodage MPEG-2 avec FFmpeg (LGPL, téléchargé et compilé par CMake avec le strict nécessaire) |
-| `src/host/pc_audio.c` | File d'attente du son, jouée par la fenêtre (SDL) |
+| `src/host/pc_audio.c` | Sortie son : mélange du moteur de son et de la file des vidéos, jouée par la fenêtre (SDL) |
+| `src/host/pc_sound.c` | Moteur de son : voix (flux ou sources), rééchantillonnage, volume, panoramique, position 3D |
 | `src/ninja/` | Maths Ninja en C (remplacent les fichiers VU0) |
 | `src/host/` | Services du système (temps), compilés sans les réglages du jeu |
-| `tests/` | `test_math`, `test_disc` (+ `make_test_iso.py`, une ISO de test sans données du jeu), `test_3d`, `test_movie` (+ `make_test_pss.py`, une vidéo synthétique) |
+| `tests/` | `test_math`, `test_disc` (+ `make_test_iso.py`, une ISO de test sans données du jeu), `test_3d`, `test_movie` (+ `make_test_pss.py`, une vidéo synthétique), `test_sound` (+ `make_test_adx.py`, des ADX synthétiques), `test_snddrv` (une banque Sony fabriquée par le test) |
 | `tools/gen_case_links.py` | Corrige la casse des en-têtes Dreamcast/CRI (venus de Windows) |
 
 Dans les fichiers du jeu, une fonction en assembleur est entourée de

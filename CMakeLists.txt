@@ -102,6 +102,10 @@ add_library(cvx_host STATIC
     port/src/host/pc_diag.c
     port/src/host/pc_log.c
     port/src/host/pc_audio.c
+    port/src/host/pc_sound.c
+    port/src/audio/pc_hsyn.c
+    port/src/audio/pc_hseq.c
+    port/src/audio/pc_snddrv.c
     port/src/host/pc_video.c
     port/src/platform/pc_hwregs.c
     port/src/gs/gs.c
@@ -280,3 +284,14 @@ add_test(NAME movie COMMAND test_movie)
 set_tests_properties(movie PROPERTIES
     DEPENDS movie_make_image
     ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_movie.iso)
+
+add_executable(test_snddrv port/tests/test_snddrv.c)
+target_link_libraries(test_snddrv PRIVATE cvx_host m)
+add_test(NAME sound_driver COMMAND test_snddrv)
+
+add_executable(test_sound port/tests/test_sound.c)
+target_link_libraries(test_sound PRIVATE cvx_game cvx_game_env m)
+add_test(NAME sound COMMAND test_sound)
+set_tests_properties(sound PROPERTIES
+    DEPENDS disc_make_image
+    ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_disc.iso)

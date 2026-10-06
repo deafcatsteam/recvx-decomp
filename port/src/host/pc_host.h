@@ -64,8 +64,17 @@ double pc_video_fps(PcVideo *v);
 /* Queues 16-bit stereo samples (interleaved) at the given rate. */
 void pc_audio_push(const int16_t *lr, int frames, int rate);
 
-/* Fills out with the next frames (silence when nothing is queued). */
+/* Fills out with the next frames: the mixer hook plus the queue. Called by
+ * the audio device's thread. */
 void pc_audio_pull(int16_t *out, int frames);
+
+/* Adds the game's sounds (pc_sound.c) into lr, in 16-bit sample units. It is
+ * called with the audio lock held. */
+extern void (*pc_audio_mix_hook)(float *lr, int frames);
+
+/* Taken by the game thread while it changes what the mixer reads. */
+void pc_audio_lock(void);
+void pc_audio_unlock(void);
 
 /* Frames queued and not played yet. */
 int pc_audio_queued(void);

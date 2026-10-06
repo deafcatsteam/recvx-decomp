@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #include "../host/pc_host.h"
+#include "../host/pc_sound.h"
 #include "pc_platform.h"
 
 #define PC_INTC_MAX 16
@@ -87,6 +88,7 @@ void pc_wait_vblank(void)
     }
 
     pc_diag_vblanks++;
+    pc_sound_frame();
     if (pc_frame_hook != NULL) {
         int64_t start = pc_host_time_ns();
         pc_frame_hook();

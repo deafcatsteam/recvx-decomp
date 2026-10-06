@@ -1,13 +1,16 @@
 #!/usr/bin/env python3
 """Writes a tiny ISO 9660 image used by test_disc (no game data involved).
 
-Layout: /RDX_LNK.AFS (an AFS archive of 3 files), /CF_ROM.TXT and
-/MOVIE/OPEN.SFD, plus /MOVIE/MV_000.PSS when a movie file is given.
+Layout: /RDX_LNK.AFS (an AFS archive of 3 files), /SOUND.AFS (ADX streams
+from make_test_adx.py), /CF_ROM.TXT and /MOVIE/OPEN.SFD, plus
+/MOVIE/MV_000.PSS when a movie file is given.
 
     make_test_iso.py OUT.iso [MOVIE.pss]
 """
 import struct
 import sys
+
+import make_test_adx
 
 SECTOR = 2048
 
@@ -45,13 +48,15 @@ def afs(files):
 def main(path, pss_path=None):
     pss = open(pss_path, 'rb').read() if pss_path else b''
     afs_data = afs([b'hello afs file 0', b'B' * 3000, b'third'])
+    sound_afs = afs(make_test_adx.test_streams())
     txt = b'plain file contents\n'
     sfd = b'x' * 5000
 
     ROOT, MOVIE, DATA = 18, 19, 20
     files = []
     lsn = DATA
-    for name, content in [(b'RDX_LNK.AFS;1', afs_data), (b'CF_ROM.TXT;1', txt)]:
+    for name, content in [(b'RDX_LNK.AFS;1', afs_data), (b'CF_ROM.TXT;1', txt),
+                          (b'SOUND.AFS;1', sound_afs)]:
         files.append((name, lsn, content))
         lsn += (len(content) + SECTOR - 1) // SECTOR
     sfd_lsn = lsn
@@ -63,6 +68,7 @@ def main(path, pss_path=None):
     root += dir_record(b'CF_ROM.TXT;1', files[1][1], len(txt), False)
     root += dir_record(b'MOVIE', MOVIE, SECTOR, True)
     root += dir_record(b'RDX_LNK.AFS;1', files[0][1], len(afs_data), False)
+    root += dir_record(b'SOUND.AFS;1', files[2][1], len(sound_afs), False)
     movie = dir_record(b'\0', MOVIE, SECTOR, True) + dir_record(b'\1', ROOT, SECTOR, True)
     if pss:
         movie += dir_record(b'MV_000.PSS;1', pss_lsn, len(pss), False)

@@ -30,8 +30,10 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    (`npCalcSkin`) et le morphing (`npTransform`). Reste : les visages
    (`_fmCnkCalc*`). Le rendu natif par la carte graphique vient ensuite
    (phase B), à partir des mêmes données.
-3. **Son** : remplaçant PC du pilote IOP `TSNDDRV` (effets, musiques MIDI),
-   flux ADX (voix, ambiances). La sortie son (SDL) existe déjà.
+3. **Son** ✔ musique et voix (flux ADX), bruitages et ambiances (remplaçant
+   du pilote IOP `TSNDDRV` : banques Sony HD/BD, séquences SQ, adapté de
+   recvx-vita). Reste : la réverbération des pièces, et la validation sur
+   le jeu.
 4. **Vidéos** ✔ `.PSS` lues sur le disque : image MPEG-2 (FFmpeg) et son ;
    toutes peuvent être passées.
 5. **Sauvegardes** dans des fichiers (carte mémoire émulée), finitions des
@@ -51,8 +53,23 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
   pourront être affichées directement en plein écran par la carte graphique,
   et remplacées par des versions refaites en HD (FFmpeg n'a qu'à activer
   d'autres décodeurs, H.264 par exemple).
-- **Son** : la file `src/host/pc_audio.c` recevra aussi les effets, les
-  musiques et les voix ; FFmpeg sait déjà décoder l'ADX.
+- **Son** : tout passe par le moteur `src/host/pc_sound.c`, où chaque son
+  est une voix avec un volume, un panoramique et, en option, une **position
+  3D** par rapport à l'auditeur. Une seule fonction, `spatialize()`, décide
+  de la répartition gauche/droite : c'est elle qu'on remplacera pour le son
+  spatial moderne, au choix **HRTF** (son 3D au casque, par exemple avec
+  OpenAL Soft ou Steam Audio) ou **5.1/7.1** (plus de canaux de sortie).
+  Ce qui reste à faire pour en profiter :
+  - donner leur position aux sons : le jeu la connaît (`Get3DSoundParameter`,
+    `SetupSeGenericParm`, `PlayVoiceEx2` dans `sdfunc.c` reçoivent la
+    position de la source et celle de la caméra) ; un petit relais PC peut
+    la transmettre au lieu du seul panoramique ;
+  - sortir chaque bruitage du synthétiseur comme une voix séparée du moteur
+    (aujourd'hui `pc_hsyn.c` mélange ses 48 voix lui-même) ;
+  - la réverbération par pièce (le jeu envoie déjà un niveau par salle,
+    `Room_SoundEnv`) avec un effet moderne au lieu de celui du SPU2 ;
+  - un rééchantillonnage de meilleure qualité (les voix du moteur sont
+    déjà interpolées en Hermite ; celles du synthétiseur en linéaire).
 - **Performances** : le GS logiciel dessine sur plusieurs cœurs ; la
   traduction C du VU0 se prête aussi au SIMD (SSE) si besoin.
 
@@ -68,7 +85,10 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 
 ## Phase C — Son et confort
 
-- Musiques et voix de meilleure qualité, son 3D positionnel (OpenAL).
+- Son 3D positionnel (HRTF au casque, 5.1/7.1), réverbération moderne par
+  pièce : voir « Ce qui prépare déjà la suite » ci-dessus.
+- Musiques et voix de meilleure qualité (remplacement des ADX par des
+  fichiers refaits, comme pour les vidéos).
 - Contrôles modernes : déplacement libre, visée souris, touches configurables.
 - Confort : passer les cinématiques, sauvegardes rapides, menu d'options.
 

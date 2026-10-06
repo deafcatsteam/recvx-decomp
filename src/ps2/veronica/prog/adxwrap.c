@@ -593,7 +593,13 @@ void ContinueAdx(unsigned int SlotNo)
 // 100% matching!
 int GetAdxStatus(unsigned int SlotNo)
 {
+#ifdef PLATFORM_PC
+    /* The original has no return statement: on the PS2 the status stays in
+     * the return register after the call, which x86 does not guarantee. */
+    return ADXT_GetStat(AdxTInfo[SlotNo].Handle);
+#else
     ADXT_GetStat(AdxTInfo[SlotNo].Handle);
+#endif
 }
 
 // 100% matching!
