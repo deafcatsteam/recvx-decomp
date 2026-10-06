@@ -30,6 +30,8 @@ enum {
 
 extern unsigned short pc_pad_buttons;
 extern unsigned char pc_pad_sticks[4]; /* right x, right y, left x, left y */
+extern unsigned char pc_pad_motor[2];  /* small (on/off), big (0-255) */
+extern unsigned int pc_pad_motor_sets;
 extern void (*pc_frame_hook)(void);
 
 #ifdef CVX_HAVE_SDL
@@ -38,7 +40,22 @@ extern void (*pc_frame_hook)(void);
 
 static SDL_Window *window;
 static SDL_Renderer *renderer;
-static SDL_GameController *controller;
+
+/* Every controller plugged in drives the game's controller 1, so one can
+ * be swapped for another at any time. SDL knows most controllers (Xbox,
+ * PlayStation, Switch, ...) as "game controllers" with a standard layout;
+ * a gamecontrollerdb.txt next to the game adds more. The others are read
+ * as plain joysticks with the usual layout of cheap USB controllers. */
+#define MAX_PADS 8
+static struct {
+    SDL_GameController *gc; /* or NULL for a plain joystick */
+    SDL_Joystick *joy;
+    SDL_JoystickID id;
+    int sticks; /* plain joystick: bit n, stick n is centred when plugged in */
+} pads[MAX_PADS];
+static int npads;
+static int rumbling;
+static unsigned int motor_sets, motor_idle;
 static SDL_Texture *screen;
 static int screen_w, screen_h;
 static SDL_Texture *overlay; /* replacement movie picture (pc_overlay) */
@@ -86,9 +103,112 @@ static const struct {
     { SDL_CONTROLLER_BUTTON_RIGHTSTICK, PAD_R3 },
 };
 
+/* Plain joysticks: the usual button order of cheap USB controllers. */
+static const unsigned short joystick_map[] = {
+    PAD_TRIANGLE, PAD_CIRCLE, PAD_CROSS, PAD_SQUARE, PAD_L2, PAD_R2,
+    PAD_L1, PAD_R1, PAD_SELECT, PAD_START, PAD_L3, PAD_R3,
+};
+
 static unsigned char axis_to_pad(Sint16 v)
 {
     return (unsigned char)((v + 32768) >> 8); /* 0..255, 128 at rest */
+}
+
+/* The stick pushed furthest wins when several controllers are in use. */
+static void stick(unsigned char *x, unsigned char *y, Sint16 ax, Sint16 ay, int dead)
+{
+    int nx = ax < -dead || ax > dead ? axis_to_pad(ax) : 0x80;
+    int ny = ay < -dead || ay > dead ? axis_to_pad(ay) : 0x80;
+
+    if (abs(nx - 0x80) > abs(*x - 0x80))
+        *x = (unsigned char)nx;
+    if (abs(ny - 0x80) > abs(*y - 0x80))
+        *y = (unsigned char)ny;
+}
+
+static int find_pad(SDL_JoystickID id)
+{
+    for (int i = 0; i < npads; i++) {
+        if (pads[i].id == id)
+            return i;
+    }
+    return -1;
+}
+
+static void add_pad(int index, int as_controller)
+{
+    SDL_GameController *gc = NULL;
+    SDL_Joystick *joy;
+    const char *name;
+    char guid[33];
+
+    if (npads == MAX_PADS || find_pad(SDL_JoystickGetDeviceInstanceID(index)) >= 0)
+        return;
+    if (as_controller) {
+        gc = SDL_GameControllerOpen(index);
+        if (gc == NULL)
+            return;
+        joy = SDL_GameControllerGetJoystick(gc);
+        name = SDL_GameControllerName(gc);
+    } else {
+        joy = SDL_JoystickOpen(index);
+        if (joy == NULL)
+            return;
+        name = SDL_JoystickName(joy);
+    }
+    pads[npads].gc = gc;
+    pads[npads].joy = joy;
+    pads[npads].id = SDL_JoystickInstanceID(joy);
+    /* Some devices that are not controllers (keyboards, wheels) show up as
+     * joysticks with axes that never rest at the centre: those are not
+     * read as sticks. */
+    pads[npads].sticks = 0;
+    for (int s = 0; s < 2 && 2 * s + 1 < SDL_JoystickNumAxes(joy); s++) {
+        if (abs(SDL_JoystickGetAxis(joy, 2 * s)) < 8000 && abs(SDL_JoystickGetAxis(joy, 2 * s + 1)) < 8000)
+            pads[npads].sticks |= 1 << s;
+    }
+    npads++;
+    SDL_JoystickGetGUIDString(SDL_JoystickGetGUID(joy), guid, sizeof(guid));
+    printf("pad: %s plugged in (%s, %d buttons, %d axes; %d controller%s now)\n",
+           name != NULL ? name : "controller", as_controller ? "known" : "unknown, usual layout guessed",
+           SDL_JoystickNumButtons(joy), SDL_JoystickNumAxes(joy), npads, npads > 1 ? "s" : "");
+    if (!as_controller)
+        printf("pad: add a line for GUID %s to gamecontrollerdb.txt to map it\n", guid);
+}
+
+static void remove_pad(SDL_JoystickID id)
+{
+    int i = find_pad(id);
+
+    if (i < 0)
+        return;
+    if (pads[i].gc != NULL)
+        SDL_GameControllerClose(pads[i].gc);
+    else
+        SDL_JoystickClose(pads[i].joy);
+    pads[i] = pads[--npads];
+    printf("pad: a controller was unplugged (%d left)\n", npads);
+}
+
+/* The game's vibration (on when its option is on), on every controller
+ * that has motors. Each call lasts a little and is renewed every frame
+ * while the game wants it; it stops if the game stops setting it. */
+static void rumble(void)
+{
+    Uint16 lo = (Uint16)(pc_pad_motor[1] * 257), hi = pc_pad_motor[0] ? 0xffff : 0;
+
+    if (pc_pad_motor_sets != motor_sets) {
+        motor_sets = pc_pad_motor_sets;
+        motor_idle = 0;
+    } else if (++motor_idle > 10) {
+        lo = hi = 0;
+    }
+
+    if (lo == 0 && hi == 0 && !rumbling)
+        return;
+    rumbling = lo != 0 || hi != 0;
+    for (int i = 0; i < npads; i++)
+        SDL_JoystickRumble(pads[i].joy, lo, hi, rumbling ? 200 : 0);
 }
 
 static void read_input(void)
@@ -107,21 +227,41 @@ static void read_input(void)
     if (keys[SDL_SCANCODE_W]) ly = 0x00;
     if (keys[SDL_SCANCODE_S]) ly = 0xff;
 
-    if (controller != NULL) {
-        for (size_t i = 0; i < sizeof(controller_map) / sizeof(controller_map[0]); i++) {
-            if (SDL_GameControllerGetButton(controller, controller_map[i].pad))
-                held |= controller_map[i].button;
+    for (int p = 0; p < npads; p++) {
+        SDL_GameController *gc = pads[p].gc;
+        SDL_Joystick *joy = pads[p].joy;
+
+        if (gc != NULL) {
+            for (size_t i = 0; i < sizeof(controller_map) / sizeof(controller_map[0]); i++) {
+                if (SDL_GameControllerGetButton(gc, controller_map[i].pad))
+                    held |= controller_map[i].button;
+            }
+            if (SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16384)
+                held |= PAD_L2;
+            if (SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16384)
+                held |= PAD_R2;
+            stick(&lx, &ly, SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTX),
+                  SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_LEFTY), 8000);
+            stick(&rx, &ry, SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTX),
+                  SDL_GameControllerGetAxis(gc, SDL_CONTROLLER_AXIS_RIGHTY), 2000);
+            continue;
         }
-        if (SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16384)
-            held |= PAD_L2;
-        if (SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16384)
-            held |= PAD_R2;
-        Sint16 x = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTX);
-        Sint16 y = SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_LEFTY);
-        if (x < -8000 || x > 8000) lx = axis_to_pad(x);
-        if (y < -8000 || y > 8000) ly = axis_to_pad(y);
-        rx = axis_to_pad(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTX));
-        ry = axis_to_pad(SDL_GameControllerGetAxis(controller, SDL_CONTROLLER_AXIS_RIGHTY));
+        int nb = SDL_JoystickNumButtons(joy);
+        for (int i = 0; i < nb && i < (int)(sizeof(joystick_map) / sizeof(joystick_map[0])); i++) {
+            if (SDL_JoystickGetButton(joy, i))
+                held |= joystick_map[i];
+        }
+        if (SDL_JoystickNumHats(joy) > 0) {
+            Uint8 hat = SDL_JoystickGetHat(joy, 0);
+            if (hat & SDL_HAT_UP) held |= PAD_UP;
+            if (hat & SDL_HAT_DOWN) held |= PAD_DOWN;
+            if (hat & SDL_HAT_LEFT) held |= PAD_LEFT;
+            if (hat & SDL_HAT_RIGHT) held |= PAD_RIGHT;
+        }
+        if (pads[p].sticks & 1)
+            stick(&lx, &ly, SDL_JoystickGetAxis(joy, 0), SDL_JoystickGetAxis(joy, 1), 8000);
+        if (pads[p].sticks & 2)
+            stick(&rx, &ry, SDL_JoystickGetAxis(joy, 2), SDL_JoystickGetAxis(joy, 3), 2000);
     }
 
     pc_pad_buttons = (unsigned short)~held;
@@ -189,16 +329,15 @@ static void frame(void)
         case SDL_QUIT:
             pc_quit_requested = 1;
             exit(0);
+        /* Also sent at start-up for the controllers already there. */
         case SDL_CONTROLLERDEVICEADDED:
-            if (controller == NULL)
-                controller = SDL_GameControllerOpen(ev.cdevice.which);
+            add_pad(ev.cdevice.which, 1);
             break;
-        case SDL_CONTROLLERDEVICEREMOVED:
-            if (controller != NULL &&
-                SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(controller)) == ev.cdevice.which) {
-                SDL_GameControllerClose(controller);
-                controller = NULL;
-            }
+        case SDL_JOYDEVICEADDED: /* a game controller's comes first or after */
+            add_pad(ev.jdevice.which, SDL_IsGameController(ev.jdevice.which));
+            break;
+        case SDL_JOYDEVICEREMOVED: /* a game controller's too */
+            remove_pad(ev.jdevice.which);
             break;
         case SDL_KEYDOWN:
             if (ev.key.keysym.scancode == SDL_SCANCODE_F12)
@@ -217,6 +356,7 @@ static void frame(void)
         }
     }
     read_input();
+    rumble();
 
     /* Fast-forward: no pacing, and only every 8th frame is shown. */
     static unsigned skipped;
@@ -242,6 +382,25 @@ static void frame(void)
     SDL_RenderCopy(renderer, screen, NULL, NULL); /* stretched to 4:3 */
     draw_overlay();
     SDL_RenderPresent(renderer);
+}
+
+/* gamecontrollerdb.txt (the community list of controller layouts), next
+ * to the game or in the current folder, if there is one. */
+static void load_mappings(void)
+{
+    char *base = SDL_GetBasePath();
+    char path[1024];
+    int n = -1;
+
+    if (base != NULL) {
+        snprintf(path, sizeof(path), "%sgamecontrollerdb.txt", base);
+        n = SDL_GameControllerAddMappingsFromFile(path);
+        SDL_free(base);
+    }
+    if (n < 0)
+        n = SDL_GameControllerAddMappingsFromFile("gamecontrollerdb.txt");
+    if (n >= 0)
+        printf("pad: %d controller layouts read from gamecontrollerdb.txt\n", n);
 }
 
 /* The audio device plays what pc_audio.c has queued. */
@@ -280,6 +439,9 @@ int pc_window_open(void)
     /* Keep Ctrl+C working even while the game is busy between frames. */
     SDL_SetHint(SDL_HINT_NO_SIGNAL_HANDLERS, "1");
     SDL_SetMainReady();
+    /* The bottom face button is always the confirm (cross), also on
+     * Nintendo controllers, whose A is on the right. */
+    SDL_SetHint("SDL_GAMECONTROLLER_USE_BUTTON_LABELS", "0");
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER) != 0) {
         fprintf(stderr, "window: SDL_Init failed (%s), running without a window\n", SDL_GetError());
         return 0;
@@ -301,6 +463,7 @@ int pc_window_open(void)
         return 0;
     }
     printf("window: SDL %s video\n", SDL_GetCurrentVideoDriver());
+    load_mappings();
     open_audio();
     pc_frame_hook = frame;
     return 1;

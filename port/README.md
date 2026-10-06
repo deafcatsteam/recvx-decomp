@@ -20,7 +20,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Décompression `Expand`, défilement d'UV, surface de l'eau, etc. traduits en C
 - [x] Lecture du disque depuis l'ISO, archives AFS (CRI ADXF), testée
 - [x] Noyau, IOP, manette, horloge 60 Hz, SDK Sony : remplacements PC
-- [x] Fenêtre, clavier et manette (SDL2), builds Linux et Windows
+- [x] Fenêtre, clavier et manettes (SDL2, branchement à chaud, vibration), builds Linux et Windows
 - [ ] **Premier lancement avec la vraie ISO** (à faire chez toi, voir plus bas)
 - [x] Rendu 2D : GS logiciel (`src/gs/`), testé sur des paquets de test ; reste à valider sur le jeu
 - [x] Rendu 3D par le GS logiciel : sommets, éclairage, découpage traduits du VU0 (`src/game/pc_render3d.c`), testé ; reste à valider sur le jeu
@@ -77,7 +77,7 @@ côté de l'exe. En cas de plantage, la console indique où était le jeu et
 reste ouverte jusqu'à un appui sur Entrée : envoie ce fichier pour signaler
 un problème.
 
-Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
+Touches (manette PS2 émulée ; pour les vraies manettes, voir plus bas) :
 
 | Clavier | Bouton PS2 | | Clavier | Bouton PS2 |
 |---|---|---|---|---|
@@ -90,6 +90,18 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 | Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…) |
 | Entrée, Retour arrière ou Échap | Passer une vidéo (Start, Select ou ○ à la manette) | | | |
 | | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`) |
+
+Manettes : Xbox, PlayStation (DualShock 4, DualSense), Switch Pro et la
+plupart des autres marchent, branchées avant ou pendant le jeu, en USB ou en
+Bluetooth. On peut en débrancher une et en brancher une autre à tout moment ;
+si plusieurs sont branchées, toutes contrôlent le personnage. Le bouton du
+bas (A sur Xbox, ✕ sur PlayStation, B sur Switch) est toujours ✕, et les
+gâchettes sont L2/R2. La vibration du jeu passe sur la manette (si l'option
+du jeu est activée). Une manette que SDL ne connaît pas est lue avec la
+disposition des manettes USB génériques ; si ses boutons sont mélangés, mets
+un fichier `gamecontrollerdb.txt`
+([liste communautaire](https://github.com/mdqinc/SDL_GameControllerDB)) à
+côté de l'exe. `cvx_log.txt` indique chaque manette branchée (lignes `pad:`).
 
 ## Vidéos en HD (remplacement)
 

@@ -320,6 +320,10 @@ void sceVpu0Reset(void) {}
 /* Buttons are active low on the PS2: a bit is 0 while the button is held. */
 unsigned short pc_pad_buttons = 0xffff;
 unsigned char pc_pad_sticks[4] = { 0x80, 0x80, 0x80, 0x80 };
+/* Vibration, as the game aligns it: small motor (on/off), big motor
+ * (0-255). pc_window.c passes it on to the controllers. */
+unsigned char pc_pad_motor[2];
+unsigned int pc_pad_motor_sets;
 
 int scePadInit(int mode) { return 1; }
 int scePadPortOpen(int port, int slot, u_long128 *addr) { return 1; }
@@ -344,7 +348,16 @@ int scePadInfoMode(int port, int slot, int term, int offs)
 int scePadSetMainMode(int port, int slot, int offs, int lock) { return 1; }
 int scePadInfoPressMode(int port, int slot) { return 1; }
 int scePadEnterPressMode(int port, int slot) { return 1; }
-int scePadSetActDirect(int port, int slot, const u_char *data) { return 1; }
+int scePadSetActDirect(int port, int slot, const u_char *data)
+{
+    if (port == 0) {
+        pc_pad_motor[0] = data[0];
+        pc_pad_motor[1] = data[1];
+        pc_pad_motor_sets++;
+    }
+    return 1;
+}
+
 int scePadSetActAlign(int port, int slot, const u_char *data) { return 1; }
 
 int scePadRead(int port, int slot, u_char *rdata)
