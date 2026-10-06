@@ -27,8 +27,8 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    sprites et polygones 2D, affichage dans la fenêtre. → écran titre et menus.
 2. **Rendu 3D** ✔ d'abord par le GS logiciel, fidèle à la PS2 : le code VU0
    (sommets, éclairage, découpage) est traduit en C, avec le skinning
-   (`npCalcSkin`) et le morphing (`npTransform`). Reste : les visages
-   (`_fmCnkCalc*`). Le rendu natif par la carte graphique vient ensuite
+   (`npCalcSkin`), le morphing (`npTransform`) et l'animation des visages
+   (`_fmCnkCalc*` : muscles, mâchoire, langue, yeux). Le rendu natif par la carte graphique vient ensuite
    (phase B), à partir des mêmes données.
 3. **Son** ✔ musique et voix (flux ADX), bruitages et ambiances (remplaçant
    du pilote IOP `TSNDDRV` : banques Sony HD/BD, séquences SQ, adapté de

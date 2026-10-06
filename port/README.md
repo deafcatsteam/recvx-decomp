@@ -25,7 +25,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Rendu 2D : GS logiciel (`src/gs/`), testé sur des paquets de test ; reste à valider sur le jeu
 - [x] Rendu 3D par le GS logiciel : sommets, éclairage, découpage traduits du VU0 (`src/game/pc_render3d.c`), testé ; reste à valider sur le jeu
 - [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
-- [ ] Animation des visages (`_fmCnkCalc*`) : les visages gardent leur pose de repos
+- [x] Animation des visages (`_fmCnkCalc*`) : muscles, mâchoire, langue et yeux
 - [ ] Rendu 3D par la carte graphique (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
 - [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu

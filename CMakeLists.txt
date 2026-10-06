@@ -331,6 +331,10 @@ add_executable(test_snddrv port/tests/test_snddrv.c)
 target_link_libraries(test_snddrv PRIVATE cvx_host m)
 add_test(NAME sound_driver COMMAND test_snddrv)
 
+add_executable(test_face port/tests/test_face.c)
+target_link_libraries(test_face PRIVATE cvx_game cvx_game_env m)
+add_test(NAME face COMMAND test_face)
+
 add_executable(test_memcard port/tests/test_memcard.c)
 target_link_libraries(test_memcard PRIVATE cvx_game cvx_game_env m)
 add_test(NAME memory_card COMMAND test_memcard)
