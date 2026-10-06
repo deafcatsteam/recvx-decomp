@@ -421,6 +421,43 @@ static void test_equal_depth(void)
     CHECK(bad == 0);
 }
 
+/* An image sent over what was drawn: over a whole page, and over a part of
+ * one (the rest of what was drawn stays). */
+static void test_upload_over_drawing(void)
+{
+    static uint32_t img[64 * 32];
+
+    gs_reset();
+    setup_frame();
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x00, 6);
+    ad(0x01, 0x80112233);
+    ad(0x05, xyz(0, 0));
+    send();
+    tag(1, 1, 0, 1, 0xe);
+    ad(0x05, xyz(64, 64));
+    send();
+    for (int i = 0; i < 64 * 32; i++)
+        img[i] = 0x80000000u | (uint32_t)i;
+    upload(GS_PSMCT32, 0, 1, 64, 32, img, sizeof(img));  /* page 0: rows 0-31 */
+    upload(GS_PSMCT32, 0, 1, 4, 4, img, 4 * 4 * 4);      /* part of it again */
+    CHECK(fb(10, 10) == (0x80000000u | (10 * 64 + 10)));
+    CHECK(fb(2, 3) == (0x80000000u | (3 * 4 + 2)));
+    /* Rows 32-35: a part of page 1, whose other rows are still drawn. */
+    tag(4, 0, 0, 1, 0xe);
+    ad(0x50, ((uint64_t)0 << 32) | (1ull << 48) | ((uint64_t)GS_PSMCT32 << 56));
+    ad(0x51, (32ull << 48));
+    ad(0x52, 4 | (4ull << 32));
+    ad(0x53, 0);
+    tag(4, 1, 2, 0, 0);
+    memcpy(&pkt[pn], img, 64);
+    pn += 8;
+    send();
+    CHECK(fb(1, 33) == (0x80000000u | 5));
+    CHECK(fb(20, 40) == 0x80112233);
+    CHECK(fb(5, 33) == 0x80112233);
+}
+
 /* A frame dump drawn again gives the same picture. */
 static void test_dump_replay(void)
 {
@@ -473,6 +510,7 @@ int main(void)
     test_batch_hazards();
     test_dma_chain();
     test_equal_depth();
+    test_upload_over_drawing();
     test_dump_replay();
     if (failures == 0)
         printf("test_gs: all checks passed\n");

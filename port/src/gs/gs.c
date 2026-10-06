@@ -194,7 +194,7 @@ static void trx_start(void)
         trx.pending_n = 0;
         gs_stats.uploads++;
         if (gs_gpu_on)
-            gs_gpu_sync(trx.psm, trx.bp, trx.bw, trx.x0, trx.y0, trx.x0 + trx.w - 1, trx.y0 + trx.h - 1);
+            gs_gpu_overwrite(trx.psm, trx.bp, trx.bw, trx.x0, trx.y0, trx.x0 + trx.w - 1, trx.y0 + trx.h - 1);
         /* Primitives still waiting that read or draw this memory are drawn
          * before it changes. */
         if (trx.x0 + trx.w > 2048 || trx.y0 + trx.h > 2048 ||

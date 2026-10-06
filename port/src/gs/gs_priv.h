@@ -74,6 +74,10 @@ void gs_gpu_prim(const DrawState *s, int type, const Vertex *v);
 void gs_gpu_sync(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1);
 void gs_gpu_sync_all(void);
 
+/* The same before the CPU writes that whole rectangle: the pages it fully
+ * covers are not copied back. */
+void gs_gpu_overwrite(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1);
+
 /* GS memory was replaced as a whole (reset, frame dump): the GPU's copies
  * are forgotten. */
 void gs_gpu_reset(void);

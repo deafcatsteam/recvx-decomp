@@ -739,6 +739,35 @@ void gs_gpu_sync(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int 
     }
 }
 
+void gs_gpu_overwrite(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1)
+{
+    int pw = 64, ph = 32;
+    uint32_t row = GS_ROW64(bw);
+
+    if (owned == 0)
+        return;
+    switch (psm) {
+    case GS_PSMCT16: case GS_PSMCT16S: case GS_PSMZ16: case GS_PSMZ16S: ph = 64; break;
+    case GS_PSMT8: pw = 128; ph = 64; row = GS_ROW128(bw); break;
+    case GS_PSMT4: pw = 128; ph = 128; row = GS_ROW128(bw); break;
+    default: break;
+    }
+    /* Whole pages inside the rectangle: what the GPU drew there is lost
+     * anyway, no need to copy it back. */
+    if (bp % 32 == 0 && x0 >= 0 && y0 >= 0 && x1 < 2048 && y1 < 2048) {
+        for (int cy = (y0 + ph - 1) / ph; (cy + 1) * ph - 1 <= y1; cy++) {
+            for (int cx = (x0 + pw - 1) / pw; (cx + 1) * pw - 1 <= x1; cx++) {
+                uint32_t p = (bp / 32 + (uint32_t)cy * row + (uint32_t)cx) % GS_PAGES;
+                if (owner[p] != NULL) {
+                    batch_flush(); /* a draw still waiting may be on it */
+                    set_owner(p, NULL);
+                }
+            }
+        }
+    }
+    gs_gpu_sync(psm, bp, bw, x0, y0, x1, y1);
+}
+
 void gs_gpu_sync_all(void)
 {
     uint64_t mask[GS_PAGES / 64];
@@ -1160,36 +1189,75 @@ static int make_state(const DrawState *s, GLenum mode, int rows, GpuState *st)
 
 /* ---- Batches ------------------------------------------------------------------ */
 
+/* Uniforms are only sent when they change. */
+static int ucache[U_COUNT][4];
+static int ucache_ok[U_COUNT];
+
+static void set_int(int u, int n, int a, int b, int c, int d)
+{
+    int v[4] = { a, b, c, d };
+
+    if (ucache_ok[u] && memcmp(ucache[u], v, sizeof(v)) == 0)
+        return;
+    memcpy(ucache[u], v, sizeof(v));
+    ucache_ok[u] = 1;
+    switch (n) {
+    case 1: glUniform1i(uni[u], a); break;
+    case 2: glUniform2i(uni[u], a, b); break;
+    default: glUniform4i(uni[u], a, b, c, d); break;
+    }
+}
+
+static void set_float(int u, float a, float b)
+{
+    int v[4] = { 0, 0, 0, 0 };
+
+    memcpy(&v[0], &a, 4);
+    memcpy(&v[1], &b, 4);
+    if (ucache_ok[u] && memcmp(ucache[u], v, sizeof(v)) == 0)
+        return;
+    memcpy(ucache[u], v, sizeof(v));
+    ucache_ok[u] = 1;
+    if (u == U_SIZE)
+        glUniform2f(uni[u], a, b);
+    else
+        glUniform1f(uni[u], a);
+}
+
 static void apply_uniforms(const GpuState *st, int pass)
 {
-    glUniform2f(uni[U_SIZE], (float)st->t->w, (float)st->t->h);
-    glUniform1i(uni[U_TEX], 0);
-    glUniform1i(uni[U_DST], 1);
-    glUniform1i(uni[U_IIP], st->iip);
-    glUniform1i(uni[U_TME], st->tme);
-    glUniform1i(uni[U_TFX], st->tfx);
-    glUniform1i(uni[U_TCC], st->tcc);
-    glUniform1i(uni[U_FGE], st->fge);
-    glUniform1i(uni[U_FBA], st->fba);
-    glUniform1i(uni[U_FMT], st->fmt);
-    glUniform4i(uni[U_FOG], st->fog[0], st->fog[1], st->fog[2], 0);
-    glUniform1i(uni[U_TEXMODE], st->texmode);
-    glUniform2i(uni[U_TSIZE], st->tsize[0], st->tsize[1]);
-    glUniform2i(uni[U_TOFF], st->toff[0], st->toff[1]);
-    glUniform2i(uni[U_WRAP], st->wrap[0], st->wrap[1]);
-    glUniform4i(uni[U_REGION], st->region[0], st->region[1], st->region[2], st->region[3]);
-    glUniform4i(uni[U_TEXA], st->texa[0], st->texa[1], st->texa[2], 0);
-    glUniform4i(uni[U_ATEST], st->atest[0], st->atest[1], st->atest[2], pass);
-    glUniform4i(uni[U_BLEND], st->blend[0], st->blend[1], st->blend[2], st->blend[3]);
-    glUniform1i(uni[U_BILINEAR], st->bilinear);
-    glUniform1i(uni[U_TSCALE], st->tscale);
-    glUniform1i(uni[U_PRE], st->pre);
-    glUniform1i(uni[U_EXACT], st->exact);
-    glUniform1i(uni[U_FIX], st->fix);
-    glUniform4i(uni[U_FLAGS], st->flags[0], st->flags[1], st->flags[2], st->flags[3]);
-    glUniform1ui(uni[U_FBMSK], st->fbmsk);
-    glUniform1f(uni[U_ZSCALE], st->zscale);
-    glUniform1f(uni[U_ZMAX], st->zmax);
+    set_float(U_SIZE, (float)st->t->w, (float)st->t->h);
+    set_int(U_TEX, 1, 0, 0, 0, 0);
+    set_int(U_DST, 1, 1, 0, 0, 0);
+    set_int(U_IIP, 1, st->iip, 0, 0, 0);
+    set_int(U_TME, 1, st->tme, 0, 0, 0);
+    set_int(U_TFX, 1, st->tfx, 0, 0, 0);
+    set_int(U_TCC, 1, st->tcc, 0, 0, 0);
+    set_int(U_FGE, 1, st->fge, 0, 0, 0);
+    set_int(U_FBA, 1, st->fba, 0, 0, 0);
+    set_int(U_FMT, 1, st->fmt, 0, 0, 0);
+    set_int(U_FOG, 4, st->fog[0], st->fog[1], st->fog[2], 0);
+    set_int(U_TEXMODE, 1, st->texmode, 0, 0, 0);
+    set_int(U_TSIZE, 2, st->tsize[0], st->tsize[1], 0, 0);
+    set_int(U_TOFF, 2, st->toff[0], st->toff[1], 0, 0);
+    set_int(U_WRAP, 2, st->wrap[0], st->wrap[1], 0, 0);
+    set_int(U_REGION, 4, st->region[0], st->region[1], st->region[2], st->region[3]);
+    set_int(U_TEXA, 4, st->texa[0], st->texa[1], st->texa[2], 0);
+    set_int(U_ATEST, 4, st->atest[0], st->atest[1], st->atest[2], pass);
+    set_int(U_BLEND, 4, st->blend[0], st->blend[1], st->blend[2], st->blend[3]);
+    set_int(U_BILINEAR, 1, st->bilinear, 0, 0, 0);
+    set_int(U_TSCALE, 1, st->tscale, 0, 0, 0);
+    set_int(U_PRE, 1, st->pre, 0, 0, 0);
+    set_int(U_EXACT, 1, st->exact, 0, 0, 0);
+    set_int(U_FIX, 1, st->fix, 0, 0, 0);
+    set_int(U_FLAGS, 4, st->flags[0], st->flags[1], st->flags[2], st->flags[3]);
+    if (!ucache_ok[U_FBMSK] || (uint32_t)ucache[U_FBMSK][0] != st->fbmsk) {
+        glUniform1ui(uni[U_FBMSK], st->fbmsk);
+        ucache[U_FBMSK][0] = (int)st->fbmsk;
+        ucache_ok[U_FBMSK] = 1;
+    }
+    set_float(U_ZSCALE, st->zscale, 0.0f);
+    set_float(U_ZMAX, st->zmax, 0.0f);
 }
 
 static void batch_flush(void)
