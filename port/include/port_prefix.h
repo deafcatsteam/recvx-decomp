@@ -89,6 +89,15 @@ int pc_snd_take(float dir[3]);
 void pc_sd_take_dir(void *handle, int midi, int mode);
 void pc_snddrv_dir(int midi, int port, int ch, const float *dir);
 
+/* 60 images a second (pc_interp.c): pc_interp_begin starts a frame (after
+   the buffers are swapped) and pc_interp_frame ends it (before the wait for
+   the V-blanks); pc_interp_model tells which model the 3D strips drawn next
+   belong to (mod: its shadow), to find them again in the next frame. */
+void pc_interp_begin(void);
+void pc_interp_frame(void);
+void pc_interp_model(const void *model, int mod);
+void pc_interp_vertex(const unsigned int *words);
+
 /* CodeWarrior / EE-gcc specific keywords. */
 #define __inline__ inline
 

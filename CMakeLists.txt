@@ -97,6 +97,7 @@ set(PORT_SOURCES
     port/src/game/pc_render3d.c
     port/src/game/pc_widescreen.c
     port/src/game/pc_sound3d.c
+    port/src/game/pc_interp.c
 )
 
 # Settings for code that sees the game's headers: the game itself, the port's
@@ -323,6 +324,8 @@ add_test(NAME gs_gpu_compare_exact COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_compare_exact PROPERTIES ENVIRONMENT CVX_GPU_EXACT=1 SKIP_RETURN_CODE 77)
 add_test(NAME gs_gpu_letters COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_letters PROPERTIES ENVIRONMENT CVX_TEST_LETTERS=1 SKIP_RETURN_CODE 77)
+add_test(NAME gs_gpu_replay COMMAND test_gs_gpu)
+set_tests_properties(gs_gpu_replay PROPERTIES ENVIRONMENT CVX_TEST_REPLAY=1 SKIP_RETURN_CODE 77)
 
 # Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
 add_executable(gs_replay port/tools/gs_replay.c)

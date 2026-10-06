@@ -1612,7 +1612,18 @@ static void window_state(int fb_w, int fb_h)
     glActiveTexture(GL_TEXTURE0);
 }
 
-void gs_gpu_present(int fb_w, int fb_h, int x, int y, int w, int h, int smooth)
+/* ---- Pictures kept aside (60 fps, see gs_rec_replay) ---------------------------- */
+
+static struct {
+    GLuint tex, fbo;
+    int tw, th;           /* texture size */
+    int w, h;             /* GS pixels kept */
+    uint32_t fbp, fbw;
+    int psm;
+} held[2];
+static int show_held;
+
+int gs_gpu_hold(int slot)
 {
     uint32_t fbp, fbw;
     int psm, dw, dh;
@@ -1621,19 +1632,81 @@ void gs_gpu_present(int fb_w, int fb_h, int x, int y, int w, int h, int smooth)
     batch_flush();
     gs_display_area(&fbp, &fbw, &psm, &dw, &dh);
     t = target_get(0, fbp, fbw, psm, dh);
+    if (t == NULL)
+        return 0;
     sync_target(t, 0, 0, dw - 1, dh - 1);
+    if (held[slot].tex == 0) {
+        glGenTextures(1, &held[slot].tex);
+        glGenFramebuffers(1, &held[slot].fbo);
+    }
+    if (held[slot].tw != dw * scale || held[slot].th != dh * scale) {
+        held[slot].tw = dw * scale;
+        held[slot].th = dh * scale;
+        make_tex(held[slot].tex, 0, held[slot].tw, held[slot].th);
+        attach(held[slot].fbo, 0, held[slot].tex);
+    }
+    blit(t->fbo, held[slot].fbo, 0, 0, held[slot].tw, held[slot].th, 0, 0, held[slot].tw, held[slot].th, 0);
+    held[slot].w = dw;
+    held[slot].h = dh;
+    held[slot].fbp = fbp;
+    held[slot].fbw = fbw;
+    held[slot].psm = psm;
+    check_gl("hold");
+    return 1;
+}
+
+void gs_gpu_unhold(int slot)
+{
+    Target *t;
+
+    if (held[slot].w == 0)
+        return;
+    batch_flush();
+    t = target_get(0, held[slot].fbp, held[slot].fbw, held[slot].psm, held[slot].h);
+    if (t == NULL)
+        return;
+    blit(held[slot].fbo, t->fbo, 0, 0, held[slot].tw, held[slot].th, 0, 0, held[slot].tw, held[slot].th, 0);
+    target_drawn(t, 0, 0, held[slot].w - 1, held[slot].h - 1);
+    check_gl("unhold");
+}
+
+void gs_gpu_show_held(int on)
+{
+    show_held = on;
+}
+
+void gs_gpu_present(int fb_w, int fb_h, int x, int y, int w, int h, int smooth)
+{
+    uint32_t fbp, fbw;
+    int psm, dw, dh;
+    Target *t;
+    GLuint tex;
+    float tu, tv;
+
+    batch_flush();
+    if (show_held && held[0].w > 0) {
+        tex = held[0].tex;
+        tu = tv = 1.0f;
+    } else {
+        gs_display_area(&fbp, &fbw, &psm, &dw, &dh);
+        t = target_get(0, fbp, fbw, psm, dh);
+        sync_target(t, 0, 0, dw - 1, dh - 1);
+        tex = t->tex;
+        tu = (float)dw / t->w;
+        tv = (float)dh / t->h;
+    }
 
     window_state(fb_w, fb_h);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
-    glBindTexture(GL_TEXTURE_2D, t->tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, smooth ? GL_LINEAR : GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, smooth ? GL_LINEAR : GL_NEAREST);
     /* Target rows go up from GS row 0; the window's from its bottom. */
     float x0 = (float)x / fb_w * 2.0f - 1.0f, x1 = (float)(x + w) / fb_w * 2.0f - 1.0f;
     float y0 = 1.0f - (float)y / fb_h * 2.0f, y1 = 1.0f - (float)(y + h) / fb_h * 2.0f;
-    blit_quad(x0, y0, x1, y1, 0.0f, 0.0f, (float)dw / t->w, (float)dh / t->h);
-    glBindTexture(GL_TEXTURE_2D, t->tex);
+    blit_quad(x0, y0, x1, y1, 0.0f, 0.0f, tu, tv);
+    glBindTexture(GL_TEXTURE_2D, tex);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     check_gl("present");

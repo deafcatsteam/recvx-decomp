@@ -94,8 +94,17 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 2. **Textures** : export, remplacement, packs refaits par IA ; compatibilité
    avec les packs PCSX2 si leur format d'empreinte le permet.
 3. Backend **Direct3D 9** et **RTX Remix** (path tracing, matériaux, **DLSS**).
-4. **60 images/seconde** par interpolation de l'affichage (la logique du jeu
-   reste à 30).
+4. **60 images/seconde** ✔ en essai (`fps60`, `src/game/pc_interp.c`) : la
+   logique du jeu reste à 30. Le GS enregistre ce qu'il reçoit pendant une
+   image (`gs_rec_start`) ; les sommets des modèles 3D y sont retrouvés par
+   leur contenu, rangés par modèle. En fin d'image, chaque modèle dessiné
+   avec autant de sommets qu'à l'image d'avant est placé à mi-chemin (écran,
+   profondeur, perspective des textures, brouillard, couleur) et l'image
+   enregistrée est redessinée depuis l'état du GS de son début
+   (`gs_rec_replay`) : c'est l'image montrée à la première V-blank, la vraie
+   à la seconde. Pas d'image intermédiaire aux changements de plan, ni hors
+   du jeu. Reste : les particules et effets 2D placés en 3D (à 30), et un
+   rendu natif qui le ferait avec les vraies matrices.
 
 ## Phase C — Son et confort
 

@@ -56,6 +56,9 @@ static const char template_text[] =
     ";filter = smooth\n"
     "; Image 16:9 (écran large) en jeu ; les menus restent en 4:3\n"
     ";widescreen = yes\n"
+    "; 60 images par seconde en jeu au lieu de 30 (essai) : une image entre\n"
+    "; deux, avec les personnages et la caméra à mi-chemin\n"
+    ";fps60 = yes\n"
     "\n"
     "; Dessin par la carte graphique (OpenGL 3.3) au lieu du processeur, et\n"
     "; sa résolution : 1 = celle de la PS2, 2 = deux fois plus fine... jusqu'à 4\n"
@@ -218,7 +221,7 @@ static int known(const char *name)
 {
     static const char *const names[] = {
         "iso", "saves", "movies", "fullscreen", "window", "filter", "sound", "vibration", "renderer",
-        "upscale", "launcher", "widescreen", "sound_3d",
+        "upscale", "launcher", "widescreen", "fps60", "sound_3d",
         /* the keys, see key_actions in pc_window.c */
         "key_up", "key_down", "key_left", "key_right", "key_stick_up", "key_stick_down",
         "key_stick_left", "key_stick_right", "key_cross", "key_circle", "key_square",

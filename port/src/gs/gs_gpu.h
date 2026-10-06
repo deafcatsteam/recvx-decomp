@@ -34,4 +34,11 @@ int gs_gpu_read_display(uint32_t *dst, int max_pixels, int *w, int *h);
 void gs_gpu_draw_picture(const uint32_t *rgba, int pw, int ph, int changed, int fb_w, int fb_h, int x, int y,
                          int w, int h);
 
+/* 60 fps (gs_rec_replay): copies the displayed picture into hold slot 0
+ * or 1, copies slot 1 back into the frame buffer it came from, and has
+ * gs_gpu_present show slot 0 instead of the display while on is set. */
+int gs_gpu_hold(int slot);
+void gs_gpu_unhold(int slot);
+void gs_gpu_show_held(int on);
+
 #endif

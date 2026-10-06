@@ -56,6 +56,26 @@ typedef struct {
 } GsStats;
 extern GsStats gs_stats;
 
+/* ---- Drawing a frame again (60 images a second, port/src/game/pc_interp.c)
+ *
+ * gs_rec_start keeps the GS state and memory as they are, and records the
+ * GIF data sent from then on, until gs_rec_stop. While recording, the
+ * three quadwords of each vertex sent as ST, RGBAQ, XYZF2 (the game's 3D
+ * strips) are given to gs_rec_vertex_id, which returns an id for the
+ * vertices it knows, or -1. gs_rec_replay then draws the recorded frame
+ * again from the kept state, with patch(id, words) changing the vertices
+ * that have an id (12 words: S T Q -, R G B A, X Y Z F), keeps the picture
+ * displayed by the result aside, and puts the GS state, memory and
+ * displayed picture back as they were before the replay. gs_show_held(1)
+ * shows that picture instead of the display (gs_read_display and
+ * gs_gpu_present) until gs_show_held(0). */
+extern int (*gs_rec_vertex_id)(const uint32_t words[12]);
+void gs_rec_start(void);
+void gs_rec_stop(void);
+int gs_rec_vertices(void); /* vertices with an id in the recording */
+int gs_rec_replay(void (*patch)(int id, uint32_t words[12]));
+void gs_show_held(int on);
+
 /* Frame dumps, for reproducing a picture away from the game: gs_dump_frame
  * asks for the next frame to be written to path (the GS state, its memory,
  * then everything sent to it until the following V-blank); call

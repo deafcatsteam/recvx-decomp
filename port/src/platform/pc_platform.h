@@ -12,4 +12,7 @@ void pc_wait_vblank(void);
 /* Called once per V-blank: lets the window/input layer pump its events. */
 extern void (*pc_frame_hook)(void);
 
+/* Shows buffer id of a sceGsDBuffDc at once (pc_sdk.c). */
+void pc_gs_show_dbuff(void *db, int id);
+
 #endif

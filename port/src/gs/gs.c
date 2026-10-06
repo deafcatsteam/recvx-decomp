@@ -66,6 +66,29 @@ static struct {
     int in_tag;
 } gif;
 
+/* Recording of a frame, to draw it again (60 fps, see gs_rec_start). */
+typedef struct {
+    uint32_t at; /* quadword of the recording where the vertex starts */
+    int id;
+} RecVertex;
+
+static struct {
+    int on, replaying, kept;
+    uint64_t *q; /* the GIF data recorded, two halves per quadword */
+    uint32_t n, cap;
+    uint32_t pos; /* quadword being handled */
+    RecVertex *v;
+    uint32_t nv, capv;
+    /* state at gs_rec_start, and before a replay */
+    uint8_t *mem0, *mem1;
+    uint32_t pixels[GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H]; /* held picture, software GS */
+    int held_w, held_h, show;
+} rec;
+static uint8_t rec_state0[sizeof(gs) + sizeof(trx) + sizeof(gif)];
+static uint8_t rec_state1[sizeof(gs) + sizeof(trx) + sizeof(gif)];
+
+static void rec_vertex(void);
+
 /* Primitives waiting to be drawn (see "Batches"). */
 static int batch_touches(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, int reads);
 static void batch_flush(void);
@@ -1569,6 +1592,9 @@ static void gif_qword(uint64_t lo, uint64_t hi)
     switch (gif.flg) {
     case 0: /* PACKED */
         gif_packed(BITS(gif.tag_hi, gif.reg * 4, 4), lo, hi);
+        /* the last of ST, RGBAQ, XYZF2: a vertex of a 3D strip */
+        if (rec.on && gif.reg == 2 && gif.nreg == 3 && (gif.tag_hi & 0xfff) == 0x412)
+            rec_vertex();
         if (++gif.reg >= gif.nreg) {
             gif.reg = 0;
             gif.nloop--;
@@ -1699,15 +1725,184 @@ int gs_replay(const char *path)
     return ok ? 0 : -1;
 }
 
+/* ---- Drawing a frame again (60 fps) ------------------------------------ */
+
+int (*gs_rec_vertex_id)(const uint32_t words[12]);
+
+static void rec_vertex(void)
+{
+    uint32_t words[12];
+    int id;
+
+    if (gs_rec_vertex_id == NULL || rec.pos < 2)
+        return;
+    memcpy(words, rec.q + (size_t)(rec.pos - 2) * 2, 48);
+    id = gs_rec_vertex_id(words);
+    if (id < 0)
+        return;
+    if (rec.nv == rec.capv) {
+        uint32_t cap = rec.capv ? rec.capv * 2 : 65536;
+        RecVertex *v = realloc(rec.v, cap * sizeof(*v));
+        if (v == NULL)
+            return;
+        rec.v = v;
+        rec.capv = cap;
+    }
+    rec.v[rec.nv].at = rec.pos - 2;
+    rec.v[rec.nv].id = id;
+    rec.nv++;
+}
+
+static void save_state(uint8_t *to)
+{
+    memcpy(to, &gs, sizeof(gs));
+    memcpy(to + sizeof(gs), &trx, sizeof(trx));
+    memcpy(to + sizeof(gs) + sizeof(trx), &gif, sizeof(gif));
+}
+
+static void load_state(const uint8_t *from)
+{
+    memcpy(&gs, from, sizeof(gs));
+    memcpy(&trx, from + sizeof(gs), sizeof(trx));
+    memcpy(&gif, from + sizeof(gs) + sizeof(trx), sizeof(gif));
+}
+
+/* Puts GS memory back to a copy, marking the pages that change. */
+static void load_memory(const uint8_t *from)
+{
+    int changed = 0;
+
+    for (int p = 0; p < GS_PAGES; p++) {
+        if (memcmp(gs_vram + p * 8192, from + p * 8192, 8192) != 0) {
+            memcpy(gs_vram + p * 8192, from + p * 8192, 8192);
+            gs_page_gen[p] = gs_gen + 1;
+            changed = 1;
+        }
+    }
+    if (changed) {
+        gs_gen++;
+        tc_flush();
+    }
+}
+
+void gs_rec_start(void)
+{
+    batch_flush();
+    if (rec.mem0 == NULL) {
+        rec.mem0 = malloc(GS_MEM_SIZE);
+        rec.mem1 = malloc(GS_MEM_SIZE);
+        if (rec.mem0 == NULL || rec.mem1 == NULL)
+            return;
+    }
+    save_state(rec_state0);
+    memcpy(rec.mem0, gs_vram, GS_MEM_SIZE);
+    rec.n = 0;
+    rec.nv = 0;
+    rec.on = 1;
+    rec.kept = 1;
+}
+
+void gs_rec_stop(void)
+{
+    rec.on = 0;
+}
+
+int gs_rec_vertices(void)
+{
+    return rec.kept ? (int)rec.nv : 0;
+}
+
+static void hold_display(void)
+{
+    if (gs_gpu_on) {
+        gs_gpu_hold(0);
+        return;
+    }
+    shown_changes = changes - 1;
+    if (!gs_read_display(rec.pixels, &rec.held_w, &rec.held_h))
+        rec.held_w = rec.held_h = 0;
+}
+
+int gs_rec_replay(void (*patch)(int id, uint32_t words[12]))
+{
+    if (!rec.kept || rec.on || rec.mem0 == NULL)
+        return 0;
+    batch_flush();
+    uint64_t dispfb = gs.dispfb, display = gs.display;
+    /* now: kept, with the picture displayed */
+    save_state(rec_state1);
+    memcpy(rec.mem1, gs_vram, GS_MEM_SIZE);
+    if (gs_gpu_on && !gs_gpu_hold(1))
+        return 0;
+
+    load_state(rec_state0);
+    load_memory(rec.mem0);
+    for (uint32_t i = 0; i < rec.nv; i++)
+        patch(rec.v[i].id, (uint32_t *)(rec.q + (size_t)rec.v[i].at * 2));
+    rec.replaying = 1;
+    gif_write(rec.q, rec.n);
+    rec.replaying = 0;
+    batch_flush();
+    /* the display of now, on what the replay drew */
+    gs.dispfb = dispfb;
+    gs.display = display;
+    hold_display();
+
+    load_state(rec_state1);
+    load_memory(rec.mem1);
+    if (gs_gpu_on)
+        gs_gpu_unhold(1);
+    rec.kept = 0; /* the recording has been patched */
+    changes++;
+    return 1;
+}
+
+void gs_show_held(int on)
+{
+    rec.show = on;
+    changes++;
+    if (gs_gpu_on)
+        gs_gpu_show_held(on);
+}
+
+/* Room for count more quadwords in the recording; 0 (and no recording of
+ * this frame) when out of memory. */
+static int rec_reserve(uint32_t count)
+{
+    if (rec.n + count > rec.cap) {
+        uint32_t cap = rec.cap ? rec.cap : 1 << 16;
+        uint64_t *q;
+
+        while (cap < rec.n + count)
+            cap *= 2;
+        q = realloc(rec.q, (size_t)cap * 16);
+        if (q == NULL) {
+            rec.on = rec.kept = 0;
+            return 0;
+        }
+        rec.q = q;
+        rec.cap = cap;
+    }
+    return 1;
+}
+
 static void gif_write(const uint64_t *qwords, uint32_t count)
 {
+    int recording = rec.on && !rec.replaying && rec_reserve(count);
+
     if (dump_file != NULL) {
         dump_u32(DUMP_GIF);
         dump_u32(count);
         fwrite(qwords, 16, count, dump_file);
     }
-    for (uint32_t i = 0; i < count; i++)
+    if (recording)
+        memcpy(rec.q + (size_t)rec.n * 2, qwords, (size_t)count * 16);
+    for (uint32_t i = 0; i < count; i++) {
+        rec.pos = rec.n + i;
         gif_qword(qwords[i * 2], qwords[i * 2 + 1]);
+    }
+    if (recording)
+        rec.n += count;
 }
 
 static int64_t busy_start(void)
@@ -1842,6 +2037,15 @@ int gs_read_display(uint32_t *dst, int *w, int *h)
     int psm, width, height;
 
     batch_flush();
+    if (rec.show && rec.held_w > 0 && !gs_gpu_on) { /* 60 fps: the picture between two frames */
+        if (changes == shown_changes)
+            return 0;
+        shown_changes = changes;
+        *w = rec.held_w;
+        *h = rec.held_h;
+        memcpy(dst, rec.pixels, (size_t)rec.held_w * rec.held_h * 4);
+        return 1;
+    }
     gs_display_area(&fbp, &fbw, &psm, &width, &height);
     *w = width;
     *h = height;

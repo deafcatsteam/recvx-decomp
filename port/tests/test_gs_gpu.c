@@ -429,6 +429,97 @@ static int letters_test(int wide)
     return red != 0 || green < 32 * (lw / 16 - 1) * 13 * 16;
 }
 
+/* 60 fps (gs_rec_replay): a frame recorded, then drawn again with its
+ * strip's vertices moved 20 pixels right; the picture kept aside has the
+ * moved square, the frame buffer the square where it was drawn. */
+static int any_vertex(const uint32_t w[12])
+{
+    (void)w;
+    return 0;
+}
+
+static void move_right(int id, uint32_t w[12])
+{
+    (void)id;
+    w[8] += 20 * 16;
+}
+
+static void square_columns(int *x0, int *x1, int *n)
+{
+    static uint32_t px[W * 4 * H * 4];
+    int w, h;
+
+    *x0 = 1 << 30;
+    *x1 = -1;
+    *n = 0;
+    if (!gs_gpu_read_display(px, W * 4 * H * 4, &w, &h))
+        return;
+    for (int i = 0; i < w * h; i++) {
+        if ((px[i] & 0xff) > 0x80) {
+            int x = i % w;
+            *x0 = x < *x0 ? x : *x0;
+            *x1 = x > *x1 ? x : *x1;
+            (*n)++;
+        }
+    }
+}
+
+static int replay_test(void)
+{
+    int x0, x1, n, bad = 0;
+
+    gs_reset();
+    tag(5, 1, 0, 1, 0xe);
+    ad(0x4c, FBP | (2ull << 16) | ((uint64_t)GS_PSMCT32 << 24));
+    ad(0x4e, ZBP | (1ull << 32));
+    ad(0x18, (1000ull * 16) | ((1000ull * 16) << 32));
+    ad(0x40, 0 | ((uint64_t)(W - 1) << 16) | ((uint64_t)(H - 1) << 48));
+    ad(0x47, 0);
+    send();
+    gs_set_display(FBP | (2ull << 9), ((uint64_t)(W - 1) << 32) | ((uint64_t)(H - 1) << 44));
+    gs_rec_vertex_id = any_vertex;
+    gs_rec_start();
+    tag(3, 1, 0, 1, 0xe); /* black background */
+    ad(0x00, 6);
+    ad(0x01, 0x80000000u);
+    ad(0x05, (1000 << 4) | ((uint64_t)(1000 << 4) << 16));
+    send();
+    tag(1, 1, 0, 1, 0xe);
+    ad(0x05, ((1000 + W) << 4) | ((uint64_t)((1000 + H) << 4) << 16));
+    send();
+    /* a red square as a strip of ST, RGBAQ, XYZF2, as the game's models */
+    tag(4, 1, 0, 3, 0x412);
+    pkt[pn - 2] |= (1ull << 46) | (4ull << 47);
+    for (int v = 0; v < 4; v++) {
+        uint32_t x = (1000 + 10 + (v & 1) * 32) * 16, y = (1000 + 10 + (v >> 1) * 32) * 16;
+        float q = 1.0f;
+        uint32_t qb;
+        memcpy(&qb, &q, 4);
+        pkt[pn++] = 0;
+        pkt[pn++] = qb;
+        pkt[pn++] = 0xff;
+        pkt[pn++] = 0x80ull << 32;
+        pkt[pn++] = x | ((uint64_t)y << 32);
+        pkt[pn++] = 0;
+    }
+    send();
+    gs_rec_stop();
+    square_columns(&x0, &x1, &n);
+    printf("frame: square from x %d to %d (%d pixels)\n", x0, x1, n);
+    int f0 = x0, f1 = x1, fn = n; /* at 2x: 64 pixels wide */
+    bad |= x1 - x0 != 63 || n != 64 * 64;
+    if (!gs_rec_replay(move_right))
+        return 1;
+    square_columns(&x0, &x1, &n);
+    printf("after the replay, the frame: square from x %d to %d\n", x0, x1);
+    bad |= x0 != f0 || x1 != f1 || n != fn;
+    gs_gpu_unhold(0); /* to look at the picture kept aside */
+    square_columns(&x0, &x1, &n);
+    printf("picture kept aside: square from x %d to %d\n", x0, x1);
+    bad |= x0 != f0 + 40 || x1 != f1 + 40 || n != fn;
+    return bad;
+}
+
 int main(void)
 {
     static const struct {
@@ -470,6 +561,13 @@ int main(void)
             return 77;
         }
         return letters_test(0) | letters_test(1);
+    }
+    if (getenv("CVX_TEST_REPLAY") != NULL) { /* a test of its own: at 2 times the resolution */
+        if (!open_gl() || !gs_gpu_init(get_proc, 2)) {
+            printf("test_gs_gpu: no OpenGL 3.3 here, skipped\n");
+            return 77;
+        }
+        return replay_test();
     }
     if (getenv("CVX_TEST_PRIMS") != NULL)
         prims = atoi(getenv("CVX_TEST_PRIMS"));

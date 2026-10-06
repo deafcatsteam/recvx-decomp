@@ -864,6 +864,11 @@ static float pack_prim3d(unsigned long prim, const void* dp, unsigned int num, i
         dst[9] = ftoi4(src[9]);
         dst[10] = ftoi4(sz);
         dst[11] = (int)(short)((ftoi4(src[11]) & 0xFFFF) | flags);
+        /* 60 fps: the models' vertices, to find them in the next frame */
+        if (int_colour)
+        {
+            pc_interp_vertex(dst);
+        }
     }
 
     ((float*)dst)[3] = zsum * (1.0f / (float)num);

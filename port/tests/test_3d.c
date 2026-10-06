@@ -189,6 +189,76 @@ static void test_skin(void)
 }
 
 int pc_widescreen_on(unsigned int tk_flg, unsigned int ts_flg);
+void pc_interp_enable(int on);
+void sceGsSetDefDBuffDc(sceGsDBuffDc *db, short psm, short w, short h, short ztest, short zpsm, short clear);
+
+/* Middle x of what is drawn in a picture (0: nothing). */
+static float centre_x(const unsigned int* px, int w, int h, int* n)
+{
+    double sx = 0;
+    int x, y;
+
+    *n = 0;
+    for (y = 0; y < h; y++)
+        for (x = 0; x < w; x++)
+            if ((px[y * w + x] & 0xFFFFFF) != 0)
+            {
+                sx += x;
+                (*n)++;
+            }
+    return *n ? (float)(sx / *n) : 0.0f;
+}
+
+/* 60 fps (pc_interp.c): a model drawn 40 pixels further right in the next
+ * frame is drawn 20 pixels right in the picture shown between them, and
+ * the frame itself is left as it was drawn. */
+static void test_interp(const float (*quad)[3])
+{
+    static unsigned int px[GS_DISPLAY_MAX_W * GS_DISPLAY_MAX_H];
+    float moved[4][3];
+    int i, w, h, n;
+    float cx;
+
+    for (i = 0; i < 4; i++)
+    {
+        moved[i][0] = quad[i][0] + 12.5f; /* 40 pixels at z = 100 */
+        moved[i][1] = quad[i][1];
+        moved[i][2] = quad[i][2];
+    }
+    sceGsSetDefDBuffDc(&Db, 0, 640, 480, 0, 0, 0);
+    Ps2_dbuff = 1; /* shows buffer 0, at FBP 0 like FRAME_1 */
+    sys->tk_flg = 0x80;
+    sys->ts_flg = 0;
+    pc_interp_enable(1);
+
+    /* (the game clears with GS packets, recorded; here before the frame) */
+    clear();
+    pc_interp_begin();
+    make_model(quad, 4);
+    draw();
+    pc_interp_frame();
+
+    clear();
+    pc_interp_begin();
+    make_model(moved, 4);
+    draw();
+    pc_interp_frame();
+
+    gs_show_held(1);
+    CHECK(gs_read_display(px, &w, &h) && w == 640 && h == 480);
+    gs_show_held(0);
+    cx = centre_x(px, w, h, &n);
+    printf("60 fps: picture between the frames: %d pixels around x %.1f\n", n, cx);
+    CHECK(n > 60 * 60 && n < 66 * 66 && fabsf(cx - (320.0f + 20.0f)) < 1.5f);
+    for (i = 0; i < 640 * 480; i++)
+        px[i] = fb(i % 640, i / 640);
+    cx = centre_x(px, 640, 480, &n);
+    printf("60 fps: the frame itself: %d pixels around x %.1f\n", n, cx);
+    CHECK(n > 60 * 60 && n < 66 * 66 && fabsf(cx - (320.0f + 40.0f)) < 1.5f);
+
+    pc_interp_enable(0);
+    sys->tk_flg = 0;
+}
 extern NJS_POINT3 CameraPos; /* sdfunc.c */
 
 /* 3D sound (pc_sound3d.c): a sound's position, seen from the camera, has
@@ -356,6 +426,7 @@ int main(void)
 
     test_widescreen(quad);
     test_sound3d();
+    test_interp(quad);
     test_skin();
 
     if (failures == 0)

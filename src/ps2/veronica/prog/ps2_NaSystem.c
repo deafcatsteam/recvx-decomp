@@ -76,6 +76,10 @@ void Ps2SwapDBuff()
     EorFunc(); 
     
 #ifdef PLATFORM_PC
+    /* 60 fps (port/src/game/pc_interp.c): shows the frame just drawn, after
+       a picture between it and the one before. */
+    pc_interp_frame();
+
     /* The V-blank interrupt bumps Ps2_vcount; on PC the wait itself drives
        it, which also paces the game at 30 frames per second. */
     while (Ps2_vcount < 2)
@@ -108,6 +112,10 @@ void Ps2SwapDBuff()
 #endif
     
     VsyncFunc(); 
+
+#ifdef PLATFORM_PC
+    pc_interp_begin();
+#endif
 } 
 
 // 100% matching! 

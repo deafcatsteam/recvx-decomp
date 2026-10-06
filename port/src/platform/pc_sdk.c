@@ -226,6 +226,17 @@ void sceGsSetDefDBuffDc(sceGsDBuffDc *db, short psm, short w, short h,
     set_clear((uint64_t *)&db->clear1, w, h, ztest);
 }
 
+/* Shows buffer id of db, as sceGsSwapDBuffDc does, without changing where
+ * the GS draws (60 fps, pc_interp.c). */
+void pc_gs_show_dbuff(void *dbp, int id)
+{
+    sceGsDBuffDc *db = dbp;
+
+    id &= 1;
+    gs_set_display(get64(&db->disp[id].dispfb), get64(&db->disp[id].display));
+    pc_wide_shown = pc_wide_x != 1.0f;
+}
+
 int sceGsSwapDBuffDc(sceGsDBuffDc *db, int id)
 {
     const uint64_t *tag = (const uint64_t *)(id == 0 ? &db->giftag0 : &db->giftag1);

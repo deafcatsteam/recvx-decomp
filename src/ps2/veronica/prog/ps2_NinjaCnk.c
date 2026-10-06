@@ -691,6 +691,10 @@ int njCnkDrawModelLocal(NJS_CNK_MODEL* pModel)
     unsigned int modelclipflag; 
     float temp, temp2; // not from the debugging symbols
 
+#ifdef PLATFORM_PC
+    pc_interp_model(pModel, 0);
+#endif
+
     modelclipflag = 0;
     
     if (ulNaCnkFlagModelClip != 0) 
@@ -792,6 +796,10 @@ int njCnkDrawModelLocalMod(NJS_CNK_MODEL* pModel)
     float fZ;                 
     CHUNK_HEAD* pCnk;           
     float temp, temp2, temp3; // not from the debugging symbols
+
+#ifdef PLATFORM_PC
+    pc_interp_model(pModel, 1);
+#endif
 
     if (ulNaCnkFlagModelClip != 0) 
     {
