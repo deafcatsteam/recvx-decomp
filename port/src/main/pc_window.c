@@ -348,6 +348,32 @@ static void read_input(void)
     pc_pad_sticks[3] = ly;
 }
 
+/* A picture drawn for 16:9 (narrowed by 3/4) stretched back to 16:9, with
+ * linear filtering across. Returns NULL when out of memory. */
+static uint32_t *stretch_wide(const uint32_t *src, int w, int h, int *out_w)
+{
+    int ow = (h * 16 / 9 + 1) & ~1;
+    uint32_t *dst = malloc((size_t)ow * h * 4);
+
+    if (dst == NULL)
+        return NULL;
+    for (int x = 0; x < ow; x++) {
+        float fx = (x + 0.5f) * w / ow - 0.5f;
+        int x0 = fx < 0 ? 0 : (int)fx, x1 = x0 + 1 < w ? x0 + 1 : w - 1;
+        int f = (int)((fx - x0) * 256.0f);
+
+        f = f < 0 ? 0 : f > 256 ? 256 : f;
+        for (int y = 0; y < h; y++) {
+            uint32_t a = src[y * w + x0], b = src[y * w + x1], c = 0;
+            for (int s = 0; s < 32; s += 8)
+                c |= (((a >> s & 0xff) * (256 - f) + (b >> s & 0xff) * f) >> 8) << s;
+            dst[y * ow + x] = c;
+        }
+    }
+    *out_w = ow;
+    return dst;
+}
+
 static void save_screenshot(void)
 {
     static int count;
@@ -364,6 +390,13 @@ static void save_screenshot(void)
         else
             gs_read_display(pixels, &w, &h);
     }
+    if (pc_wide_shown) {
+        uint32_t *wide = stretch_wide(src, w, h, &w);
+        if (wide != NULL) {
+            free(big);
+            src = big = wide;
+        }
+    }
     SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(src, w, h, 32, w * 4, SDL_PIXELFORMAT_RGBA32);
 
     if (shot != NULL) {
@@ -375,10 +408,28 @@ static void save_screenshot(void)
     free(big);
 }
 
+/* Where the game's picture goes in a window of fw x fh pixels: as large as
+ * fits in the middle, 4:3, or 16:9 for a frame drawn for it. */
+static SDL_Rect picture_rect(int fw, int fh)
+{
+    int aw = pc_wide_shown ? 16 : 4, ah = pc_wide_shown ? 9 : 3;
+    SDL_Rect r;
+
+    r.w = fw;
+    r.h = fw * ah / aw;
+    if (r.h > fh) {
+        r.h = fh;
+        r.w = fh * aw / ah;
+    }
+    r.x = (fw - r.w) / 2;
+    r.y = (fh - r.h) / 2;
+    return r;
+}
+
 /* A replacement movie's picture, over its area of the game's picture
- * (640x448, shown stretched to the 640x480 logical screen). It is drawn
- * from its own pixels, so an HD picture stays sharp in a large window. */
-static void draw_overlay(void)
+ * (640x448, shown in pic). It is drawn from its own pixels, so an HD
+ * picture stays sharp in a large window. */
+static void draw_overlay(SDL_Rect pic)
 {
     SDL_Rect dst;
 
@@ -400,28 +451,26 @@ static void draw_overlay(void)
         SDL_UpdateTexture(overlay, NULL, pc_overlay.rgba, pc_overlay.w * 4);
         overlay_serial = pc_overlay.serial;
     }
-    dst.x = pc_overlay.x;
-    dst.y = pc_overlay.y * 480 / 448;
-    dst.w = pc_overlay.cw;
-    dst.h = pc_overlay.ch * 480 / 448;
+    dst.x = pic.x + pc_overlay.x * pic.w / 640;
+    dst.y = pic.y + pc_overlay.y * pic.h / 448;
+    dst.w = pc_overlay.cw * pic.w / 640;
+    dst.h = pc_overlay.ch * pic.h / 448;
     SDL_RenderCopy(renderer, overlay, NULL, &dst);
 }
 
-/* The GPU renderer's picture, 4:3 in the middle of the window, and over it
- * a replacement movie's. */
+/* The GPU renderer's picture, 4:3 (or 16:9) in the middle of the window,
+ * and over it a replacement movie's. */
 static void present_gpu(void)
 {
     int fw, fh, w, h, x, y;
+    SDL_Rect pic;
 
     SDL_GL_GetDrawableSize(window, &fw, &fh);
-    w = fw;
-    h = fw * 3 / 4;
-    if (h > fh) {
-        h = fh;
-        w = fh * 4 / 3;
-    }
-    x = (fw - w) / 2;
-    y = (fh - h) / 2;
+    pic = picture_rect(fw, fh);
+    x = pic.x;
+    y = pic.y;
+    w = pic.w;
+    h = pic.h;
     gs_gpu_present(fw, fh, x, y, w, h, smooth);
     if (pc_overlay.rgba != NULL) {
         int changed = overlay_serial != pc_overlay.serial;
@@ -498,10 +547,15 @@ static void frame(void)
         SDL_UpdateTexture(screen, NULL, pixels, w * 4);
     }
 
+    int fw, fh;
+    SDL_Rect pic;
+
+    SDL_GetRendererOutputSize(renderer, &fw, &fh);
+    pic = picture_rect(fw, fh);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
-    SDL_RenderCopy(renderer, screen, NULL, NULL); /* stretched to 4:3 */
-    draw_overlay();
+    SDL_RenderCopy(renderer, screen, NULL, &pic);
+    draw_overlay(pic);
     SDL_RenderPresent(renderer);
 }
 
@@ -561,6 +615,10 @@ static Uint32 window_settings(int *w, int *h)
 
     *w = 1280;
     *h = 960;
+    if (pc_config_yes("widescreen", 0)) { /* 16:9 (pc_widescreen.c) */
+        *w = 1600;
+        *h = 900;
+    }
     if (size != NULL && size[0] != 0) {
         int sw, sh;
         if (sscanf(size, "%d x %d", &sw, &sh) == 2 && sw >= 320 && sh >= 240 && sw <= 16384 && sh <= 16384) {
@@ -652,8 +710,6 @@ int pc_window_open(void)
             return 0;
         }
         renderer = SDL_CreateRenderer(window, -1, 0);
-        if (renderer != NULL)
-            SDL_RenderSetLogicalSize(renderer, 640, 480); /* the PS2 picture is 4:3 */
         if (renderer == NULL) {
             fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
             SDL_DestroyWindow(window);

@@ -9,6 +9,7 @@
 #include "ps2_NaMatrix.h"
 #include "ps2_NaView.h"
 #include "ps2_NinjaCnk.h"
+#include "ps2_Vu1Strip.h"
 #include "ps2_dummy.h"
 #include "main.h"
 #include "njplus.h"
@@ -19,6 +20,7 @@
 extern CNK_LIGHT NaCnkLightSs;
 extern VU1_COLOR NaCnkAmbientSs;
 extern unsigned int ulNaCnkFlagModelClip;
+extern NJS_POINT4 ClipVolume;
 
 static int failures;
 
@@ -185,6 +187,80 @@ static void test_skin(void)
     printf("skin: (%g %g %g) (%g %g %g)\n", out[16], out[17], out[18], out[24], out[25], out[26]);
 }
 
+int pc_widescreen_on(unsigned int tk_flg, unsigned int ts_flg);
+
+/* 16:9 (pc_widescreen.c): the 3D is drawn 3/4 as wide, and what was just
+ * off the sides in 4:3 is now drawn, not culled or cut away. */
+static void test_widescreen(const float (*quad)[3])
+{
+    /* 64 pixels wide at 4:3, centred 378 pixels right of the middle. */
+    static const float side[4][3] = {
+        { 108, -10, 100 }, { 128, -10, 100 }, { 108, 10, 100 }, { 128, 10, 100 }
+    };
+    float xy[4] = { 68.0f, 10.0f, 320.0f, 20.0f };
+    int n;
+
+    pc_set_wide(0.75f);
+    CHECK(fabsf(fNaViwAspectW - 0.75f) < 1e-6f && fabsf(fVu1AspectW - 0.75f) < 1e-6f);
+    CHECK(fabsf(fNaViwHalfW - 320.0f / 0.75f) < 1e-3f);
+    CHECK(fabsf(ClipVolume.x - 320.0f / 0.75f) < 1e-3f);
+
+    clear();
+    make_model(quad, 4);
+    draw();
+    n = count_drawn();
+    printf("16:9 quad: %d pixels\n", n);
+    CHECK(n > 46 * 62 && n < 50 * 66);
+    CHECK(fb(320 - 22, 240) != 0 && fb(320 - 26, 240) == 0);
+
+    /* Also with the model culling by bounding sphere on. */
+    ulNaCnkFlagModelClip = 1;
+    clear();
+    make_model(side, 4);
+    model.center.x = 118;
+    model.center.z = 100;
+    model.r = 15;
+    draw();
+    dump("wide_side");
+    n = count_drawn();
+    printf("16:9 side quad: %d pixels\n", n);
+    CHECK(n > 46 * 62 && n < 50 * 66);
+    CHECK(fb(603, 240) != 0);
+
+    pc_set_wide(1.0f);
+    CHECK(fNaViwAspectW == 1.0f && fNaViwHalfW == 320.0f && ClipVolume.x == 320.0f);
+    clear();
+    draw();
+    CHECK(count_drawn() == 0);
+    ulNaCnkFlagModelClip = 0;
+
+    /* The room's own view volume is widened too, and kept for 4:3. */
+    _Make_ClipVolume(280.0f, 240.0f);
+    pc_set_wide(0.75f);
+    CHECK(fabsf(ClipVolume.x - 280.0f / 0.75f) < 1e-3f);
+    njSetAspect(1.174f, 1.0f);
+    CHECK(fabsf(fNaViwAspectW - 1.174f * 0.75f) < 1e-5f);
+    pc_set_wide(1.0f);
+    CHECK(ClipVolume.x == 280.0f && fNaViwAspectW == 1.174f);
+    njSetAspect(1.0f, 1.0f);
+    _Make_ClipVolume(320.0f, 240.0f);
+
+    /* Text: narrowed around the middle of the screen in 16:9 only. */
+    pc_wide_text(xy, 2);
+    CHECK(xy[0] == 68.0f && xy[2] == 320.0f);
+    pc_set_wide(0.75f);
+    pc_wide_text(xy, 2);
+    CHECK(xy[0] == 131.0f && xy[1] == 10.0f && xy[2] == 320.0f);
+    pc_set_wide(1.0f);
+
+    /* The game (0x80) and its events are 16:9, its menus are not. */
+    CHECK(pc_widescreen_on(0x80, 0));
+    CHECK(pc_widescreen_on(0x380, 0x200));
+    CHECK(!pc_widescreen_on(0x280, 0x80));
+    CHECK(!pc_widescreen_on(0x1080, 0));
+    CHECK(!pc_widescreen_on(0x700040, 0));
+}
+
 int main(void)
 {
     static const float quad[4][3] = {
@@ -247,6 +323,7 @@ int main(void)
     CHECK(fb(320, 100) == 0);
     CHECK(fb(320, 300) != 0);
 
+    test_widescreen(quad);
     test_skin();
 
     if (failures == 0)

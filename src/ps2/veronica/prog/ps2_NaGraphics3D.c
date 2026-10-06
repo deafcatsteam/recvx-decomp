@@ -31,7 +31,13 @@ void Ps2SetPlane(PS2_PLANE* p, sceVu0FVECTOR v0, sceVu0FVECTOR v1, sceVu0FVECTOR
 void Ps2CalcScreenCone()
 {
     sceVu0FVECTOR cp = { 0, 0, 0, 1.0f };
+#ifdef PLATFORM_PC
+    /* Made wider in 16:9, as the view volume (ps2_NaView.c). */
+    const float x = 320.0f / pc_wide_x;
+    const sceVu0FMATRIX pos = { { -x, -240.0f, 0, 1.0f }, { x, -240.0f, 0, 1.0f }, { x, 240.0f, 0, 1.0f }, { -x, 240.0f, 0, 1.0f } };
+#else
 	static const sceVu0FMATRIX pos = { { -320.0f, -240.0f, 0, 1.0f }, { 320.0f, -240.0f, 0, 1.0f }, { 320.0f, 240.0f, 0, 1.0f }, { -320.0f, 240.0f, 0, 1.0f } };
+#endif
 
     cp[2] = -_nj_screen_.dist;
 

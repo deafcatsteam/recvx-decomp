@@ -37,3 +37,4 @@ void pc_host_sleep_ns(int64_t ns)
 }
 
 PcOverlay pc_overlay;
+volatile int pc_wide_shown;

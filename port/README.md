@@ -27,6 +27,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
 - [x] Animation des visages (`_fmCnkCalc*`) : muscles, mâchoire, langue et yeux
 - [x] Rendu par la carte graphique (OpenGL 3.3, `renderer = opengl` dans `cvx.ini`), jusqu'à 4 fois la résolution de la PS2 (sans liseré de la lettre voisine autour du texte) ; comparé pixel par pixel au rendu logiciel dans les tests ; testé sur le jeu (RTX 4070 SUPER, ×4)
+- [x] Écran large 16:9 (`widescreen = yes`) : en jeu, la 3D montre plus sur les côtés sans être déformée et le texte garde sa forme ; les menus restent en 4:3 au milieu ; testé (calculs, zone visible, texte en ×4) ; reste à valider sur le jeu
 - [ ] Rendu 3D natif (la vraie scène 3D, pour D3D9 et RTX Remix), voir `ROADMAP.md`
 - [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
@@ -92,6 +93,7 @@ le jeu :
 | `fullscreen = yes` | Démarrer en plein écran (F11 change toujours) |
 | `window = 1280x960` | Taille de la fenêtre au démarrage |
 | `filter = smooth` | Image lissée quand elle est agrandie (`sharp`, par défaut : pixels nets) |
+| `widescreen = yes` | Écran large 16:9 en jeu (pièces, scènes en 3D, portes) : on voit plus sur les côtés. Les menus, les vidéos et l'écran titre, dessinés pour le 4:3, restent en 4:3 au milieu. Fenêtre par défaut : 1600x900 |
 | `renderer = opengl` | Dessin par la carte graphique au lieu du processeur (il faut OpenGL 3.3, présent sur toute carte depuis 2010 ; sinon le jeu reprend le dessin par le processeur et le dit dans `cvx_log.txt`) |
 | `upscale = 2` | Avec `renderer = opengl` : résolution 2, 3 ou 4 fois celle de la PS2 (1 par défaut, l'image exacte de la PS2) |
 | `sound = no` | Pas de son |

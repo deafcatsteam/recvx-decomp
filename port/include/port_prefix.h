@@ -70,6 +70,15 @@ typedef port_u128 Sint128;
 /* PC platform hooks called from game code under #ifdef PLATFORM_PC. */
 void pc_wait_vblank(void);
 
+/* 16:9 (pc_widescreen.c): the 3D is drawn narrower by pc_wide_x (1 in 4:3),
+   set for each frame by pc_widescreen_frame through pc_set_wide
+   (ps2_NaView.c); pc_wide_text narrows the text the same way, around the
+   middle of the screen, from n x/y pairs. */
+extern float pc_wide_x;
+void pc_widescreen_frame(void);
+void pc_set_wide(float k);
+void pc_wide_text(float *xy, int n);
+
 /* CodeWarrior / EE-gcc specific keywords. */
 #define __inline__ inline
 

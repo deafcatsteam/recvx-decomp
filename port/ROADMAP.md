@@ -82,8 +82,14 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    jour page par page (copie dans un sens ou dans l'autre quand le jeu
    relit ce qui a été dessiné), et lit directement en haute résolution une
    image dessinée puis reprise comme texture (flous, fondus). Testé contre
-   le rendu logiciel sur des scènes aléatoires. Reste : l'**écran large
-   16:9** (champ de vision, interface recalée).
+   le rendu logiciel sur des scènes aléatoires.
+   **Écran large 16:9** ✔ (`src/game/pc_widescreen.c`) : en jeu, la 3D est
+   dessinée 3/4 aussi large (l'aspect Ninja) et la fenêtre l'étire en 16:9 ;
+   le volume de vue (découpage des polygones, objets écartés, cône de
+   l'écran) est élargi d'autant. Le texte est resserré vers le milieu pour
+   garder sa forme. Les menus, vidéos et l'écran titre restent en 4:3.
+   L'image en 16:9 a donc 3/4 de la finesse horizontale : un rendu natif
+   (plus bas) la dessinerait à sa vraie largeur.
 2. **Textures** : export, remplacement, packs refaits par IA ; compatibilité
    avec les packs PCSX2 si leur format d'empreinte le permet.
 3. Backend **Direct3D 9** et **RTX Remix** (path tracing, matériaux, **DLSS**).

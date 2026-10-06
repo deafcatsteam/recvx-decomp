@@ -23,6 +23,16 @@ float ClipDispW = 2047.0f;
 float ClipDispH = 2047.0f;
 NJS_POINT4 ClipVolume = { 320.0f, 240.0f, 1.0f, 512.0f };
 
+#ifdef PLATFORM_PC
+/* 16:9 (port/src/game/pc_widescreen.c): the 3D is drawn narrower by the
+   factor pc_wide_x, which the window stretches back, and the view volume is
+   made as much wider. What the game asked for is kept to apply it again. */
+float pc_wide_x = 1.0f;
+static float pc_aspect_w = 1.174000025f;
+static float pc_aspect_h = 1.0f;
+static float pc_clip_x = 320.0f;
+#endif
+
 // 100% matching!
 void    njSetScreen(NJS_SCREEN *s)
 { 
@@ -41,6 +51,9 @@ void    njSetScreen(NJS_SCREEN *s)
     
     fNaViwHalfW = _nj_screen_.w / 2.0f; 
     fNaViwHalfH = _nj_screen_.h / 2.0f;
+#ifdef PLATFORM_PC
+    fNaViwHalfW /= pc_wide_x;
+#endif
 
     ClipDispW = 2047.0f; 
     ClipDispH = 2047.0f;
@@ -80,6 +93,11 @@ void njSetScreenProjection(float dist)
 // 100% matching!
 void    njSetAspect(Float ax, Float ay)
 { 
+#ifdef PLATFORM_PC
+    pc_aspect_w = ax;
+    pc_aspect_h = ay;
+    ax *= pc_wide_x;
+#endif
     fNaViwAspectW = ax; 
     fNaViwAspectH = ay; 
     
@@ -314,6 +332,10 @@ void _Make_ClipVolume(float x, float y)
         
         ClipVolume.x = 320.0f; 
         ClipVolume.y = 240.0f; 
+#ifdef PLATFORM_PC
+        pc_clip_x = ClipVolume.x;
+        ClipVolume.x /= pc_wide_x;
+#endif
         
         _Make_ClipMatrix(ClipMatrix2, fVu1Projection, _fNaViwClipNear, _fNaViwClipFar); 
     } 
@@ -324,7 +346,35 @@ void _Make_ClipVolume(float x, float y)
 
         ClipVolume.x = x; 
         ClipVolume.y = y; 
+#ifdef PLATFORM_PC
+        pc_clip_x = ClipVolume.x;
+        ClipVolume.x /= pc_wide_x;
+#endif
         
         _Make_ClipMatrix(ClipMatrix2, fVu1Projection, _fNaViwClipNear, _fNaViwClipFar); 
     }
 } 
+
+#ifdef PLATFORM_PC
+/* Sets the 16:9 factor (1 for 4:3) and applies it to the aspect, the view
+   volume and the visibility tests. */
+void pc_set_wide(float k)
+{
+    if (k == pc_wide_x)
+    {
+        return;
+    }
+
+    pc_wide_x = k;
+
+    njSetAspect(pc_aspect_w, pc_aspect_h);
+
+    fNaViwHalfW = (_nj_screen_.w / 2.0f) / k;
+
+    ClipVolume.x = pc_clip_x / k;
+
+    _Make_ClipMatrix(ClipMatrix2, fVu1Projection, _fNaViwClipNear, _fNaViwClipFar);
+
+    Ps2CalcScreenCone();
+}
+#endif

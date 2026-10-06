@@ -397,6 +397,10 @@ void bhDispFont(NJS_POINT2* pos, int code, int color, float pri)
     
     p[3].x = pos->x;
     p[3].y = pos->y + (28.0f * FontScaleY);
+
+#ifdef PLATFORM_PC
+    pc_wide_text(&p[0].x, 4);
+#endif
     
     switch (color) 
     {                              
@@ -485,6 +489,10 @@ void bhDispFontEx(NJS_POINT2* pos, int code, unsigned int argb, float pri)
     
     p[3].x = pos->x;
     p[3].y = pos->y + (28.0f * FontScaleY);
+
+#ifdef PLATFORM_PC
+    pc_wide_text(&p[0].x, 4);
+#endif
     
     code %= 324;
 

@@ -111,6 +111,10 @@ typedef struct {
 
 extern PcOverlay pc_overlay;
 
+/* Set when the picture on screen was drawn for 16:9 (pc_widescreen.c): the
+ * window then shows it stretched to 16:9 instead of 4:3. */
+extern volatile int pc_wide_shown;
+
 /* ---- Sound output (pc_audio.c, played by the window's audio device) ---- */
 
 #define PC_AUDIO_RATE 48000

@@ -25,6 +25,7 @@
 #include <time.h>
 
 #include "pc_disc.h"
+#include "../host/pc_host.h"
 #include "../host/pc_memcard.h"
 #include "pc_platform.h"
 #include "../gs/gs.h"
@@ -231,6 +232,8 @@ int sceGsSwapDBuffDc(sceGsDBuffDc *db, int id)
 
     id &= 1;
     gs_set_display(get64(&db->disp[id].dispfb), get64(&db->disp[id].display));
+    /* The frame drawn last is shown from now on. */
+    pc_wide_shown = pc_wide_x != 1.0f;
     /* The drawing environment follows its GIF tag in the structure. */
     gs_gif_write(tag, 1 + (uint32_t)(tag[0] & 0x7fff));
     return field;

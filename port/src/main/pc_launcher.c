@@ -49,7 +49,7 @@ enum {
 /* What can be clicked or focused */
 enum {
     ID_NONE, ID_TAB0, ID_TAB1, ID_TAB2, ID_TAB3, ID_ISO, ID_BROWSE, ID_FULLSCREEN, ID_WINDOW,
-    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_SOUND, ID_VIBRATION, ID_KEYS_DEFAULT,
+    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_SOUND, ID_VIBRATION, ID_KEYS_DEFAULT,
     ID_QUIT, ID_PLAY, ID_KEY0 = 100,
 };
 
@@ -58,7 +58,7 @@ enum {
 typedef struct {
     char iso[512];
     char window[32];
-    int fullscreen, launcher, renderer, upscale, filter, sound, vibration;
+    int fullscreen, launcher, renderer, upscale, filter, widescreen, sound, vibration;
     char keys[MAX_KEYS][96];
 } Settings;
 
@@ -80,8 +80,10 @@ static const struct {
     { "key_fast_forward", "Avance rapide" },
 };
 
-static const char *const window_sizes[] = {
-    "640x480", "960x720", "1280x960", "1600x1200", "1920x1440", "2560x1920",
+/* 4:3, then 16:9 */
+static const char *const window_sizes[2][6] = {
+    { "640x480", "960x720", "1280x960", "1600x1200", "1920x1440", "2560x1920" },
+    { "854x480", "1280x720", "1600x900", "1920x1080", "2560x1440", "3840x2160" },
 };
 static const char *const upscale_names[] = {
     "×1  (640×448, la PS2)", "×2  (1280×896)", "×3  (1920×1344)", "×4  (2560×1792)",
@@ -369,8 +371,9 @@ static void read_settings(void)
     if (v == NULL || v[0] == 0)
         v = getenv("CVX_ISO");
     snprintf(now.iso, sizeof(now.iso), "%s", v != NULL && v[0] != 0 ? v : "cvx.iso");
+    now.widescreen = yes("widescreen", 0);
     v = pc_config_get("window");
-    snprintf(now.window, sizeof(now.window), "%s", v != NULL && v[0] != 0 ? v : "1280x960");
+    snprintf(now.window, sizeof(now.window), "%s", v != NULL && v[0] != 0 ? v : window_sizes[now.widescreen][2]);
     now.fullscreen = yes("fullscreen", 0);
     now.launcher = yes("launcher", 1);
     v = pc_config_get("renderer");
@@ -418,6 +421,7 @@ static void save_settings(void)
     SET(renderer, "renderer", now.renderer ? "opengl" : "software")
     SET(upscale, "upscale", number)
     SET(filter, "filter", now.filter ? "smooth" : "sharp")
+    SET(widescreen, "widescreen", now.widescreen ? "yes" : "no")
     SET(sound, "sound", now.sound ? "yes" : "no")
     SET(vibration, "vibration", now.vibration ? "yes" : "no")
 #undef SET
@@ -544,8 +548,8 @@ static int window_index(void)
 
     if (sscanf(now.window, "%d x %d", &w, &h) != 2)
         return -1;
-    for (int i = 0; i < (int)(sizeof(window_sizes) / sizeof(window_sizes[0])); i++) {
-        sscanf(window_sizes[i], "%dx%d", &sw, &sh);
+    for (int i = 0; i < 6; i++) {
+        sscanf(window_sizes[now.widescreen][i], "%dx%d", &sw, &sh);
         if (sw == w && sh == h)
             return i;
     }
@@ -636,6 +640,13 @@ static void activate(int id, int dir)
     case ID_SOUND: now.sound ^= 1; break;
     case ID_VIBRATION: now.vibration ^= 1; break;
     case ID_FILTER: now.filter ^= 1; break;
+    case ID_WIDESCREEN:
+        /* the window keeps its place in the list of sizes */
+        i = window_index();
+        now.widescreen ^= 1;
+        if (i >= 0)
+            snprintf(now.window, sizeof(now.window), "%s", window_sizes[now.widescreen][i]);
+        break;
     case ID_RENDERER:
         now.renderer ^= 1;
         if (now.renderer && !upscale_set && now.upscale == 1)
@@ -649,7 +660,7 @@ static void activate(int id, int dir)
         if (i < 0)
             i = dir > 0 ? -1 : 0;
         i = (i + dir + 6) % 6;
-        snprintf(now.window, sizeof(now.window), "%s", window_sizes[i]);
+        snprintf(now.window, sizeof(now.window), "%s", window_sizes[now.widescreen][i]);
         break;
     case ID_KEYS_DEFAULT:
         for (i = 0; i < nkeys; i++)
@@ -671,7 +682,7 @@ static void activate(int id, int dir)
 static int changes(int id)
 {
     return id == ID_FULLSCREEN || id == ID_LAUNCHER || id == ID_SOUND || id == ID_VIBRATION
-           || id == ID_FILTER || id == ID_RENDERER || id == ID_UPSCALE || id == ID_WINDOW;
+           || id == ID_FILTER || id == ID_WIDESCREEN || id == ID_RENDERER || id == ID_UPSCALE || id == ID_WINDOW;
 }
 
 /* Moves the focus to the nearest widget in that direction. */
@@ -742,7 +753,7 @@ static void page_general(void)
     label(350, "Taille de la fenêtre", NULL);
     if (i >= 0) {
         int w, h;
-        sscanf(window_sizes[i], "%dx%d", &w, &h);
+        sscanf(window_sizes[now.widescreen][i], "%dx%d", &w, &h);
         snprintf(buf, sizeof(buf), "%d × %d", w, h);
     } else {
         snprintf(buf, sizeof(buf), "%s", now.window);
@@ -761,8 +772,10 @@ static void page_picture(void)
     choice(ID_UPSCALE, 520, 224, 320, upscale_names[now.upscale - 1], now.renderer);
     label(292, "Lissage", "Lissée : moins de gros pixels visibles");
     choice(ID_FILTER, 520, 292, 320, now.filter ? "Lissée" : "Nette", 1);
-    draw_text(&text, 40, 380, "Si la carte graphique ne convient pas, le jeu revient tout seul", C_DIM);
-    draw_text(&text, 40, 402, "au processeur (c'est noté dans cvx_log.txt).", C_DIM);
+    label(360, "Format de l'image", "16:9 : on voit plus large en jeu ; menus en 4:3");
+    choice(ID_WIDESCREEN, 520, 360, 320, now.widescreen ? "16:9  (écran large)" : "4:3  (comme la PS2)", 1);
+    draw_text(&text, 40, 430, "Si la carte graphique ne convient pas, le jeu revient tout seul", C_DIM);
+    draw_text(&text, 40, 452, "au processeur (c'est noté dans cvx_log.txt).", C_DIM);
 }
 
 static void page_sound(void)

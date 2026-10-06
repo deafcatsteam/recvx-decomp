@@ -354,10 +354,13 @@ static int channel_diff(uint32_t a, uint32_t b, int is16)
  * cell to 1/4 texel past it. The PS2 never samples past the cell (the
  * letters are at whole pixels); at 4 times its resolution neither may the
  * GPU (the next letter's pixels, red here, would show at its edges). */
-static int letters_test(void)
+/* wide: the letters narrowed to 3/4 around the middle, as in 16:9
+ * (pc_wide_text), which puts their sides on quarter pixels. */
+static int letters_test(int wide)
 {
     static uint32_t font[64 * 64], px[W * 4 * H * 4];
     int w, h, red = 0, green = 0;
+    int lw = wide ? 14 * 12 : 14 * 16; /* letter width, 1/16 pixel */
 
     gs_reset();
     for (int i = 0; i < 64 * 64; i++)
@@ -384,6 +387,8 @@ static int letters_test(void)
     send();
     for (int k = 0; k < 32; k++) {
         int x = (1000 + 2 + (k % 8) * 16) * 16, y = (1000 + 2 + (k / 8) * 20) * 16;
+        if (wide)
+            x = (1000 + 64) * 16 + (x - (1000 + 64) * 16) * 3 / 4;
         int u0 = 14 * 16 + 8, v0 = 14 * 16 + 8, u1 = 28 * 16 + 4, v1 = 28 * 16 + 4;
         if (k < 16) {
             tag(10, 1, 0, 1, 0xe);
@@ -392,9 +397,9 @@ static int letters_test(void)
             ad(0x03, (uint64_t)u0 | ((uint64_t)v0 << 16));
             ad(0x05, (uint64_t)x | ((uint64_t)y << 16));
             ad(0x03, (uint64_t)u1 | ((uint64_t)v0 << 16));
-            ad(0x05, (uint64_t)(x + 14 * 16) | ((uint64_t)y << 16));
+            ad(0x05, (uint64_t)(x + lw) | ((uint64_t)y << 16));
             ad(0x03, (uint64_t)u1 | ((uint64_t)v1 << 16));
-            ad(0x05, (uint64_t)(x + 14 * 16) | ((uint64_t)(y + 14 * 16) << 16));
+            ad(0x05, (uint64_t)(x + lw) | ((uint64_t)(y + 14 * 16) << 16));
             ad(0x03, (uint64_t)u0 | ((uint64_t)v1 << 16));
         } else {
             tag(6, 1, 0, 1, 0xe);
@@ -404,7 +409,7 @@ static int letters_test(void)
             ad(0x05, (uint64_t)x | ((uint64_t)y << 16));
             ad(0x03, (uint64_t)u1 | ((uint64_t)v1 << 16));
         }
-        ad(0x05, (uint64_t)(k < 16 ? x : x + 14 * 16) | ((uint64_t)(y + 14 * 16) << 16));
+        ad(0x05, (uint64_t)(k < 16 ? x : x + lw) | ((uint64_t)(y + 14 * 16) << 16));
         send();
     }
     gs_set_display(FBP | (2ull << 9), ((uint64_t)(W - 1) << 32) | ((uint64_t)(H - 1) << 44));
@@ -414,14 +419,14 @@ static int letters_test(void)
         red += (px[i] & 0xff) > 0x40;
         green += ((px[i] >> 8) & 0xff) > 0x40;
     }
-    FILE *f = getenv("CVX_TEST_ALL") != NULL ? fopen("letters.ppm", "wb") : NULL; /* to look at it */
+    FILE *f = getenv("CVX_TEST_ALL") != NULL ? fopen(wide ? "letters_wide.ppm" : "letters.ppm", "wb") : NULL;
     if (f != NULL) {
         fprintf(f, "P6 %d %d 255\n", w, h);
         for (int i = 0; i < w * h; i++) { fputc(px[i] & 255, f); fputc((px[i] >> 8) & 255, f); fputc((px[i] >> 16) & 255, f); }
         fclose(f);
     }
-    printf("letters at 4x: %d pixels of the letters, %d of the next ones\n", green, red);
-    return red != 0 || green < 32 * 13 * 13 * 16;
+    printf("letters at 4x%s: %d pixels of the letters, %d of the next ones\n", wide ? ", 16:9" : "", green, red);
+    return red != 0 || green < 32 * (lw / 16 - 1) * 13 * 16;
 }
 
 int main(void)
@@ -464,7 +469,7 @@ int main(void)
             printf("test_gs_gpu: no OpenGL 3.3 here, skipped\n");
             return 77;
         }
-        return letters_test();
+        return letters_test(0) | letters_test(1);
     }
     if (getenv("CVX_TEST_PRIMS") != NULL)
         prims = atoi(getenv("CVX_TEST_PRIMS"));

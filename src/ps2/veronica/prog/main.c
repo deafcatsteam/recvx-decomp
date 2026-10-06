@@ -190,6 +190,10 @@ Sint32 njUserMain(void)
 { 
     int i; 
 
+#ifdef PLATFORM_PC
+    pc_widescreen_frame();
+#endif
+
     Ps2_sys_cnt++; 
   
     for (i = 0; i < 23; i++) 

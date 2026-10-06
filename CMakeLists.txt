@@ -95,6 +95,7 @@ set(PORT_SOURCES
     port/src/game/pc_game_asm.c
     port/src/game/pc_movie.c
     port/src/game/pc_render3d.c
+    port/src/game/pc_widescreen.c
 )
 
 # Settings for code that sees the game's headers: the game itself, the port's
