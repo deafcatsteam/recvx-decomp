@@ -103,6 +103,7 @@ add_library(cvx_host STATIC
     port/src/host/pc_log.c
     port/src/host/pc_audio.c
     port/src/host/pc_sound.c
+    port/src/host/pc_memcard.c
     port/src/audio/pc_hsyn.c
     port/src/audio/pc_hseq.c
     port/src/audio/pc_snddrv.c
@@ -317,6 +318,12 @@ set_tests_properties(movie PROPERTIES
 add_executable(test_snddrv port/tests/test_snddrv.c)
 target_link_libraries(test_snddrv PRIVATE cvx_host m)
 add_test(NAME sound_driver COMMAND test_snddrv)
+
+add_executable(test_memcard port/tests/test_memcard.c)
+target_link_libraries(test_memcard PRIVATE cvx_game cvx_game_env m)
+add_test(NAME memory_card COMMAND test_memcard)
+set_tests_properties(memory_card PROPERTIES
+    ENVIRONMENT CVX_SAVES=${CMAKE_BINARY_DIR}/test_saves)
 
 add_executable(test_sound port/tests/test_sound.c)
 target_link_libraries(test_sound PRIVATE cvx_game cvx_game_env m)

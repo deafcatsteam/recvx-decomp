@@ -5,9 +5,10 @@
  * DVD reads are served from the disc image (pc_disc.c); the IOP side lives in
  * pc_iop.c. The controller is
  * reported as a DualShock 2 whose state comes from pc_pad (filled by the
- * window/input layer). The rest are placeholders that report success, so the
- * game's init sequences run through; graphics, sound and memory cards get
- * real implementations in their own layers.
+ * window/input layer), and the memory card is a folder (pc_memcard.c). The
+ * rest are placeholders that report success, so the game's init sequences
+ * run through; graphics and sound get real implementations in their own
+ * layers.
  */
 #include <eekernel.h>
 #include <libcdvd.h>
@@ -24,6 +25,7 @@
 #include <time.h>
 
 #include "pc_disc.h"
+#include "../host/pc_memcard.h"
 #include "pc_platform.h"
 #include "../gs/gs.h"
 #include "../gs/gs_mem.h"
@@ -367,43 +369,126 @@ int scePadRead(int port, int slot, u_char *rdata)
 
 /* ---- Memory cards ------------------------------------------------------ */
 
-/* TODO: store saves in files. For now no card is ever inserted. */
-static int mc_result;
+/* Each call registers its work and finishes it at once (pc_memcard.c keeps
+ * the card in a folder); sceMcSync then reports it finished, once, and
+ * "idle" afterwards, as the PS2 library does. The game's card check runs
+ * while the library is idle. */
+static int mc_pending, mc_cmd, mc_result;
+static int mc_seen[2];
+
+static int mc_done(int cmd, int result)
+{
+    mc_pending = 1;
+    mc_cmd = cmd;
+    mc_result = result;
+    return 0;
+}
 
 int sceMcInit(void) { return 0; }
 
 int sceMcGetInfo(int port, int slot, int *type, int *free, int *format)
 {
+    int card = port >= 0 && port < 2 && pc_mc_card(port);
+    int result = PC_MC_NOCARD;
+
     /* The game passes NULL for the values it does not need. */
     if (type != NULL)
-        *type = 0;
+        *type = card ? 2 : 0; /* PS2 card */
     if (free != NULL)
-        *free = 0;
+        *free = card ? pc_mc_free_kb(port) : 0;
     if (format != NULL)
-        *format = 0;
-    mc_result = -10; /* no card */
-    return 0;
+        *format = card ? 1 : 0;
+    if (card) {
+        result = mc_seen[port] ? 0 : -1; /* -1: a card newly seen */
+        mc_seen[port] = 1;
+    }
+    return mc_done(sceMcFuncNoCardInfo, result);
 }
 
-int sceMcOpen(int port, int slot, const char *name, int mode) { mc_result = -4; return 0; }
-int sceMcClose(int fd) { mc_result = 0; return 0; }
-int sceMcRead(int fd, void *buff, int size) { mc_result = -10; return 0; }
-int sceMcWrite(int fd, const void *buff, int size) { mc_result = -10; return 0; }
-int sceMcMkdir(int port, int slot, const char *name) { mc_result = -10; return 0; }
-int sceMcChdir(int port, int slot, const char *newDir, char *oldDir) { mc_result = -10; return 0; }
-int sceMcFormat(int port, int slot) { mc_result = -10; return 0; }
+int sceMcOpen(int port, int slot, const char *name, int mode)
+{
+    return mc_done(sceMcFuncNoOpen, pc_mc_open(port, name, mode));
+}
+
+int sceMcClose(int fd) { return mc_done(sceMcFuncNoClose, pc_mc_close(fd)); }
+
+int sceMcRead(int fd, void *buff, int size)
+{
+    return mc_done(sceMcFuncNoRead, pc_mc_read(fd, buff, size));
+}
+
+int sceMcWrite(int fd, const void *buff, int size)
+{
+    return mc_done(sceMcFuncNoWrite, pc_mc_write(fd, buff, size));
+}
+
+int sceMcMkdir(int port, int slot, const char *name)
+{
+    return mc_done(sceMcFuncNoMkdir, pc_mc_mkdir(port, name));
+}
+
+int sceMcChdir(int port, int slot, const char *newDir, char *oldDir)
+{
+    return mc_done(sceMcFuncNoChDir, pc_mc_chdir(port, newDir, oldDir));
+}
+
+int sceMcDelete(int port, int slot, const char *name)
+{
+    return mc_done(sceMcFuncNoDelete, pc_mc_delete(port, name));
+}
+
+int sceMcFormat(int port, int slot)
+{
+    /* The card always reads as formatted; never erase the player's saves. */
+    return mc_done(sceMcFuncNoFormat, pc_mc_card(port) ? 0 : PC_MC_NOCARD);
+}
+
+static void mc_date(sceMcStDateTime *d, int64_t mtime)
+{
+    time_t t = (time_t)mtime;
+    struct tm *tm = mtime != 0 ? localtime(&t) : NULL;
+
+    memset(d, 0, sizeof(*d));
+    if (tm != NULL) {
+        d->Sec = tm->tm_sec;
+        d->Min = tm->tm_min;
+        d->Hour = tm->tm_hour;
+        d->Day = tm->tm_mday;
+        d->Month = tm->tm_mon + 1;
+        d->Year = tm->tm_year + 1900;
+    }
+}
 
 int sceMcGetDir(int port, int slot, const char *name, unsigned mode, int maxent,
                 sceMcTblGetDir *table)
 {
-    mc_result = 0;
-    return 0;
+    PcMcEntry list[64];
+    int n, i;
+
+    if (maxent > 64)
+        maxent = 64;
+    n = pc_mc_getdir(port, name, maxent, list);
+    for (i = 0; i < n; i++) {
+        sceMcTblGetDir *t = &table[i];
+
+        memset(t, 0, sizeof(*t));
+        mc_date(&t->_Create, list[i].mtime);
+        mc_date(&t->_Modify, list[i].mtime);
+        t->FileSizeByte = list[i].size;
+        /* exists, closed, readable, writable, executable; file or folder */
+        t->AttrFile = 0x8087 | (list[i].is_dir ? 0x20 : 0x10);
+        memcpy(t->EntryName, list[i].name, sizeof(t->EntryName));
+    }
+    return mc_done(sceMcFuncNoGetDir, pc_mc_card(port) ? n : PC_MC_NOCARD);
 }
 
 int sceMcSync(int mode, int *cmd, int *result)
 {
+    if (!mc_pending)
+        return -1; /* sceMcExecIdle */
+    mc_pending = 0;
     if (cmd != NULL)
-        *cmd = 0;
+        *cmd = mc_cmd;
     if (result != NULL)
         *result = mc_result;
     return 1; /* sceMcExecFinish */

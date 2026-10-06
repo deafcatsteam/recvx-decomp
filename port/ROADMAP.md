@@ -36,8 +36,9 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    le jeu.
 4. **Vidéos** ✔ `.PSS` lues sur le disque : image MPEG-2 (FFmpeg) et son ;
    toutes peuvent être passées.
-5. **Sauvegardes** dans des fichiers (carte mémoire émulée), finitions des
-   contrôles.
+5. **Sauvegardes** ✔ carte mémoire émulée par un dossier (`saves`),
+   passée par le code du jeu lui-même dans les tests. Reste : les
+   finitions des contrôles.
 
 ### Ce qui prépare déjà la suite
 

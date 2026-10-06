@@ -33,7 +33,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
-- [ ] Cartes mémoire : sauvegardes dans des fichiers
+- [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
 
 ## Lancer le jeu
 
@@ -63,6 +63,13 @@ Variables utiles :
 | `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
 | `CVX_NO_AUDIO` | Pas de son |
 | `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`, puis `MOVIE`) |
+| `CVX_SAVES` | Dossier de la carte mémoire (par défaut `saves`) |
+
+**Sauvegardes** : la carte mémoire de la fente 1 est le dossier `saves` à
+côté de l'exe (créé à la première sauvegarde), avec les fichiers du jeu
+comme sur une carte PS2 : `saves/BASLUS-20184/SAVEDATA-00`… Pour garder
+tes parties, copie ce dossier. Chaque fichier est remplacé d'un coup quand
+le jeu sauvegarde, donc un plantage pendant la sauvegarde ne l'abîme pas.
 
 Tout ce qui s'affiche dans la console est aussi écrit dans `cvx_log.txt`, à
 côté de l'exe. En cas de plantage, la console indique où était le jeu et
@@ -192,6 +199,7 @@ une couche « plateforme » écrite pour le PC.
 | `src/game/pc_render3d.c` | 3D : couleurs des sommets, découpage, paquets GS (code VU0 traduit) |
 | `src/host/pc_video.c` | Décodage MPEG-2 avec FFmpeg (LGPL, téléchargé et compilé par CMake avec le strict nécessaire), et lecture des vidéos de remplacement |
 | `src/host/pc_audio.c` | Sortie son : mélange du moteur de son et de la file des vidéos, jouée par la fenêtre (SDL) |
+| `src/host/pc_memcard.c` | Carte mémoire dans un dossier (`saves`) |
 | `src/host/pc_sound.c` | Moteur de son : voix (flux ou sources), rééchantillonnage, volume, panoramique, position 3D |
 | `src/ninja/` | Maths Ninja en C (remplacent les fichiers VU0) |
 | `src/host/` | Services du système (temps), compilés sans les réglages du jeu |
