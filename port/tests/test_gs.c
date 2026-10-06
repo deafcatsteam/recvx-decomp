@@ -222,6 +222,35 @@ static void test_triangle(void)
     CHECK(fb(9, 57) != 0x800000ff);
 }
 
+/* Top-left rule: a 4x4 square drawn as a fan of two triangles, with its
+ * edges on pixels, covers 16 pixels, none of them twice (additive blending
+ * would show it), and not the column and row past its right and bottom. */
+static void test_fill_rule(void)
+{
+    int once = 0, twice = 0;
+
+    gs_reset();
+    setup_frame();
+    tag(7, 1, 0, 1, 0xe);
+    ad(0x42, 0 | (2 << 2) | (2 << 4) | (1 << 6) | (128ull << 32)); /* Cs + Cd */
+    ad(0x00, 5 | (1 << 6));                                      /* fan, blended */
+    ad(0x01, 0x80101010);
+    ad(0x05, xyz(8, 8));
+    ad(0x05, xyz(12, 8));
+    ad(0x05, xyz(12, 12));
+    ad(0x05, xyz(8, 12));
+    send();
+    for (int y = 4; y < 16; y++)
+        for (int x = 4; x < 16; x++) {
+            once += (fb(x, y) & 0xffffff) == 0x101010;
+            twice += (fb(x, y) & 0xffffff) == 0x202020;
+        }
+    CHECK(once == 16);
+    CHECK(twice == 0);
+    CHECK((fb(8, 8) & 0xffffff) == 0x101010 && (fb(11, 11) & 0xffffff) == 0x101010);
+    CHECK((fb(12, 10) & 0xffffff) == 0 && (fb(10, 12) & 0xffffff) == 0);
+}
+
 static void test_dma_chain(void)
 {
     static uint64_t chain[64] __attribute__((aligned(16)));
@@ -320,6 +349,7 @@ int main(void)
     test_clut_texture();
     test_alpha_blend();
     test_triangle();
+    test_fill_rule();
     test_dma_chain();
     test_equal_depth();
     test_dump_replay();

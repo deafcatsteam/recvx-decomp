@@ -824,6 +824,7 @@ typedef struct {
     const Vertex *v[3], *last;
     int64_t area;
     int px0, px1;
+    int bias[3]; /* 1 for edges whose pixels are left out (right, bottom) */
     float att[3][9];
     double z[3];
 } TriangleJob;
@@ -840,7 +841,7 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
             int64_t w0 = edge(v[1]->x, v[1]->y, v[2]->x, v[2]->y, sx, sy);
             int64_t w1 = edge(v[2]->x, v[2]->y, v[0]->x, v[0]->y, sx, sy);
             int64_t w2 = edge(v[0]->x, v[0]->y, v[1]->x, v[1]->y, sx, sy);
-            if (w0 < 0 || w1 < 0 || w2 < 0)
+            if (w0 < j->bias[0] || w1 < j->bias[1] || w2 < j->bias[2])
                 continue;
             float b0 = (float)w0 / j->area, b1 = (float)w1 / j->area, b2 = (float)w2 / j->area;
             float at[9];
@@ -895,6 +896,18 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
         area = -area;
     }
     j.area = area;
+
+    /* Top-left rule, as on the GS: a pixel exactly on an edge belongs to the
+     * triangle only on its top and left edges. Without it, a polygon whose
+     * edges fall on pixels gets one more column and row, sampled past its
+     * texture area (a sliver of the next letter beside each font glyph), and
+     * triangles sharing an edge draw it twice. With the vertices in this
+     * order, edges going up are left edges and edges going right are top. */
+    for (int i = 0; i < 3; i++) {
+        const Vertex *a = v[(i + 1) % 3], *b = v[(i + 2) % 3];
+        int top_left = b->y < a->y || (b->y == a->y && b->x > a->x);
+        j.bias[i] = top_left ? 0 : 1;
+    }
 
     int minx = v[0]->x, maxx = v[0]->x, miny = v[0]->y, maxy = v[0]->y;
     for (int i = 1; i < 3; i++) {
