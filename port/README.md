@@ -35,6 +35,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Réverbération des pièces (`SdrSetRev`) : l'écho « Hall » du SPU2 refait en logiciel (`src/audio/pc_spu2rev.c`), testé ; reste à valider sur le jeu
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
+- [x] Textures HD : export des textures du jeu et remplacement par des versions refaites (avec la carte graphique), voir plus bas ; testé ; reste à valider sur le jeu
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio
 - [x] Son 3D (`sound_3d`) : les bruits placés dans la pièce (pas, armes, ennemis, objets, événements) sont mis autour de toi, au casque (devant, derrière, côtés) ou sur toute la largeur des enceintes ; testé (sens gauche/droite du jeu, délai entre les oreilles) ; reste à valider sur le jeu
 - [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
@@ -99,6 +100,7 @@ le jeu :
 | `widescreen = yes` | Écran large 16:9 en jeu (pièces, scènes en 3D, portes) : on voit plus sur les côtés. Les menus, les vidéos et l'écran titre, dessinés pour le 4:3, restent en 4:3 au milieu. Fenêtre par défaut : 1600x900 |
 | `renderer = opengl` | Dessin par la carte graphique au lieu du processeur (il faut OpenGL 3.3, présent sur toute carte depuis 2010 ; sinon le jeu reprend le dessin par le processeur et le dit dans `cvx_log.txt`) |
 | `upscale = 2` | Avec `renderer = opengl` : résolution 2, 3 ou 4 fois celle de la PS2 (1 par défaut, l'image exacte de la PS2) |
+| `textures = dump` | Avec `renderer = opengl` : `hd` (par défaut) remplace les textures par celles du dossier `textures/replace` s'il y en a ; `dump` exporte en plus celles du jeu dans `textures/dump` ; `original` garde celles de la PS2. Voir « Textures en HD » |
 | `sound = no` | Pas de son |
 | `sound_3d = headphones` | Son 3D en jeu : `headphones` (casque : on entend si un bruit vient de devant, de derrière ou d'un côté), `speakers` (enceintes : les bruits vont d'un bout à l'autre), `off` (par défaut, comme la PS2) |
 | `vibration = no` | Pas de vibration de la manette |
@@ -124,6 +126,7 @@ Variables utiles :
 | `CVX_NO_AUDIO` | Pas de son |
 | `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`, puis `MOVIE`) |
 | `CVX_SAVES` | Dossier de la carte mémoire (par défaut `saves`) |
+| `CVX_TEXTURES` | Dossier des textures exportées et de remplacement (par défaut `textures`) |
 
 **Sauvegardes** : la carte mémoire de la fente 1 est le dossier `saves` à
 côté de l'exe (créé à la première sauvegarde), avec les fichiers du jeu
@@ -149,6 +152,7 @@ pour les vraies manettes, voir plus bas) :
 | 1 / 3 | L2 / R2 | | F11 | Plein écran |
 | Tab (maintenu) | Avance rapide | | F12 | Capture d'écran (`cvx_screenshot_000.bmp`…, à la résolution de la carte graphique avec `renderer = opengl`) |
 | Entrée, Retour arrière ou Échap | Passer une vidéo (Start, Select ou ○ à la manette) | | | |
+| | | | F9 | Relit les textures de `textures/replace` (pour voir tout de suite celles que tu viens de refaire) |
 | | | | F10 | Enregistre une image pour le débogage graphique (`cvx_gsdump_000.bin`, environ 5 Mo ; la rejouer avec `gs_replay`, ou `CVX_REPLAY_SCALE=4 gs_replay …` pour la dessiner par la carte graphique en ×4) |
 
 Manettes : Xbox, PlayStation (DualShock 4, DualSense), Switch Pro et la
@@ -207,6 +211,109 @@ Video* et *Video Combine* de VideoHelperSuite, *Upscale Image (using
 Model)* avec un modèle ×4) ; il faut alors régler la sortie à 29,97 images
 par seconde et traiter les longues vidéos par morceaux (ComfyUI garde
 toutes les images en mémoire).
+
+## Textures en HD
+
+Les textures du jeu (murs, sols, personnages, objets, menus) sont petites :
+souvent 128×128 pixels ou moins. Le portage peut les **exporter** en images
+PNG, que tu agrandis (avec une IA, ou à la main), puis il les **remplace**
+en jeu par tes versions. Il faut le dessin par la **carte graphique**
+(`renderer = opengl`) ; les textures refaites sont lissées avec des
+*mipmaps* et un filtrage anisotrope (×16), donc nettes de près et sans
+scintillement de loin.
+
+Chaque texture a un code de 16 caractères calculé d'après son image (par
+exemple `8810e52ac9c5563d`), qui lui sert de nom. Une texture refaite peut
+avoir n'importe quelle taille (en gardant les proportions) et n'importe quel
+nom, du moment qu'il **finit par ce code** avant `.png` ; elle peut être dans
+des sous-dossiers de `textures/replace`.
+
+### 1. Exporter les textures
+
+1. Dans la fenêtre de réglages, onglet **Image** : *Dessin de l'image* =
+   **Carte graphique**, *Finesse* = **×4** (pour bien juger le résultat),
+   *Textures* = **HD + exporter** (`textures = dump` dans `cvx.ini`).
+2. Joue : chaque texture qui s'affiche est enregistrée une fois dans
+   `textures/dump`, sous un nom comme `128x64_8810e52ac9c5563d.png` (sa
+   taille, puis son code). Pour tout avoir, il faut passer **partout** :
+   chaque pièce, les deux parties (Claire et Chris), l'inventaire, les
+   fichiers et la carte, les cinématiques du jeu, le mode Battle. Plusieurs
+   parties sauvegardées à des endroits différents aident.
+3. Le dossier se remplit petit à petit ; tu peux commencer à refaire les
+   textures d'une pièce avant d'avoir fini le jeu. Une texture déjà refaite
+   n'est plus exportée.
+
+Ne sont pas exportées : les images que le jeu dessine lui-même (ombres,
+reflets, flous, fondus) et les vidéos (voir « Vidéos en HD »). Une texture
+qui change à chaque image (une animation) n'est exportée que 8 fois.
+
+### 2. Trier
+
+Toutes ne méritent pas le même traitement. Crée trois dossiers à côté :
+
+- **à agrandir par l'IA** : décors, personnages, objets, ennemis (le gros
+  du travail) ;
+- **à refaire à la main** : celles avec du **texte** (documents, affiches,
+  menus, lettres de la police) : l'IA déforme les lettres. Le plus propre
+  est de les redessiner dans GIMP (gratuit) ou Photoshop, ou d'agrandir par
+  l'IA puis de retaper le texte par-dessus ;
+- **à laisser** : les toutes petites (8×8, 16×16), les couleurs unies, les
+  dégradés, les halos de lumière et de fumée. Les agrandir n'apporte rien et
+  peut créer des défauts : ne les mets simplement pas dans `replace`.
+
+### 3. Agrandir avec l'IA
+
+Le meilleur outil gratuit pour ça est **chaiNNer**
+(https://github.com/chaiNNer-org/chaiNNer, page *Releases*, l'installateur
+Windows ; au premier lancement, il propose d'installer PyTorch : accepte,
+il utilise la carte graphique). Il garde la **transparence** (grilles,
+feuillages, cheveux) et traite un dossier entier d'un coup en gardant les
+noms.
+
+1. Télécharge un ou deux modèles ×4 sur https://openmodeldb.info (fichiers
+   `.pth` ou `.safetensors`). Bons points de départ pour ce jeu (textures
+   réalistes, en basse définition) : **4x-UltraSharp** (le plus courant,
+   net) et **4x_NMKD-Siax_200k** (plus doux, moins d'artefacts). Il y en a
+   d'autres faits pour les textures de jeux : cherche `texture` sur le site.
+2. Dans chaiNNer, fais la chaîne : **Load Images** (le dossier « à
+   agrandir ») → **Load Model** + **Upscale Image** → **Save Image** (format
+   PNG, dossier de sortie, nom = celui d'origine).
+3. **Essaie d'abord sur une dizaine de textures** d'une même pièce avec
+   chaque modèle, mets-les dans `textures/replace`, regarde en jeu (F9 les
+   recharge sans quitter), et garde le modèle qui te plaît. Puis lance tout.
+
+Conseils pour le meilleur résultat :
+
+- **×4** suffit : au-delà, c'est plus lourd sans être plus beau à l'écran.
+  Le jeu garde jusqu'à 1,5 Go de textures refaites en mémoire de la carte
+  graphique et libère celles qui ne servent plus.
+- Les textures des PS2 ont souvent un léger quadrillage de points
+  (*tramage*) ou des pixels flous. Si l'IA les agrandit au lieu de les
+  effacer, passe d'abord un modèle de nettoyage **1x** (cherche `dither` ou
+  `denoise` sur openmodeldb), puis le modèle ×4.
+- Les murs et sols se **répètent** : l'IA ne le sait pas, et une ligne peut
+  apparaître à chaque raccord. Si tu en vois une, refais cette texture en
+  ajoutant un bord répété avant l'agrandissement et en le coupant après
+  (dans chaiNNer, nœud **Pad** en mode *Wrap* avant, **Crop** après, de 4
+  fois la taille du bord).
+- Garde l'ambiance : le jeu est sombre et un peu granuleux. Un modèle qui
+  « lisse » trop donne un aspect plastique ; compare toujours en jeu.
+- Garde **les mêmes proportions** que l'original (128×64 → 512×256).
+
+### 4. Installer
+
+Mets les PNG refaits dans `textures/replace` (à côté de `cvx_pc.exe`), avec
+des sous-dossiers si tu veux (`textures/replace/manoir/…`), en gardant le
+code à la fin du nom. Mets *Textures* = **HD** (ou laisse **HD +
+exporter** pour continuer à exporter). Au lancement, `cvx_log.txt` dit
+combien de remplacements sont trouvés (ligne `textures: … replacements`) ;
+F9 en jeu relit le dossier.
+
+Si une texture a deux codes (exportée deux fois presque pareille), refais
+les deux ou copie la même image sous les deux noms. Les packs de textures
+faits pour PCSX2 n'utilisent pas les mêmes codes : ils ne marchent pas tels
+quels. Tes textures et les exportées sont à toi : elles ne vont jamais sur
+GitHub.
 
 ## Récupérer l'exécutable Windows
 

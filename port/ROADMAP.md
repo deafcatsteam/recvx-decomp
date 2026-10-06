@@ -91,8 +91,14 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    garder sa forme. Les menus, vidéos et l'écran titre restent en 4:3.
    L'image en 16:9 a donc 3/4 de la finesse horizontale : un rendu natif
    (plus bas) la dessinerait à sa vraie largeur.
-2. **Textures** : export, remplacement, packs refaits par IA ; compatibilité
-   avec les packs PCSX2 si leur format d'empreinte le permet.
+2. **Textures** ✔ (`textures`, `src/gs/gs_texrep.c`) : avec le rendu par la
+   carte graphique, chaque texture décodée de la mémoire du GS est connue
+   par une empreinte de son image (taille et couleurs), exportée en PNG
+   (`textures/dump`) et remplacée par un fichier de `textures/replace` de
+   taille quelconque, filtré par OpenGL (mipmaps, anisotrope) dans les
+   texels de l'originale (limites des images 2D comprises). F9 relit le
+   dossier. Reste : les packs PCSX2 (autre empreinte), les textures
+   dessinées par le jeu (cibles relues), et le rendu logiciel.
 3. Backend **Direct3D 9** et **RTX Remix** (path tracing, matériaux, **DLSS**).
 4. **60 images/seconde** ✔ en essai (`fps60`, `src/game/pc_interp.c`) : la
    logique du jeu reste à 30. Le GS enregistre ce qu'il reçoit pendant une

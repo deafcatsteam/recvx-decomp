@@ -25,6 +25,7 @@
 #include "gs_gl.h"
 #include "gs_mem.h"
 #include "gs_priv.h"
+#include "gs_texrep.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -79,7 +80,7 @@ static const char draw_fs[] =
     "uniform sampler2D u_dst;\n"   /* copy of the target, for u_exact */
     "uniform int u_iip, u_tme, u_tfx, u_tcc, u_fge, u_fba, u_fmt;\n"
     "uniform ivec4 u_fog;\n"
-    "uniform int u_texmode;\n"     /* 0 decoded, 1 target CT32, 2 target CT24, 3 target CT16 */
+    "uniform int u_texmode;\n"     /* 0 decoded, 1 target CT32, 2 target CT24, 3 target CT16, 4 replaced */
     "uniform ivec2 u_tsize, u_toff, u_wrap;\n"
     "uniform ivec4 u_region, u_texa, u_atest, u_blend;\n"
     "uniform int u_bilinear, u_tscale, u_pre, u_exact, u_fix;\n"
@@ -112,6 +113,17 @@ static const char draw_fs[] =
     "}\n"
     "ivec4 sample_tex() {\n"
     "    float q = v_uvq.z != 0.0 ? v_uvq.z : 1.0;\n"
+    /* A replacement (texture pack): any size, filtered by OpenGL with its
+     * mipmaps, in the texels of the texture it replaces. The limits of 2D
+     * pictures (uv_limits) are taken to the edges of the first and last
+     * texels the PS2 reads, less half a texel of the replacement. */
+    "    if (u_texmode == 4) {\n"
+    "        vec2 h = 0.5 * vec2(u_tsize) / vec2(textureSize(u_tex, 0));\n"
+    "        vec2 t = clamp(v_uvq.xy / q / 16.0, floor(v_clamp.xy / 16.0) + h, floor(v_clamp.zw / 16.0) + 1.0 - h);\n"
+    "        if (u_wrap.x == 2) t.x = clamp(t.x, float(u_region.x) + 0.5, float(u_region.y) + 0.5);\n"
+    "        if (u_wrap.y == 2) t.y = clamp(t.y, float(u_region.z) + 0.5, float(u_region.w) + 0.5);\n"
+    "        return ivec4(texture(u_tex, t / vec2(u_tsize)) * 255.0 + 0.5);\n"
+    "    }\n"
     "    vec2 uv = vec2(ivec2(clamp(v_uvq.xy / q, v_clamp.xy, v_clamp.zw))) / 16.0;\n" /* 1/16 texel, truncated as on the GS */
     "    float s = float(u_tscale);\n"
     "    if (u_bilinear == 0)\n"
@@ -873,6 +885,8 @@ typedef struct {
     uint64_t stamp, last_use;
     int w, h;
     GLuint tex;
+    uint64_t hd_hash;       /* its fingerprint, when a texture pack replaces it */
+    int hd;                 /* the replacement in hd_tex[] + 1, or 0 when not loaded */
 } GpuTex;
 
 static GpuTex textures[TEX_ENTRIES];
@@ -882,7 +896,118 @@ static size_t decoded_cap;
 
 static GLuint batch_uses_tex(GLuint tex);
 
-static GLuint texture_decoded(const DrawState *s)
+/* ---- Replacements (texture packs, gs_texrep.c) ------------------------------- */
+
+#define HD_ENTRIES 4096
+#define HD_BUDGET ((size_t)1536 << 20) /* bytes of video memory, with the mipmaps */
+
+typedef struct {
+    uint64_t hash;          /* 0: free */
+    GLuint tex;             /* 0: the file could not be used */
+    size_t bytes;
+    uint64_t last_use;
+} HdTex;
+
+static HdTex hd_tex[HD_ENTRIES];
+static size_t hd_bytes;
+static GLuint samplers[4];  /* repeat or clamp, for U (bit 0) and V (bit 1) */
+
+static void hd_free(HdTex *e)
+{
+    int k = (int)(e - hd_tex) + 1;
+
+    if (e->tex != 0) {
+        if (batch_uses_tex(e->tex))
+            batch_flush();
+        glDeleteTextures(1, &e->tex);
+    }
+    hd_bytes -= e->bytes;
+    memset(e, 0, sizeof(*e));
+    for (int i = 0; i < TEX_ENTRIES; i++) {
+        if (textures[i].hd == k)
+            textures[i].hd = 0;
+    }
+}
+
+/* The replacement for hash, loaded if needed; its entry + 1, or 0. */
+static int hd_get(uint64_t hash)
+{
+    HdTex *e = NULL, *lru = NULL;
+    uint32_t *px;
+    int w, h, max = 0;
+
+    for (int i = 0; i < HD_ENTRIES; i++) {
+        if (hd_tex[i].hash == hash) {
+            e = &hd_tex[i];
+            break;
+        }
+        if (lru == NULL || hd_tex[i].hash == 0 || (lru->hash != 0 && hd_tex[i].last_use < lru->last_use))
+            lru = &hd_tex[i];
+    }
+    if (e == NULL) {
+        px = texrep_load(hash, &w, &h);
+        e = lru;
+        if (e->hash != 0)
+            hd_free(e);
+        e->hash = hash;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &max);
+        if (px != NULL && (w > max || h > max)) {
+            printf("textures: %dx%d is more than this graphics card takes (%d)\n", w, h, max);
+        } else if (px != NULL) {
+            e->bytes = (size_t)w * h * 4 * 4 / 3;
+            /* Room for it: the replacements used least recently go. */
+            while (hd_bytes + e->bytes > HD_BUDGET) {
+                HdTex *old = NULL;
+                for (int i = 0; i < HD_ENTRIES; i++) {
+                    if (hd_tex[i].hash != 0 && &hd_tex[i] != e && hd_tex[i].bytes != 0 &&
+                        (old == NULL || hd_tex[i].last_use < old->last_use))
+                        old = &hd_tex[i];
+                }
+                if (old == NULL)
+                    break;
+                hd_free(old);
+            }
+            glGenTextures(1, &e->tex);
+            glBindTexture(GL_TEXTURE_2D, e->tex);
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
+            glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE, px);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            check_gl("replacement");
+            hd_bytes += e->bytes;
+        }
+        free(px);
+    }
+    e->last_use = ++use_clock;
+    return e->tex != 0 ? (int)(e - hd_tex) + 1 : 0;
+}
+
+static void hd_drop_all(void)
+{
+    for (int i = 0; i < HD_ENTRIES; i++) {
+        if (hd_tex[i].hash != 0)
+            hd_free(&hd_tex[i]);
+    }
+    for (int i = 0; i < TEX_ENTRIES; i++)
+        textures[i].used = 0;
+    last_tex = -1;
+}
+
+/* The replacement of a texture decoded at t (pixels in decoded), if any. */
+static void hd_find(GpuTex *t, const DrawState *s, const uint32_t *pixels)
+{
+    uint64_t h = texrep_hash(pixels, s->tw, s->th);
+
+    t->hd_hash = 0;
+    t->hd = 0;
+    texrep_dump(h, pixels, s->tw, s->th, t->key ^ (t->clut << 7 | t->clut >> 57) ^ t->texa << 3);
+    if (texrep_has(h)) {
+        t->hd_hash = h;
+        t->hd = hd_get(h);
+    }
+}
+
+/* The texture for s, decoded from GS memory; *hd: its replacement, or 0. */
+static GLuint texture_decoded(const DrawState *s, GLuint *hd)
 {
     int indexed = s->tpsm == GS_PSMT8 || s->tpsm == GS_PSMT4 || s->tpsm == GS_PSMT8H ||
                   s->tpsm == GS_PSMT4HL || s->tpsm == GS_PSMT4HH;
@@ -891,7 +1016,13 @@ static GLuint texture_decoded(const DrawState *s)
     uint64_t texa = s->tpsm == GS_PSMCT32 ? 0 : (uint64_t)s->ta0 | (uint64_t)s->aem << 8 | (uint64_t)s->ta1 << 16;
     uint64_t clut = indexed ? s->clut_hash ^ ((uint64_t)s->cpsm << 56) ^ ((uint64_t)s->csa << 48) : 0;
     GpuTex *t = NULL, *lru = NULL;
+    int packs = texrep_mode() != TEXREP_OFF;
 
+    *hd = 0;
+    if (packs && texrep_reload_pending()) {
+        printf("textures: F9, the texture packs are read again\n");
+        hd_drop_all();
+    }
     if (last_tex >= 0 && textures[last_tex].used && textures[last_tex].key == key &&
         textures[last_tex].texa == texa && textures[last_tex].clut == clut) {
         t = &textures[last_tex];
@@ -918,9 +1049,17 @@ static GLuint texture_decoded(const DrawState *s)
         t->clut = clut;
         t->w = t->h = 0;
         t->stamp = 0;
+        t->hd_hash = 0;
+        t->hd = 0;
     } else if (!gs_pages_newer(s->tpsm, s->tbp, s->tbw, 0, 0, s->tw - 1, s->th - 1, t->stamp)) {
         t->last_use = ++use_clock;
         last_tex = (int)(t - textures);
+        if (t->hd_hash != 0 && t->hd == 0)
+            t->hd = hd_get(t->hd_hash);
+        if (t->hd != 0) {
+            hd_tex[t->hd - 1].last_use = use_clock;
+            *hd = hd_tex[t->hd - 1].tex;
+        }
         return t->tex;
     }
 
@@ -936,6 +1075,11 @@ static GLuint texture_decoded(const DrawState *s)
             return 0;
     }
     gs_decode_texture(s, decoded, s->tw, s->th);
+    if (packs && texrep_busy()) {
+        hd_find(t, s, decoded);
+        if (t->hd != 0)
+            *hd = hd_tex[t->hd - 1].tex;
+    }
     glBindTexture(GL_TEXTURE_2D, t->tex);
     if (t->w != s->tw || t->h != s->th) {
         make_tex(t->tex, 0, s->tw, s->th);
@@ -1187,10 +1331,15 @@ static int make_state(const DrawState *s, GLenum mode, int rows, GpuState *st)
                 memcpy(st->tex_rect, r, sizeof(r));
             }
         } else {
+            GLuint hd;
             st->texmode = 0;
-            st->tex = texture_decoded(s);
+            st->tex = texture_decoded(s, &hd);
             if (st->tex == 0)
                 return 0;
+            if (hd != 0) {
+                st->texmode = 4;
+                st->tex = hd;
+            }
         }
     }
     return 1;
@@ -1286,6 +1435,8 @@ static void batch_flush(void)
     glBindTexture(GL_TEXTURE_2D, dst);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, tex);
+    if (st->texmode == 4)
+        glBindSampler(0, samplers[(st->wrap[0] == 1 || st->wrap[0] == 2) | (st->wrap[1] == 1 || st->wrap[1] == 2) << 1]);
 
     glBindFramebuffer(GL_FRAMEBUFFER, t->fbo);
     if (st->zt != NULL && (t->att != st->zt || t->att_tex != st->zt->tex)) {
@@ -1338,6 +1489,8 @@ static void batch_flush(void)
         apply_uniforms(st, pass);
         glDrawArrays(st->mode, 0, batch.n);
     }
+    if (st->texmode == 4)
+        glBindSampler(0, 0);
     check_gl("draw");
     batch.n = 0;
 }
@@ -1832,6 +1985,23 @@ int gs_gpu_init(void *(*getproc)(const char *name), int scale_)
     glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
     glPixelStorei(GL_PACK_ALIGNMENT, 4);
     check_gl("init");
+
+    /* Replacements: trilinear, and anisotropic where the card has it. */
+    float aniso = 0.0f;
+    glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &aniso);
+    if (glGetError() != GL_NO_ERROR)
+        aniso = 0.0f;
+    glGenSamplers(4, samplers);
+    for (int i = 0; i < 4; i++) {
+        glSamplerParameteri(samplers[i], GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glSamplerParameteri(samplers[i], GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glSamplerParameteri(samplers[i], GL_TEXTURE_WRAP_S, (i & 1) ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        glSamplerParameteri(samplers[i], GL_TEXTURE_WRAP_T, (i & 2) ? GL_CLAMP_TO_EDGE : GL_REPEAT);
+        if (aniso > 1.0f)
+            glSamplerParameterf(samplers[i], GL_TEXTURE_MAX_ANISOTROPY, aniso < 16.0f ? aniso : 16.0f);
+    }
+    while (glGetError() != GL_NO_ERROR)
+        ;
 
     scale = scale_ < 1 ? 1 : scale_ > 4 ? 4 : scale_;
     force_exact = getenv("CVX_GPU_EXACT") != NULL;

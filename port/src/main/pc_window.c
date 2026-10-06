@@ -5,7 +5,8 @@
  * DualShock 2 state the game reads (pc_pad_*, see pc_sdk.c), and shows the
  * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
  * fullscreen, F12 saves a screenshot, F10 dumps a frame of the GS (see
- * gs_dump_frame), Tab held fast-forwards. The keys, the window's size and
+ * gs_dump_frame), F9 reads the texture packs again (gs_texrep.h), Tab held
+ * fast-forwards. The keys, the window's size and
  * a few other things can be changed in cvx.ini (see pc_config.c), as well
  * as the renderer: the software GS, or the GPU one (gs_gpu.c, OpenGL).
  *
@@ -15,6 +16,7 @@
 
 #include "../gs/gs.h"
 #include "../gs/gs_gpu.h"
+#include "../gs/gs_texrep.h"
 #include "../host/pc_host.h"
 
 #include <stdint.h>
@@ -512,6 +514,8 @@ static void frame(void)
                 snprintf(name, sizeof(name), "cvx_gsdump_%03d.bin", dumps++);
                 gs_dump_frame(name);
             }
+            if (ev.key.keysym.scancode == SDL_SCANCODE_F9)
+                texrep_reload_asked = 1;
             if (ev.key.keysym.scancode == SDL_SCANCODE_F11) {
                 Uint32 full = SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP;
                 SDL_SetWindowFullscreen(window, full ? 0 : SDL_WINDOW_FULLSCREEN_DESKTOP);

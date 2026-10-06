@@ -90,6 +90,10 @@ typedef ptrdiff_t GLintptr;
 #define GL_DEPTH_ATTACHMENT 0x8D00
 #define GL_FRAMEBUFFER_COMPLETE 0x8CD5
 #define GL_MAX_TEXTURE_SIZE 0x0D33
+#define GL_REPEAT 0x2901
+#define GL_LINEAR_MIPMAP_LINEAR 0x2703
+#define GL_TEXTURE_MAX_ANISOTROPY 0x84FE
+#define GL_MAX_TEXTURE_MAX_ANISOTROPY 0x84FF
 
 /* name, return type, arguments */
 #define GS_GL_FUNCTIONS(F) \
@@ -123,6 +127,12 @@ typedef ptrdiff_t GLintptr;
     F(glTexSubImage2D, void, (GLenum target, GLint level, GLint x, GLint y, GLsizei w, GLsizei h, \
                               GLenum format, GLenum type, const void *pixels)) \
     F(glTexParameteri, void, (GLenum target, GLenum pname, GLint param)) \
+    F(glGenerateMipmap, void, (GLenum target)) \
+    F(glGetFloatv, void, (GLenum pname, GLfloat *data)) \
+    F(glGenSamplers, void, (GLsizei n, GLuint *samplers)) \
+    F(glBindSampler, void, (GLuint unit, GLuint sampler)) \
+    F(glSamplerParameteri, void, (GLuint sampler, GLenum pname, GLint param)) \
+    F(glSamplerParameterf, void, (GLuint sampler, GLenum pname, GLfloat param)) \
     F(glGenFramebuffers, void, (GLsizei n, GLuint *fbs)) \
     F(glDeleteFramebuffers, void, (GLsizei n, const GLuint *fbs)) \
     F(glBindFramebuffer, void, (GLenum target, GLuint fb)) \
@@ -201,6 +211,12 @@ GS_GL_FUNCTIONS(GS_GL_DECLARE)
 #define glTexImage2D p_glTexImage2D
 #define glTexSubImage2D p_glTexSubImage2D
 #define glTexParameteri p_glTexParameteri
+#define glGenerateMipmap p_glGenerateMipmap
+#define glGetFloatv p_glGetFloatv
+#define glGenSamplers p_glGenSamplers
+#define glBindSampler p_glBindSampler
+#define glSamplerParameteri p_glSamplerParameteri
+#define glSamplerParameterf p_glSamplerParameterf
 #define glGenFramebuffers p_glGenFramebuffers
 #define glDeleteFramebuffers p_glDeleteFramebuffers
 #define glBindFramebuffer p_glBindFramebuffer

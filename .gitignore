@@ -43,3 +43,6 @@ config/undefined_syms_auto.txt
 build-pc
 build-dbg
 build-win
+
+// the player's texture packs (exported from the game)
+textures

@@ -49,7 +49,7 @@ enum {
 /* What can be clicked or focused */
 enum {
     ID_NONE, ID_TAB0, ID_TAB1, ID_TAB2, ID_TAB3, ID_ISO, ID_BROWSE, ID_FULLSCREEN, ID_WINDOW,
-    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_FPS60, ID_SOUND, ID_SOUND3D, ID_VIBRATION, ID_KEYS_DEFAULT,
+    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_FPS60, ID_TEXTURES, ID_SOUND, ID_SOUND3D, ID_VIBRATION, ID_KEYS_DEFAULT,
     ID_QUIT, ID_PLAY, ID_KEY0 = 100,
 };
 
@@ -58,7 +58,7 @@ enum {
 typedef struct {
     char iso[512];
     char window[32];
-    int fullscreen, launcher, renderer, upscale, filter, widescreen, fps60, sound, sound3d, vibration;
+    int fullscreen, launcher, renderer, upscale, filter, widescreen, fps60, textures, sound, sound3d, vibration;
     char keys[MAX_KEYS][96];
 } Settings;
 
@@ -88,6 +88,8 @@ static const char *const window_sizes[2][6] = {
 /* sound_3d: off, headphones, speakers (pc_spatial.h) */
 static const char *const sound3d_values[] = { "off", "headphones", "speakers" };
 static const char *const sound3d_names[] = { "Non  (comme la PS2)", "Casque", "Enceintes" };
+static const char *const textures_values[] = { "original", "hd", "dump" };
+static const char *const textures_names[] = { "D'origine  (PS2)", "HD  (si présentes)", "HD + exporter" };
 static const char *const upscale_names[] = {
     "×1  (640×448, la PS2)", "×2  (1280×896)", "×3  (1920×1344)", "×4  (2560×1792)",
 };
@@ -376,6 +378,12 @@ static void read_settings(void)
     snprintf(now.iso, sizeof(now.iso), "%s", v != NULL && v[0] != 0 ? v : "cvx.iso");
     now.widescreen = yes("widescreen", 0);
     now.fps60 = yes("fps60", 0);
+    v = pc_config_get("textures");
+    now.textures = 1;
+    for (int i = 0; i < 3; i++) {
+        if (v != NULL && SDL_strcasecmp(v, textures_values[i]) == 0)
+            now.textures = i;
+    }
     v = pc_config_get("window");
     snprintf(now.window, sizeof(now.window), "%s", v != NULL && v[0] != 0 ? v : window_sizes[now.widescreen][2]);
     now.fullscreen = yes("fullscreen", 0);
@@ -433,6 +441,7 @@ static void save_settings(void)
     SET(filter, "filter", now.filter ? "smooth" : "sharp")
     SET(widescreen, "widescreen", now.widescreen ? "yes" : "no")
     SET(fps60, "fps60", now.fps60 ? "yes" : "no")
+    SET(textures, "textures", textures_values[now.textures])
     SET(sound, "sound", now.sound ? "yes" : "no")
     SET(sound3d, "sound_3d", sound3d_values[now.sound3d])
     SET(vibration, "vibration", now.vibration ? "yes" : "no")
@@ -654,6 +663,7 @@ static void activate(int id, int dir)
     case ID_VIBRATION: now.vibration ^= 1; break;
     case ID_FILTER: now.filter ^= 1; break;
     case ID_FPS60: now.fps60 ^= 1; break;
+    case ID_TEXTURES: now.textures = (now.textures + dir + 3) % 3; break;
     case ID_WIDESCREEN:
         /* the window keeps its place in the list of sizes */
         i = window_index();
@@ -696,7 +706,7 @@ static void activate(int id, int dir)
 static int changes(int id)
 {
     return id == ID_FULLSCREEN || id == ID_LAUNCHER || id == ID_SOUND || id == ID_SOUND3D || id == ID_VIBRATION
-           || id == ID_FILTER || id == ID_WIDESCREEN || id == ID_FPS60 || id == ID_RENDERER || id == ID_UPSCALE || id == ID_WINDOW;
+           || id == ID_FILTER || id == ID_WIDESCREEN || id == ID_FPS60 || id == ID_TEXTURES || id == ID_RENDERER || id == ID_UPSCALE || id == ID_WINDOW;
 }
 
 /* Moves the focus to the nearest widget in that direction. */
@@ -790,8 +800,11 @@ static void page_picture(void)
     choice(ID_WIDESCREEN, 520, 332, 320, now.widescreen ? "16:9  (écran large)" : "4:3  (comme la PS2)", 1);
     label(392, "Images par seconde", "60 : mouvements plus fluides en jeu (essai)");
     choice(ID_FPS60, 520, 392, 320, now.fps60 ? "60  (plus fluide)" : "30  (comme la PS2)", 1);
-    draw_text(&text, 40, 460, "Si la carte graphique ne convient pas, le jeu revient tout seul", C_DIM);
-    draw_text(&text, 40, 482, "au processeur (c'est noté dans cvx_log.txt).", C_DIM);
+    label(452, "Textures", now.renderer ? "HD : celles du dossier textures/replace (F9 : relire)"
+                                        : "Seulement avec la carte graphique");
+    choice(ID_TEXTURES, 520, 452, 320, textures_names[now.textures], now.renderer);
+    draw_text(&text, 40, 500, "Si la carte graphique ne convient pas, le jeu revient tout seul", C_DIM);
+    draw_text(&text, 40, 522, "au processeur (c'est noté dans cvx_log.txt).", C_DIM);
 }
 
 static void page_sound(void)

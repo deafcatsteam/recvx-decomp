@@ -125,6 +125,7 @@ add_library(cvx_host STATIC
     port/src/gs/gs_mem.c
     port/src/gs/gs_threads.c
     port/src/gs/gs_gpu.c
+    port/src/gs/gs_texrep.c
 )
 target_link_libraries(cvx_host PUBLIC m)
 if(NOT WIN32)
@@ -326,6 +327,8 @@ add_test(NAME gs_gpu_letters COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_letters PROPERTIES ENVIRONMENT CVX_TEST_LETTERS=1 SKIP_RETURN_CODE 77)
 add_test(NAME gs_gpu_replay COMMAND test_gs_gpu)
 set_tests_properties(gs_gpu_replay PROPERTIES ENVIRONMENT CVX_TEST_REPLAY=1 SKIP_RETURN_CODE 77)
+add_test(NAME gs_gpu_textures COMMAND test_gs_gpu)
+set_tests_properties(gs_gpu_textures PROPERTIES ENVIRONMENT CVX_TEST_TEXTURES=1 SKIP_RETURN_CODE 77)
 
 # Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
 add_executable(gs_replay port/tools/gs_replay.c)

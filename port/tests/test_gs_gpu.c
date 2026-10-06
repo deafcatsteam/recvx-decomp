@@ -20,6 +20,7 @@
 #include "../src/gs/gs.h"
 #include "../src/gs/gs_gpu.h"
 #include "../src/gs/gs_mem.h"
+#include "../src/gs/gs_texrep.h"
 
 #ifdef _WIN32
 int main(void)
@@ -520,6 +521,100 @@ static int replay_test(void)
     return bad;
 }
 
+/* Texture packs (gs_texrep.c): a 16x16 texture, blue, drawn at 4x as a
+ * 16x16 sprite, with a 64x64 replacement in a checkerboard of red and green
+ * squares of one pixel: every pixel of the sprite is one of its texels.
+ * Another texture, without one, is exported to textures/dump. */
+int stbi_write_png(char const *filename, int w, int h, int comp, const void *data, int stride_in_bytes);
+
+static void sprite_with(int bp, int x)
+{
+    tag(4, 1, 0, 1, 0xe);
+    ad(0x06, (uint64_t)bp | (1ull << 14) | ((uint64_t)GS_PSMCT32 << 20) | (4ull << 26) | (4ull << 30) |
+                 (1ull << 34) | (1ull << 35)); /* TEX0: 16x16, RGBA, decal */
+    ad(0x00, 6 | (1 << 4) | (1 << 8));     /* sprite, textured, UV */
+    ad(0x03, 0);
+    ad(0x05, (uint64_t)((1000 + x) * 16) | ((uint64_t)((1000 + 8) * 16) << 16));
+    send();
+    tag(2, 1, 0, 1, 0xe);
+    ad(0x03, (16 * 16) | ((uint64_t)(16 * 16) << 16));
+    ad(0x05, (uint64_t)((1000 + x + 16) * 16) | ((uint64_t)((1000 + 24) * 16) << 16));
+    send();
+}
+
+static int texture_pack_test(void)
+{
+    static uint32_t blue[16 * 16], grey[16 * 16], hd[64 * 64], px[W * 4 * H * 4];
+    char name[256];
+    int w, h, red = 0, green = 0, blues = 0, bad = 0;
+    FILE *f;
+
+    for (int i = 0; i < 16 * 16; i++) {
+        blue[i] = 0x80ff0000u;
+        grey[i] = 0x80404040u + (uint32_t)i;
+    }
+    for (int i = 0; i < 64 * 64; i++)
+        hd[i] = ((i % 64 + i / 64) & 1) ? 0xff00ff00u : 0xff0000ffu;
+    if (system("rm -rf test_textures && mkdir -p test_textures/replace/sub") != 0)
+        return 1;
+    snprintf(name, sizeof(name), "test_textures/replace/sub/mur_%016llx.png",
+             (unsigned long long)texrep_hash(blue, 16, 16));
+    if (!stbi_write_png(name, 64, 64, 4, hd, 64 * 4))
+        return 1;
+    texrep_set(TEXREP_DUMP, "test_textures");
+
+    gs_reset();
+    upload(GS_PSMCT32, TEX_BP, 1, 16, 16, blue, sizeof(blue));
+    upload(GS_PSMCT32, TEX_BP + 32, 1, 16, 16, grey, sizeof(grey));
+    tag(6, 1, 0, 1, 0xe);
+    ad(0x4c, FBP | (2ull << 16) | ((uint64_t)GS_PSMCT32 << 24));
+    ad(0x4e, ZBP | (1ull << 32));
+    ad(0x18, (1000ull * 16) | ((1000ull * 16) << 32));
+    ad(0x40, 0 | ((uint64_t)(W - 1) << 16) | ((uint64_t)(H - 1) << 48));
+    ad(0x47, 0);
+    ad(0x14, 1 | (1 << 5)); /* TEX1: bilinear, as the game's 3D */
+    send();
+    sprite_with(TEX_BP, 8);
+    sprite_with(TEX_BP + 32, 40);
+    gs_set_display(FBP | (2ull << 9), ((uint64_t)(W - 1) << 32) | ((uint64_t)(H - 1) << 44));
+    if (!gs_gpu_read_display(px, W * 4 * H * 4, &w, &h) || w != W * 4)
+        return 1;
+    /* where the sprite starts: within its first GS pixel (the GS samples
+     * pixels at their top left, OpenGL at their centre) */
+    int x0 = 8 * 4, y0 = 8 * 4;
+    while (x0 < 12 * 4 && (px[(12 * 4) * w + x0] & 0xffffff) == 0)
+        x0++;
+    while (y0 < 12 * 4 && (px[y0 * w + 12 * 4] & 0xffffff) == 0)
+        y0++;
+    for (int y = y0; y < y0 + 64; y++) {
+        for (int x = x0; x < x0 + 64; x++) {
+            uint32_t c = px[y * w + x];
+            int want_green = ((x - x0) + (y - y0)) & 1;
+            red += (c & 0xff) > 0xc0 && !want_green;
+            green += ((c >> 8) & 0xff) > 0xc0 && want_green;
+            blues += ((c >> 16) & 0xff) > 0x40;
+        }
+    }
+    if (getenv("CVX_TEST_DEBUG")) for (int y = 30; y < 98; y += 1) { for (int x = 30; x < 40; x++) printf("%06x ", px[y * w + x] & 0xffffff); printf(" ... "); for (int x = 92; x < 98; x++) printf("%06x ", px[y * w + x] & 0xffffff); printf("\n"); }
+    printf("texture pack: %d red and %d green pixels where they should be (of 2048 each), %d blue\n", red, green,
+           blues);
+    bad |= red != 2048 || green != 2048 || blues != 0;
+    snprintf(name, sizeof(name), "test_textures/dump/16x16_%016llx.png",
+             (unsigned long long)texrep_hash(grey, 16, 16));
+    f = fopen(name, "rb");
+    printf("texture pack: %s %s\n", name, f != NULL ? "exported" : "missing");
+    bad |= f == NULL;
+    if (f != NULL)
+        fclose(f);
+    snprintf(name, sizeof(name), "test_textures/dump/16x16_%016llx.png",
+             (unsigned long long)texrep_hash(blue, 16, 16));
+    f = fopen(name, "rb");
+    bad |= f != NULL; /* replaced: not exported */
+    if (f != NULL)
+        fclose(f);
+    return bad;
+}
+
 int main(void)
 {
     static const struct {
@@ -568,6 +663,13 @@ int main(void)
             return 77;
         }
         return replay_test();
+    }
+    if (getenv("CVX_TEST_TEXTURES") != NULL) { /* a test of its own: at 4 times the resolution */
+        if (!open_gl() || !gs_gpu_init(get_proc, 4)) {
+            printf("test_gs_gpu: no OpenGL 3.3 here, skipped\n");
+            return 77;
+        }
+        return texture_pack_test();
     }
     if (getenv("CVX_TEST_PRIMS") != NULL)
         prims = atoi(getenv("CVX_TEST_PRIMS"));

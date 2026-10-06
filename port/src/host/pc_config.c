@@ -64,6 +64,10 @@ static const char template_text[] =
     "; sa résolution : 1 = celle de la PS2, 2 = deux fois plus fine... jusqu'à 4\n"
     ";renderer = opengl\n"
     ";upscale = 2\n"
+    "; Textures (avec la carte graphique) : hd = remplacées par celles du\n"
+    "; dossier textures/replace s'il y en a ; dump = en plus, exporte celles\n"
+    "; du jeu dans textures/dump pour les refaire ; original = celles de la PS2\n"
+    ";textures = dump\n"
     "\n"
     "; Fenêtre de réglages avant le jeu (no : le jeu démarre tout de suite ;\n"
     "; pour la revoir, garde Maj enfoncée en lançant le jeu)\n"
@@ -221,7 +225,7 @@ static int known(const char *name)
 {
     static const char *const names[] = {
         "iso", "saves", "movies", "fullscreen", "window", "filter", "sound", "vibration", "renderer",
-        "upscale", "launcher", "widescreen", "fps60", "sound_3d",
+        "upscale", "launcher", "widescreen", "fps60", "sound_3d", "textures",
         /* the keys, see key_actions in pc_window.c */
         "key_up", "key_down", "key_left", "key_right", "key_stick_up", "key_stick_down",
         "key_stick_left", "key_stick_right", "key_cross", "key_circle", "key_square",
