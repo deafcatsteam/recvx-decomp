@@ -1891,12 +1891,16 @@ int Ps2CheckTextureAlpha(void* pp)
         case 0:                                     
             flag = 0x8000;
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB1555\n", temp2->OrgColorType);
+#endif
             break;
         case 1:                                    
             flag = 0x8000;
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("RGB565\n", temp2->OrgColorType);
+#endif
             break;
         case 2:                                    
             flag = 0x8000;
@@ -1904,14 +1908,18 @@ int Ps2CheckTextureAlpha(void* pp)
             Ps2Alpha4to8(cp, num);
             Ps2AlphaIsHalf(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB4444\n");
+#endif
             break;
         case 6:                                  
             flag = 0x8000;
             
             Ps2AlphaIsHalf(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB8888\n");
+#endif
             break;
         default:                                   
             printf("ERROR ERROR ERROR ERROR ERROR %04x\n", temp2->OrgColorType);
@@ -1927,14 +1935,18 @@ int Ps2CheckTextureAlpha(void* pp)
             
             Ps2AlphaIs000(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB1555\n");
+#endif
             break;
         case 1:
             flag = 0x8000;
             
             Ps2AlphaIs000(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("RGB565\n");
+#endif
             break;
         case 2:
             flag = 0x8000;
@@ -1943,7 +1955,9 @@ int Ps2CheckTextureAlpha(void* pp)
             Ps2Alpha4to8(cp, num);
             Ps2AlphaIsHalf(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB4444\n");
+#endif
             break;
         case 6:
             flag = 0x8000;
@@ -1951,7 +1965,9 @@ int Ps2CheckTextureAlpha(void* pp)
             Ps2AlphaIs000(cp, num);
             Ps2AlphaIsHalf(cp, num);
             
+#ifndef PLATFORM_PC /* printed for every texture loaded */
             printf("ARGB8888\n");
+#endif
             break;
         default:
             printf("ERROR ERROR ERROR ERROR ERROR %04x\n", temp2->OrgColorType);
