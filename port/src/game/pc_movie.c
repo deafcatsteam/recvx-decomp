@@ -463,9 +463,9 @@ static int next_frame_ready(void)
 static void hd_open(void)
 {
     static const char* const exts[] = { "mp4", "mkv", "webm", "mov", "avi" };
-    const char* dir = getenv("CVX_MOVIES");
+    const char* dirs[2] = { getenv("CVX_MOVIES"), NULL };
     char base[16], path[512];
-    int i;
+    int i, d;
 
     /* "MV_000.PSS;1" -> "MV_000" */
     for (i = 0; i < 15 && infile.fp.name[i] != 0 && infile.fp.name[i] != '.' && infile.fp.name[i] != ';'; i++)
@@ -477,26 +477,31 @@ static void hd_open(void)
     {
         return;
     }
-    if (dir == NULL || dir[0] == 0)
+    if (dirs[0] == NULL || dirs[0][0] == 0)
     {
-        dir = "movies";
+        /* "movies", or the game's own "MOVIE" folder copied next to it */
+        dirs[0] = "movies";
+        dirs[1] = "MOVIE";
     }
 
-    for (i = 0; i < (int)(sizeof(exts) / sizeof(exts[0])); i++)
+    for (d = 0; d < 2 && dirs[d] != NULL; d++)
     {
-        FILE* f;
+        for (i = 0; i < (int)(sizeof(exts) / sizeof(exts[0])); i++)
+        {
+            FILE* f;
 
-        snprintf(path, sizeof(path), "%s/%s.%s", dir, base, exts[i]);
-        f = fopen(path, "rb");
-        if (f == NULL)
-        {
-            continue;
-        }
-        fclose(f);
-        mv.hd = pc_hdmovie_open(path);
-        if (mv.hd != NULL)
-        {
-            return;
+            snprintf(path, sizeof(path), "%s/%s.%s", dirs[d], base, exts[i]);
+            f = fopen(path, "rb");
+            if (f == NULL)
+            {
+                continue;
+            }
+            fclose(f);
+            mv.hd = pc_hdmovie_open(path);
+            if (mv.hd != NULL)
+            {
+                return;
+            }
         }
     }
 }

@@ -62,7 +62,7 @@ Variables utiles :
 | `CVX_NO_LOG` | Ne pas écrire `cvx_log.txt` |
 | `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
 | `CVX_NO_AUDIO` | Pas de son |
-| `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`) |
+| `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`, puis `MOVIE`) |
 
 Tout ce qui s'affiche dans la console est aussi écrit dans `cvx_log.txt`, à
 côté de l'exe. En cas de plantage, la console indique où était le jeu et
@@ -86,8 +86,9 @@ Touches (manette PS2 émulée, une manette Xbox/PS branchée marche aussi) :
 ## Vidéos en HD (remplacement)
 
 Une vidéo du jeu peut être remplacée par une version agrandie : mets un
-fichier du même nom dans un dossier `movies` à côté de l'exe, par exemple
-`movies/MV_000.mp4` pour `MOVIE/MV_000.PSS`. Le portage l'affiche à sa
+fichier du même nom dans un dossier `movies` ou `MOVIE` à côté de l'exe,
+par exemple `MOVIE/MV_000.mkv` pour `MOVIE/MV_000.PSS` (les autres fichiers
+du dossier, comme des `.mpg` ou `.PSS`, sont ignorés). Le portage l'affiche à sa
 propre résolution (jusqu'à 3840×2160) à la place de l'image d'origine. Le
 **son** reste celui du `.PSS` d'origine, ainsi que le rythme et la fin de la
 vidéo : la version HD n'a donc pas besoin de son, mais elle doit garder
@@ -111,8 +112,14 @@ simple) :
    **realesrgan-plus** (×4, fait pour les images réalistes), sortie en MP4.
    **N'active pas l'interpolation d'images** (RIFE) : le nombre d'images par
    seconde doit rester le même.
-4. Renomme chaque résultat comme l'original (`MV_000.mp4`, …) et mets-les
-   dans `movies` à côté de `cvx_pc.exe`.
+4. Renomme chaque résultat comme l'original (`MV_000.mkv`, …) et mets-les
+   dans `MOVIE` (ou `movies`) à côté de `cvx_pc.exe`. Video2X ajoute
+   `.realesrgan` au nom : pour l'enlever d'un coup, tape `powershell` dans
+   la barre d'adresse du dossier, Entrée, puis :
+
+   ```
+   Get-ChildItem *.realesrgan.* | Rename-Item -NewName { $_.Name -replace '\.realesrgan','' }
+   ```
 
 Commence par une petite vidéo (`MV_004`, 5 Mo) pour voir le résultat et le
 temps que ça prend. Avec **ComfyUI**, c'est aussi possible (nœuds *Load
