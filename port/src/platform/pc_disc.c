@@ -146,3 +146,50 @@ int pc_disc_find(const char *name, unsigned int *lsn, unsigned int *size)
     *size = cur_size;
     return 1;
 }
+
+/* Every file under the directory, depth first; path: its name so far. */
+static void list_dir(unsigned int dir_lsn, unsigned int dir_size, char *path, size_t plen, int depth,
+                     void (*fn)(const char *name, unsigned int lsn, unsigned int size, void *data), void *data)
+{
+    unsigned char sector[PC_DISC_SECTOR];
+
+    for (unsigned int s = 0; s < (dir_size + PC_DISC_SECTOR - 1) / PC_DISC_SECTOR; s++) {
+        if (!pc_disc_read(dir_lsn + s, 1, sector))
+            return;
+        for (unsigned int pos = 0; pos < PC_DISC_SECTOR;) {
+            unsigned char *rec = sector + pos;
+            int len = rec[32], is_dir = (rec[25] & 2) != 0;
+
+            if (rec[0] == 0)
+                break;
+            pos += rec[0];
+            if (len == 1 && (rec[33] == 0 || rec[33] == 1))
+                continue; /* . and .. */
+            const unsigned char *semi = memchr(rec + 33, ';', len);
+            if (semi != NULL)
+                len = (int)(semi - (rec + 33));
+            if (plen + 1 + len + 1 > 512)
+                continue;
+            path[plen] = '\\';
+            memcpy(path + plen + 1, rec + 33, len);
+            path[plen + 1 + len] = 0;
+            if (is_dir) {
+                if (depth < 8)
+                    list_dir(le32(rec + 2), le32(rec + 10), path, plen + 1 + len, depth + 1, fn, data);
+            } else {
+                fn(path, le32(rec + 2), le32(rec + 10), data);
+            }
+            path[plen] = 0;
+        }
+    }
+}
+
+int pc_disc_list(void (*fn)(const char *name, unsigned int lsn, unsigned int size, void *data), void *data)
+{
+    char path[512] = "";
+
+    if (!pc_disc_open())
+        return 0;
+    list_dir(root_lsn, root_size, path, 0, 0, fn, data);
+    return 1;
+}

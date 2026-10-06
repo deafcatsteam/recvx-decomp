@@ -621,6 +621,31 @@ void gs_decode_texture(const DrawState *s, uint32_t *dst, int w, int h)
             dst[y * w + x] = texel_raw(s, x, y);
 }
 
+int gs_decode_current_texture(int ctx, uint32_t *dst, int max_pixels, int *w, int *h)
+{
+    DrawState s;
+    uint64_t tex0 = gs.tex0[ctx & 1];
+
+    memset(&s, 0, sizeof(s));
+    s.tpsm = BITS(tex0, 20, 6);
+    s.tbp = BITS(tex0, 0, 14);
+    s.tbw = BITS(tex0, 14, 6);
+    s.tw = 1 << BITS(tex0, 26, 4);
+    s.th = 1 << BITS(tex0, 30, 4);
+    s.cpsm = BITS(tex0, 51, 4);
+    s.csa = BITS(tex0, 56, 5) * 16;
+    s.ta0 = BITS(gs.texa, 0, 8);
+    s.aem = BITS(gs.texa, 15, 1);
+    s.ta1 = BITS(gs.texa, 32, 8);
+    s.clut = gs.clut;
+    *w = s.tw;
+    *h = s.th;
+    if ((int64_t)s.tw * s.th > max_pixels)
+        return 0;
+    gs_decode_texture(&s, dst, s.tw, s.th);
+    return 1;
+}
+
 static inline uint32_t fetch(const DrawState *s, int u, int v)
 {
     const TexEntry *t = s->tex;

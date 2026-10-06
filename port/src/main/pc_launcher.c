@@ -49,7 +49,7 @@ enum {
 /* What can be clicked or focused */
 enum {
     ID_NONE, ID_TAB0, ID_TAB1, ID_TAB2, ID_TAB3, ID_ISO, ID_BROWSE, ID_FULLSCREEN, ID_WINDOW,
-    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_FPS60, ID_TEXTURES, ID_SOUND, ID_SOUND3D, ID_VIBRATION, ID_KEYS_DEFAULT,
+    ID_LAUNCHER, ID_RENDERER, ID_UPSCALE, ID_FILTER, ID_WIDESCREEN, ID_FPS60, ID_TEXTURES, ID_EXTRACT, ID_SOUND, ID_SOUND3D, ID_VIBRATION, ID_KEYS_DEFAULT,
     ID_QUIT, ID_PLAY, ID_KEY0 = 100,
 };
 
@@ -634,8 +634,62 @@ static void set_key(int a, SDL_Scancode sc)
     snprintf(now.keys[a], sizeof(now.keys[0]), "%s", name);
 }
 
+/* Textures of the disc (pc_texextract.c), exported by a thread while the
+ * window stays open. */
+int pc_extract_textures(void);
+extern volatile int pc_texextract_found;
+static SDL_Thread *extract_thread;
+static SDL_atomic_t extract_done;
+static int extract_result;
+
+static int extract_main(void *unused)
+{
+    (void)unused;
+    extract_result = pc_extract_textures();
+    SDL_AtomicSet(&extract_done, 1);
+    return 0;
+}
+
+static void extract(void)
+{
+    if (extract_thread != NULL)
+        return;
+    if (iso_state() != 0) {
+        tab = 0;
+        focus = ID_BROWSE;
+        set_status(C_BAD, "Choisis d'abord l'image du disque du jeu.");
+        return;
+    }
+    pc_config_set("iso", now.iso);
+    SDL_AtomicSet(&extract_done, 0);
+    extract_thread = SDL_CreateThread(extract_main, "textures", NULL);
+    if (extract_thread == NULL)
+        set_status(C_BAD, "L'extraction n'a pas pu démarrer.");
+}
+
+/* Called at each redraw: how the extraction goes. */
+static void extract_status(void)
+{
+    if (extract_thread == NULL)
+        return;
+    if (!SDL_AtomicGet(&extract_done)) {
+        set_status(C_TEXT, "Extraction des textures… %d trouvées (quelques minutes)", pc_texextract_found);
+        return;
+    }
+    SDL_WaitThread(extract_thread, NULL);
+    extract_thread = NULL;
+    if (extract_result < 0)
+        set_status(C_BAD, "Image du disque illisible : rien n'a été extrait.");
+    else
+        set_status(C_GOOD, "%d textures extraites dans le dossier textures\\dump.", extract_result);
+}
+
 static void play(void)
 {
+    if (extract_thread != NULL) {
+        set_status(C_BAD, "Attends la fin de l'extraction des textures.");
+        return;
+    }
     if (iso_state() != 0) {
         tab = 0;
         focus = ID_BROWSE;
@@ -664,6 +718,7 @@ static void activate(int id, int dir)
     case ID_FILTER: now.filter ^= 1; break;
     case ID_FPS60: now.fps60 ^= 1; break;
     case ID_TEXTURES: now.textures = (now.textures + dir + 3) % 3; break;
+    case ID_EXTRACT: extract(); break;
     case ID_WIDESCREEN:
         /* the window keeps its place in the list of sizes */
         i = window_index();
@@ -803,8 +858,9 @@ static void page_picture(void)
     label(452, "Textures", now.renderer ? "HD : celles du dossier textures/replace (F9 : relire)"
                                         : "Seulement avec la carte graphique");
     choice(ID_TEXTURES, 520, 452, 320, textures_names[now.textures], now.renderer);
-    draw_text(&text, 40, 500, "Si la carte graphique ne convient pas, le jeu revient tout seul", C_DIM);
-    draw_text(&text, 40, 522, "au processeur (c'est noté dans cvx_log.txt).", C_DIM);
+    SDL_Rect ex = { 40, 494, 300, 38 };
+    button(ID_EXTRACT, ex, extract_thread != NULL ? "Extraction en cours…" : "Extraire les textures de l'ISO", 0);
+    draw_text(&text, 360, 504, "Toutes, sans jouer, pour les refaire en HD", C_DIM);
 }
 
 static void page_sound(void)
@@ -1112,6 +1168,7 @@ int pc_launcher_run(int argc, char *argv[])
     }
     while (result < 0) {
         SDL_Event ev;
+        extract_status();
         draw();
         SDL_RenderPresent(renderer);
         /* a timeout to see controllers come and go */

@@ -461,8 +461,11 @@ static void test_upload_over_drawing(void)
 /* A frame dump drawn again gives the same picture. */
 static void test_dump_replay(void)
 {
-    const char *path = "test_gsdump.bin";
+    /* one file per run: ctest runs this program several ways at once */
+    const char *gpu = getenv("CVX_TEST_GPU"), *threads = getenv("CVX_GS_THREADS");
+    char path[64];
 
+    snprintf(path, sizeof(path), "test_gsdump_%s_%s.bin", gpu != NULL ? gpu : "0", threads != NULL ? threads : "0");
     gs_reset();
     gs_dump_frame(path);
     gs_dump_vblank(); /* starts the dump */

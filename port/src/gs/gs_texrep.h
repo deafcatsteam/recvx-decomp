@@ -23,7 +23,7 @@ enum { TEXREP_OFF, TEXREP_HD, TEXREP_DUMP };
 /* From cvx.ini (textures = original, hd or dump; default hd), read once;
  * the folder is "textures" or CVX_TEXTURES. */
 int texrep_mode(void);
-void texrep_set(int mode, const char *dir); /* for the tests */
+void texrep_set(int mode, const char *dir); /* for the tests and the export; -1: as in cvx.ini */
 
 /* The fingerprint of a decoded texture (RGBA, R in the low byte). */
 uint64_t texrep_hash(const uint32_t *rgba, int w, int h);

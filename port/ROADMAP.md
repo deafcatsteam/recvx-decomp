@@ -97,7 +97,11 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
    (`textures/dump`) et remplacée par un fichier de `textures/replace` de
    taille quelconque, filtré par OpenGL (mipmaps, anisotrope) dans les
    texels de l'originale (limites des images 2D comprises). F9 relit le
-   dossier. Reste : les packs PCSX2 (autre empreinte), les textures
+   dossier. L'export se fait aussi sans jouer (`src/game/pc_texextract.c`) :
+   tous les fichiers du disque sont fouillés (salles décompressées) à la
+   recherche des paquets PVP et des TIM2, chargés par le code du jeu
+   (`bhSetMemPvpTexture`, `Ps2TexLoad`) et décodés par le GS comme avant
+   un dessin, donc avec la même empreinte qu'en jeu. Reste : les packs PCSX2 (autre empreinte), les textures
    dessinées par le jeu (cibles relues), et le rendu logiciel.
 3. Backend **Direct3D 9** et **RTX Remix** (path tracing, matériaux, **DLSS**).
 4. **60 images/seconde** ✔ en essai (`fps60`, `src/game/pc_interp.c`) : la

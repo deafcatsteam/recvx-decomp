@@ -18,6 +18,9 @@ int pc_disc_open(void);
  * The match ignores case and the ";1" version suffix. Returns 0 if absent. */
 int pc_disc_find(const char *name, unsigned int *lsn, unsigned int *size);
 
+/* Calls fn for every file of the disc, with its path ("\\DIR\\NAME.EXT"). */
+int pc_disc_list(void (*fn)(const char *name, unsigned int lsn, unsigned int size, void *data), void *data);
+
 /* Reads nsct sectors starting at lsn. Returns 0 on failure. */
 int pc_disc_read(unsigned int lsn, unsigned int nsct, void *buf);
 

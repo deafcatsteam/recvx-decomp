@@ -82,6 +82,12 @@ void gs_show_held(int on);
  * gs_dump_vblank at every V-blank. gs_replay draws a dump again and returns
  * 0, or -1 if the file cannot be read. */
 void gs_dump_frame(const char *path);
+
+/* Decodes the texture TEX0 of context ctx points at, with the CLUT loaded,
+ * as RGBA (R in the low byte), (1 << TW) x (1 << TH) as the GPU renderer
+ * decodes it for drawing (for the texture packs' fingerprints). Returns 0
+ * if it has more than max_pixels. */
+int gs_decode_current_texture(int ctx, uint32_t *dst, int max_pixels, int *w, int *h);
 void gs_dump_vblank(void);
 int gs_replay(const char *path);
 

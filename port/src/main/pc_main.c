@@ -13,11 +13,13 @@
 #endif
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "pc_window.h"
 #include "../host/pc_host.h"
 
 int cvx_main(int argc, char *argv[]);
+int pc_extract_textures(void);
 
 /*
  * The PS2 has no memory protection and the game writes into data the PC
@@ -78,10 +80,14 @@ int main(int argc, char *argv[])
     pc_config_load(); /* may turn the log off */
     pc_log_start();
     pc_config_report();
+    unprotect_image();
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--extract-textures") == 0)
+            return pc_extract_textures() < 0; /* textures/dump, then quit */
+    }
     if (!pc_launcher_run(argc, argv))
         return 0; /* Quitter in the settings window */
 
-    unprotect_image();
     pc_window_open();
     pc_diag_start();
 

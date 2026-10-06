@@ -35,7 +35,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Réverbération des pièces (`SdrSetRev`) : l'écho « Hall » du SPU2 refait en logiciel (`src/audio/pc_spu2rev.c`), testé ; reste à valider sur le jeu
 - [x] Vidéos `.PSS` : image MPEG-2 (FFmpeg) et son, testées sur une vidéo synthétique ; reste à valider sur le jeu
 - [x] Vidéos HD de remplacement (`movies/MV_000.mp4`…), affichées à leur résolution, voir plus bas
-- [x] Textures HD : export des textures du jeu et remplacement par des versions refaites (avec la carte graphique), voir plus bas ; testé ; reste à valider sur le jeu
+- [x] Textures HD : export de toutes les textures du disque sans jouer, et remplacement par des versions refaites (avec la carte graphique), voir plus bas ; testé sur des fichiers faits comme ceux du jeu ; reste à valider sur le jeu
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio
 - [x] Son 3D (`sound_3d`) : les bruits placés dans la pièce (pas, armes, ennemis, objets, événements) sont mis autour de toi, au casque (devant, derrière, côtés) ou sur toute la largeur des enceintes ; testé (sens gauche/droite du jeu, délai entre les oreilles) ; reste à valider sur le jeu
 - [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
@@ -230,22 +230,26 @@ des sous-dossiers de `textures/replace`.
 
 ### 1. Exporter les textures
 
-1. Dans la fenêtre de réglages, onglet **Image** : *Dessin de l'image* =
-   **Carte graphique**, *Finesse* = **×4** (pour bien juger le résultat),
-   *Textures* = **HD + exporter** (`textures = dump` dans `cvx.ini`).
-2. Joue : chaque texture qui s'affiche est enregistrée une fois dans
-   `textures/dump`, sous un nom comme `128x64_8810e52ac9c5563d.png` (sa
-   taille, puis son code). Pour tout avoir, il faut passer **partout** :
-   chaque pièce, les deux parties (Claire et Chris), l'inventaire, les
-   fichiers et la carte, les cinématiques du jeu, le mode Battle. Plusieurs
-   parties sauvegardées à des endroits différents aident.
-3. Le dossier se remplit petit à petit ; tu peux commencer à refaire les
-   textures d'une pièce avant d'avoir fini le jeu. Une texture déjà refaite
-   n'est plus exportée.
+**Toutes d'un coup, sans jouer** : dans la fenêtre de réglages, onglet
+**Image**, bouton **Extraire les textures de l'ISO** (ou `cvx_pc.exe
+--extract-textures`). Le portage lit tous les fichiers du disque (pièces,
+personnages, ennemis, objets, menus, documents, cartes) et passe chaque
+texture par le code du jeu lui-même, comme s'il la chargeait en jeu, pour
+lui donner le code qu'elle aura en jeu. Elles arrivent dans
+`textures/dump`, sous un nom comme `128x64_8810e52ac9c5563d.png` (sa
+taille, puis son code), chacune une seule fois. Compte quelques minutes ;
+`cvx_log.txt` dit combien il en a trouvé dans chaque fichier (lignes
+`textures:`).
+
+Quelques textures ne peuvent être connues qu'en jeu : celles dont le jeu
+change les couleurs en jouant (fondus de palette). Pour celles-là, mets
+*Textures* = **HD + exporter** (`textures = dump` dans `cvx.ini`) : en
+jouant, chaque texture affichée qui n'est pas encore dans `textures/dump`
+y est ajoutée. Ce n'est utile que si tu remarques en jeu une texture
+restée d'origine.
 
 Ne sont pas exportées : les images que le jeu dessine lui-même (ombres,
-reflets, flous, fondus) et les vidéos (voir « Vidéos en HD »). Une texture
-qui change à chaque image (une animation) n'est exportée que 8 fois.
+reflets, flous, fondus) et les vidéos (voir « Vidéos en HD »).
 
 ### 2. Trier
 

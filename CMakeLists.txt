@@ -98,6 +98,7 @@ set(PORT_SOURCES
     port/src/game/pc_widescreen.c
     port/src/game/pc_sound3d.c
     port/src/game/pc_interp.c
+    port/src/game/pc_texextract.c
 )
 
 # Settings for code that sees the game's headers: the game itself, the port's
@@ -343,6 +344,10 @@ add_test(NAME disc COMMAND test_disc)
 set_tests_properties(disc PROPERTIES
     DEPENDS disc_make_image
     ENVIRONMENT CVX_ISO=${CMAKE_BINARY_DIR}/test_disc.iso)
+
+add_executable(test_texextract port/tests/test_texextract.c)
+target_link_libraries(test_texextract PRIVATE cvx_game cvx_game_env m)
+add_test(NAME texture_extract COMMAND test_texextract)
 
 add_executable(test_3d port/tests/test_3d.c)
 target_link_libraries(test_3d PRIVATE cvx_game cvx_game_env m)

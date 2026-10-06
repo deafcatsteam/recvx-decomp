@@ -237,6 +237,13 @@ int texrep_mode(void)
 
 void texrep_set(int m, const char *dir)
 {
+    if (m < 0) { /* read from cvx.ini again at the next use */
+        mode = -1;
+        set_clear(&slots);
+        set_clear(&replace);
+        set_clear(&dumped);
+        return;
+    }
     mode = m;
     snprintf(root, sizeof(root), "%s", dir);
     set_clear(&slots);
