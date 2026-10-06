@@ -76,8 +76,14 @@ phase A tiennent compte de la phase B, pour ne rien avoir à refaire.
 
 ## Phase B — Graphismes modernes
 
-1. Haute résolution (jusqu'à 4K) et **écran large 16:9** (champ de vision,
-   interface recalée).
+1. Haute résolution ✔ en partie : le rendu par la carte graphique
+   (`src/gs/gs_gpu.c`, OpenGL 3.3) dessine ce que le GS dessinerait, jusqu'à
+   4 fois sa résolution (2560x1792 au plus). Il garde la mémoire du GS à
+   jour page par page (copie dans un sens ou dans l'autre quand le jeu
+   relit ce qui a été dessiné), et lit directement en haute résolution une
+   image dessinée puis reprise comme texture (flous, fondus). Testé contre
+   le rendu logiciel sur des scènes aléatoires. Reste : l'**écran large
+   16:9** (champ de vision, interface recalée).
 2. **Textures** : export, remplacement, packs refaits par IA ; compatibilité
    avec les packs PCSX2 si leur format d'empreinte le permet.
 3. Backend **Direct3D 9** et **RTX Remix** (path tracing, matériaux, **DLSS**).

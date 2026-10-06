@@ -4,7 +4,9 @@
  * drawing and texture functions) and the EE User's Manual (GIF, DMA).
  */
 #include "gs.h"
+#include "gs_gpu.h"
 #include "gs_mem.h"
+#include "gs_priv.h"
 #include "gs_threads.h"
 
 #include <math.h>
@@ -19,15 +21,6 @@ int64_t (*gs_clock_ns)(void);
 #define BITS(v, lo, n) ((uint32_t)(((v) >> (lo)) & ((1ull << (n)) - 1)))
 
 /* ---- Register state ---------------------------------------------------- */
-
-typedef struct {
-    int x, y;       /* window coordinates, 12.4 fixed point (offset applied) */
-    uint32_t z;
-    int f;          /* fog coefficient */
-    int r, g, b, a;
-    float s, t, q;
-    int u, v;       /* 10.4 fixed point texel coordinates */
-} Vertex;
 
 static struct {
     uint64_t prim, prmode, prmodecont;
@@ -99,6 +92,7 @@ static uint32_t expand16(uint32_t c, int use_texa)
 /* ---- CLUT -------------------------------------------------------------- */
 
 static uint64_t clut_gen = 1; /* counts CLUT loads */
+static uint64_t clut_hash;
 
 static void load_clut(uint64_t tex0)
 {
@@ -127,6 +121,15 @@ static void load_clut(uint64_t tex0)
         return;
 
     clut_gen++; /* decoded indexed textures use the CLUT they were made with */
+    if (gs_gpu_on) {
+        uint32_t cbw = BITS(gs.texclut, 0, 6), cou = BITS(gs.texclut, 6, 6) * 16;
+        uint32_t cov = BITS(gs.texclut, 12, 10);
+        int cpsm_ = cpsm == 0 ? GS_PSMCT32 : cpsm;
+        if (csm == 0)
+            gs_gpu_sync(cpsm_, cbp, 1, 0, 0, 15, 15);
+        else
+            gs_gpu_sync(cpsm_, cbp, cbw, cou, cov, cou + entries - 1, cov);
+    }
     {
         /* A CLUT drawn by primitives still waiting is read once they are. */
         int cpsm_ = cpsm == 0 ? GS_PSMCT32 : cpsm;
@@ -158,6 +161,10 @@ static void load_clut(uint64_t tex0)
         for (int i = 0; i < entries; i++)
             gs.clut[i] = gs_read_pixel_nosync(cpsm == 0 ? GS_PSMCT32 : cpsm, cbp, cbw, cou + i, cov);
     }
+    /* What the CLUT holds, for the GPU's texture cache (FNV-1a). */
+    clut_hash = 14695981039346656037ull;
+    for (int i = 0; i < entries; i++)
+        clut_hash = (clut_hash ^ gs.clut[i]) * 1099511628211ull;
 }
 
 /* ---- Image transfers ---------------------------------------------------- */
@@ -186,6 +193,8 @@ static void trx_start(void)
         trx.x = trx.y = 0;
         trx.pending_n = 0;
         gs_stats.uploads++;
+        if (gs_gpu_on)
+            gs_gpu_sync(trx.psm, trx.bp, trx.bw, trx.x0, trx.y0, trx.x0 + trx.w - 1, trx.y0 + trx.h - 1);
         /* Primitives still waiting that read or draw this memory are drawn
          * before it changes. */
         if (trx.x0 + trx.w > 2048 || trx.y0 + trx.h > 2048 ||
@@ -201,6 +210,11 @@ static void trx_start(void)
         int dx = BITS(gs.trxpos, 32, 11), dy = BITS(gs.trxpos, 48, 11);
         int w = BITS(gs.trxreg, 0, 12), h = BITS(gs.trxreg, 32, 12);
         static uint32_t tmp[2048 * 64];
+
+        if (gs_gpu_on) {
+            gs_gpu_sync(spsm, sbp, sbw, sx, sy, sx + w - 1, sy + h - 1);
+            gs_gpu_sync(dpsm, dbp, dbw, dx, dy, dx + w - 1, dy + h - 1);
+        }
 
         if (sx + w > 2048 || sy + h > 2048 || dx + w > 2048 || dy + h > 2048 ||
             batch_touches(spsm, sbp, sbw, sx, sy, sx + w - 1, sy + h - 1, 0) ||
@@ -275,41 +289,7 @@ static void trx_bytes(const uint8_t *q, int len)
 
 /* ---- Drawing state ------------------------------------------------------ */
 
-/* Register fields decoded once per primitive. */
-typedef struct {
-    int ctx;
-    int tme, fge, abe, fst, iip;
-    int fpsm, zpsm;
-    uint32_t fbp, fbw, zbp, fbmsk, fbmsk16;
-    int zmsk;
-    int scax0, scax1, scay0, scay1;
-    int tfx, tcc;
-    int fba, colclamp, pabe;
-    int fr, fg, fb_; /* fog colour */
-
-    /* Tests */
-    int ate, atst, aref, afail;
-    int date, datm;
-    int zte, ztst;
-    uint32_t zmax;
-
-    /* Blending: (A - B) * C >> 7 + D */
-    int sa, sb, sc, sd, fix;
-    int blend_mix; /* (Cs - Cd) * As + Cd */
-
-    /* Texture */
-    int tpsm, cpsm, csa, bilinear;
-    uint32_t tbp, tbw;
-    int tw, th;
-    int wms, wmt, minu, maxu, minv, maxv;
-    int ta0, ta1, aem;
-
-    int feedback; /* the texture overlaps the frame buffer */
-    int key;      /* K_* flags of the specialised pixel loop to use */
-
-    struct TexEntry *tex;  /* decoded texture (NULL: read GS memory) */
-    const uint32_t *clut;  /* CLUT of indexed textures */
-} DrawState;
+/* Register fields decoded once per primitive: DrawState, in gs_priv.h. */
 
 /* The pixel loops are compiled once per combination of these settings, so
  * the most common cases run without testing them for every pixel. */
@@ -409,6 +389,12 @@ static void setup_draw(void)
         uint32_t f0 = ds.fbp * 256, f1 = f0 + GS_ROW64(ds.fbw) * 64 * 4 * (ds.scay1 + 1);
         uint32_t t0 = ds.tbp * 256, t1 = t0 + GS_ROW64(ds.tbw) * 64 * 4 * ds.th;
         ds.feedback = t0 < f1 && f0 < t1;
+    }
+    ds.clut_hash = clut_hash;
+    if (gs_gpu_on) {
+        ds.tex = NULL;
+        ds.clut = gs.clut;
+        return;
     }
     tc_bind();
 }
@@ -594,6 +580,13 @@ static void tc_decode_block(const DrawState *s, TexEntry *t, int bx, int by)
             row[x] = texel_raw(s, x, y);
     }
     __atomic_store_n(&t->valid[by * t->bw + bx], 1, __ATOMIC_RELEASE);
+}
+
+void gs_decode_texture(const DrawState *s, uint32_t *dst, int w, int h)
+{
+    for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+            dst[y * w + x] = texel_raw(s, x, y);
 }
 
 static inline uint32_t fetch(const DrawState *s, int u, int v)
@@ -1400,7 +1393,9 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
         }
         gs_stats.prims++;
         changes++;
-        switch (type) {
+        if (gs_gpu_on)
+            gs_gpu_prim(&ds, type, gs.queue);
+        else switch (type) {
         case 0:
             batch_flush();
             draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v);
@@ -1629,6 +1624,7 @@ void gs_dump_vblank(void)
         fprintf(stderr, "gs: saved %s\n", dump_path);
         dump_path[0] = 0;
     } else if (dump_path[0] != 0) {
+        gs_gpu_sync_all(); /* what the GPU drew, into the memory dumped */
         dump_file = fopen(dump_path, "wb");
         if (dump_file == NULL) {
             fprintf(stderr, "gs: cannot write %s\n", dump_path);
@@ -1669,6 +1665,7 @@ int gs_replay(const char *path)
         changes++;
         tc_flush();
         gs_mark_all();
+        gs_gpu_reset();
         while (fread(&type, 4, 1, f) == 1) {
             if (type == DUMP_GIF) {
                 if (fread(&count, 4, 1, f) != 1)
@@ -1811,25 +1808,37 @@ void gs_set_display(uint64_t dispfb, uint64_t display)
     changes++;
 }
 
-int gs_read_display(uint32_t *dst, int *w, int *h)
+void gs_display_area(uint32_t *fbp, uint32_t *fbw, int *psm, int *w, int *h)
 {
-    batch_flush();
-    uint32_t fbp = BITS(gs.dispfb, 0, 9) * 32;
-    uint32_t fbw = BITS(gs.dispfb, 9, 6);
-    int psm = BITS(gs.dispfb, 15, 5);
     int magh = BITS(gs.display, 23, 4) + 1;
     int width = (BITS(gs.display, 32, 12) + 1) / magh;
     int height = BITS(gs.display, 44, 11) + 1;
 
-    if (fbw == 0)
-        fbw = 10;
+    *fbp = BITS(gs.dispfb, 0, 9) * 32;
+    *fbw = BITS(gs.dispfb, 9, 6);
+    *psm = BITS(gs.dispfb, 15, 5);
+    if (*fbw == 0)
+        *fbw = 10;
     if (width <= 1 || width > GS_DISPLAY_MAX_W)
         width = 640;
     if (height <= 1 || height > GS_DISPLAY_MAX_H)
         height = 480;
     *w = width;
     *h = height;
-    if (changes == shown_changes)
+}
+
+int gs_read_display(uint32_t *dst, int *w, int *h)
+{
+    uint32_t fbp, fbw;
+    int psm, width, height;
+
+    batch_flush();
+    gs_display_area(&fbp, &fbw, &psm, &width, &height);
+    *w = width;
+    *h = height;
+    if (gs_gpu_on) /* only for screenshots: always converted */
+        gs_gpu_sync(psm, fbp, fbw, 0, 0, width - 1, height - 1);
+    else if (changes == shown_changes)
         return 0;
     shown_changes = changes;
     if (psm == GS_PSMCT32 || psm == GS_PSMCT24) {
@@ -1859,6 +1868,7 @@ void gs_reset(void)
     changes++;
     tc_flush();
     gs_mark_all();
+    gs_gpu_reset();
     gs.q = 1.0f;
     gs.prmodecont = 1;
     gs.colclamp = 1;
@@ -1872,12 +1882,17 @@ void gs_debug_status(char *buf, int size)
     GsStats st = gs_stats;
 
     memset(&gs_stats, 0, sizeof(gs_stats));
-    for (int y = 0; y < 480; y += 4)
+    for (int y = 0; y < 480 && !gs_gpu_on; y += 4)
         for (int x = 0; x < 640; x += 4)
             lit += (gs_read_pixel_nosync(psm, fbp * 32, fbw ? fbw : 10, x, y) & 0xffffff) != 0;
-    snprintf(buf, size, "gs: %u ms, %u chains, %u uploads, %u prims, %u pixels | display page %u, "
-             "width %u, %d%% non-black | draw page %u",
-             (unsigned)(st.busy_ns / 1000000), st.chains, st.uploads, st.prims, st.pixels, fbp,
-             fbw * 64, lit * 100 / (160 * 120),
-             BITS(gs.frame[0], 0, 9));
+    if (gs_gpu_on) /* GS memory is not up to date: the pictures are on the GPU */
+        snprintf(buf, size, "gs: %u ms, %u chains, %u uploads, %u prims (gpu) | display page %u, width %u | "
+                 "draw page %u", (unsigned)(st.busy_ns / 1000000), st.chains, st.uploads, st.prims, fbp, fbw * 64,
+                 BITS(gs.frame[0], 0, 9));
+    else
+        snprintf(buf, size, "gs: %u ms, %u chains, %u uploads, %u prims, %u pixels | display page %u, "
+                 "width %u, %d%% non-black | draw page %u",
+                 (unsigned)(st.busy_ns / 1000000), st.chains, st.uploads, st.prims, st.pixels, fbp,
+                 fbw * 64, lit * 100 / (160 * 120),
+                 BITS(gs.frame[0], 0, 9));
 }

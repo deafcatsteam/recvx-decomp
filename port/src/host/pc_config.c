@@ -48,6 +48,11 @@ static const char template_text[] =
     "; sharp : pixels nets ; smooth : image lissée\n"
     ";filter = smooth\n"
     "\n"
+    "; Dessin par la carte graphique (OpenGL 3.3) au lieu du processeur, et\n"
+    "; sa résolution : 1 = celle de la PS2, 2 = deux fois plus fine... jusqu'à 4\n"
+    ";renderer = opengl\n"
+    ";upscale = 2\n"
+    "\n"
     "; Son et vibration de la manette\n"
     ";sound = no\n"
     ";vibration = no\n"
@@ -179,7 +184,8 @@ static void apply(const char *name, const char *value)
 static int known(const char *name)
 {
     static const char *const names[] = {
-        "iso", "saves", "movies", "fullscreen", "window", "filter", "sound", "vibration",
+        "iso", "saves", "movies", "fullscreen", "window", "filter", "sound", "vibration", "renderer",
+        "upscale",
         /* the keys, see key_actions in pc_window.c */
         "key_up", "key_down", "key_left", "key_right", "key_stick_up", "key_stick_down",
         "key_stick_left", "key_stick_right", "key_cross", "key_circle", "key_square",

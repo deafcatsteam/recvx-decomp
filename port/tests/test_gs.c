@@ -2,13 +2,60 @@
  * Checks the software GS: image uploads, CLUT textures, sprites, alpha
  * blending, triangles and DMA chains, through GIF packets built like the
  * game builds them.
+ *
+ * With CVX_TEST_GPU=n, the same checks run on the GPU renderer (gs_gpu.c)
+ * at n times the resolution, in an OpenGL context without a window (EGL,
+ * as Mesa gives it on Linux). Without one the test is skipped (77).
  */
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "../src/gs/gs.h"
+#include "../src/gs/gs_gpu.h"
 #include "../src/gs/gs_mem.h"
+
+#ifndef _WIN32
+#include <dlfcn.h>
+
+static void *(*egl_proc)(const char *);
+
+static void *get_proc(const char *name)
+{
+    return egl_proc(name);
+}
+
+/* An OpenGL 3.3 core context with no surface, current on this thread. */
+static int open_gl(void)
+{
+    void *egl = dlopen("libEGL.so.1", RTLD_NOW);
+    void *dpy, *ctx;
+    int major, minor;
+    static const int attrs[] = { 0x3098, 3, 0x30FB, 3, 0x30FD, 1, 0x3038 }; /* 3.3 core */
+
+    if (egl == NULL)
+        return 0;
+    egl_proc = (void *(*)(const char *))dlsym(egl, "eglGetProcAddress");
+    if (egl_proc == NULL)
+        return 0;
+    void *(*get_display)(unsigned, void *, const int *) =
+        (void *(*)(unsigned, void *, const int *))egl_proc("eglGetPlatformDisplayEXT");
+    unsigned (*init)(void *, int *, int *) = (unsigned (*)(void *, int *, int *))egl_proc("eglInitialize");
+    unsigned (*bind)(unsigned) = (unsigned (*)(unsigned))egl_proc("eglBindAPI");
+    void *(*create)(void *, void *, void *, const int *) =
+        (void *(*)(void *, void *, void *, const int *))egl_proc("eglCreateContext");
+    unsigned (*make_current)(void *, void *, void *, void *) =
+        (unsigned (*)(void *, void *, void *, void *))egl_proc("eglMakeCurrent");
+    if (get_display == NULL || init == NULL || bind == NULL || create == NULL || make_current == NULL)
+        return 0;
+    dpy = get_display(0x31DD, NULL, NULL); /* EGL_PLATFORM_SURFACELESS_MESA */
+    if (dpy == NULL || !init(dpy, &major, &minor) || !bind(0x30A2)) /* EGL_OPENGL_API */
+        return 0;
+    ctx = create(dpy, NULL, NULL, attrs);
+    return ctx != NULL && make_current(dpy, NULL, NULL, ctx);
+}
+#endif
 
 static int failures;
 
@@ -403,6 +450,18 @@ static void test_dump_replay(void)
 
 int main(void)
 {
+    const char *gpu = getenv("CVX_TEST_GPU");
+
+    if (gpu != NULL) {
+#ifndef _WIN32
+        if (!open_gl() || !gs_gpu_init(get_proc, atoi(gpu))) {
+            printf("test_gs: no OpenGL 3.3 here, skipped\n");
+            return 77;
+        }
+#else
+        return 77;
+#endif
+    }
     gs_reset();
     test_upload_ct32();
     test_layout_roundtrip();

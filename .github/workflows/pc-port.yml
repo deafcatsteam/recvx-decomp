@@ -24,8 +24,12 @@ jobs:
 
       - name: Install toolchains
         run: |
+          sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y gcc-multilib gcc-mingw-w64-i686 g++-mingw-w64-i686 cmake ninja-build nasm
+          # Mesa's OpenGL drawn by the CPU (llvmpipe), without a screen, so
+          # the GPU renderer's tests run too.
+          sudo apt-get install -y libegl1:i386 libegl-mesa0:i386 libgl1-mesa-dri:i386
 
       - name: Build and test (Linux, 32-bit)
         run: |

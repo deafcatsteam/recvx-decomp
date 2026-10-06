@@ -6,13 +6,15 @@
  * frame buffer the GS displays (port/src/gs) at every V-blank. F11 toggles
  * fullscreen, F12 saves a screenshot, F10 dumps a frame of the GS (see
  * gs_dump_frame), Tab held fast-forwards. The keys, the window's size and
- * a few other things can be changed in cvx.ini (see pc_config.c).
+ * a few other things can be changed in cvx.ini (see pc_config.c), as well
+ * as the renderer: the software GS, or the GPU one (gs_gpu.c, OpenGL).
  *
  * Without SDL2, or with CVX_HEADLESS set, the game runs without a window.
  */
 #include "pc_window.h"
 
 #include "../gs/gs.h"
+#include "../gs/gs_gpu.h"
 #include "../host/pc_host.h"
 
 #include <stdint.h>
@@ -40,7 +42,8 @@ extern void (*pc_frame_hook)(void);
 #include <SDL.h>
 
 static SDL_Window *window;
-static SDL_Renderer *renderer;
+static SDL_Renderer *renderer; /* software GS: its picture is shown through SDL */
+static SDL_GLContext gl;       /* GPU renderer (renderer = opengl): the GS draws with OpenGL */
 
 /* Every controller plugged in drives the game's controller 1, so one can
  * be swapped for another at any time. SDL knows most controllers (Xbox,
@@ -341,6 +344,9 @@ static void save_screenshot(void)
 {
     static int count;
     char name[64];
+
+    if (gl != NULL) /* the picture is on the GPU: copied back at the PS2's size */
+        gs_read_display(pixels, &screen_w, &screen_h);
     SDL_Surface *shot = SDL_CreateRGBSurfaceWithFormatFrom(pixels, screen_w, screen_h, 32, screen_w * 4,
                                                            SDL_PIXELFORMAT_RGBA32);
 
@@ -382,6 +388,32 @@ static void draw_overlay(void)
     dst.w = pc_overlay.cw;
     dst.h = pc_overlay.ch * 480 / 448;
     SDL_RenderCopy(renderer, overlay, NULL, &dst);
+}
+
+/* The GPU renderer's picture, 4:3 in the middle of the window, and over it
+ * a replacement movie's. */
+static void present_gpu(void)
+{
+    int fw, fh, w, h, x, y;
+
+    SDL_GL_GetDrawableSize(window, &fw, &fh);
+    w = fw;
+    h = fw * 3 / 4;
+    if (h > fh) {
+        h = fh;
+        w = fh * 4 / 3;
+    }
+    x = (fw - w) / 2;
+    y = (fh - h) / 2;
+    gs_gpu_present(fw, fh, x, y, w, h, smooth);
+    if (pc_overlay.rgba != NULL) {
+        int changed = overlay_serial != pc_overlay.serial;
+        overlay_serial = pc_overlay.serial;
+        gs_gpu_draw_picture(pc_overlay.rgba, pc_overlay.w, pc_overlay.h, changed, fw, fh,
+                            x + pc_overlay.x * w / 640, y + pc_overlay.y * h / 448, pc_overlay.cw * w / 640,
+                            pc_overlay.ch * h / 448);
+    }
+    SDL_GL_SwapWindow(window);
 }
 
 static void frame(void)
@@ -429,6 +461,10 @@ static void frame(void)
     pc_turbo = turbo;
     if (pc_turbo && (++skipped & 7) != 0)
         return;
+    if (gl != NULL) {
+        present_gpu();
+        return;
+    }
 
     int w, h;
     if (gs_read_display(pixels, &w, &h)) {
@@ -527,6 +563,51 @@ static Uint32 window_settings(int *w, int *h)
     return pc_config_yes("fullscreen", 0) ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0;
 }
 
+/* renderer = opengl in cvx.ini: a window with an OpenGL 3.3 context, in
+ * which the GS draws (gs_gpu.c), upscale times the PS2's resolution.
+ * Returns 0, with nothing left open, when it is not asked for or does not
+ * work: the software GS is then used. */
+static int open_gpu_window(int w, int h, Uint32 flags)
+{
+    const char *r = pc_config_get("renderer"), *up = pc_config_get("upscale");
+    int scale = 1;
+
+    if (r == NULL || r[0] == 0 || SDL_strcasecmp(r, "software") == 0)
+        return 0;
+    if (SDL_strcasecmp(r, "opengl") != 0) {
+        printf("config: renderer should be software or opengl, not '%s'\n", r);
+        return 0;
+    }
+    if (up != NULL && up[0] != 0) {
+        scale = atoi(up);
+        if (scale < 1 || scale > 4) {
+            printf("config: upscale should be 1, 2, 3 or 4, not '%s'\n", up);
+            scale = scale < 1 ? 1 : 4;
+        }
+    }
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    window = SDL_CreateWindow("Resident Evil Code: Veronica X", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                              w, h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | flags);
+    if (window != NULL)
+        gl = SDL_GL_CreateContext(window);
+    if (gl == NULL || SDL_GL_MakeCurrent(window, gl) != 0 || !gs_gpu_init(SDL_GL_GetProcAddress, scale)) {
+        printf("window: no OpenGL renderer (%s), the software one draws\n",
+               gl == NULL ? SDL_GetError() : "see above");
+        if (gl != NULL)
+            SDL_GL_DeleteContext(gl);
+        if (window != NULL)
+            SDL_DestroyWindow(window);
+        gl = NULL;
+        window = NULL;
+        return 0;
+    }
+    SDL_GL_SetSwapInterval(0); /* the game paces itself */
+    return 1;
+}
+
 int pc_window_open(void)
 {
     Uint32 flags;
@@ -545,21 +626,23 @@ int pc_window_open(void)
         return 0;
     }
     flags = window_settings(&w, &h);
-    window = SDL_CreateWindow("Resident Evil Code: Veronica X", SDL_WINDOWPOS_CENTERED,
-                              SDL_WINDOWPOS_CENTERED, w, h, SDL_WINDOW_RESIZABLE | flags);
-    if (window == NULL) {
-        fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
-        SDL_Quit();
-        return 0;
-    }
-    renderer = SDL_CreateRenderer(window, -1, 0);
-    if (renderer != NULL)
-        SDL_RenderSetLogicalSize(renderer, 640, 480); /* the PS2 picture is 4:3 */
-    if (renderer == NULL) {
-        fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
-        SDL_DestroyWindow(window);
-        SDL_Quit();
-        return 0;
+    if (!open_gpu_window(w, h, flags)) {
+        window = SDL_CreateWindow("Resident Evil Code: Veronica X", SDL_WINDOWPOS_CENTERED,
+                                  SDL_WINDOWPOS_CENTERED, w, h, SDL_WINDOW_RESIZABLE | flags);
+        if (window == NULL) {
+            fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
+            SDL_Quit();
+            return 0;
+        }
+        renderer = SDL_CreateRenderer(window, -1, 0);
+        if (renderer != NULL)
+            SDL_RenderSetLogicalSize(renderer, 640, 480); /* the PS2 picture is 4:3 */
+        if (renderer == NULL) {
+            fprintf(stderr, "window: %s, running without a window\n", SDL_GetError());
+            SDL_DestroyWindow(window);
+            SDL_Quit();
+            return 0;
+        }
     }
     printf("window: SDL %s video\n", SDL_GetCurrentVideoDriver());
     bind_keys();

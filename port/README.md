@@ -26,7 +26,8 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Rendu 3D par le GS logiciel : sommets, éclairage, découpage traduits du VU0 (`src/game/pc_render3d.c`), testé ; reste à valider sur le jeu
 - [x] Skinning (`npCalcSkin`) et morphing (`npTransform`), testés
 - [x] Animation des visages (`_fmCnkCalc*`) : muscles, mâchoire, langue et yeux
-- [ ] Rendu 3D par la carte graphique (OpenGL, puis D3D9 pour RTX Remix), voir `ROADMAP.md`
+- [x] Rendu par la carte graphique (OpenGL 3.3, `renderer = opengl` dans `cvx.ini`), jusqu'à 4 fois la résolution de la PS2 ; comparé pixel par pixel au rendu logiciel dans les tests ; reste à valider sur le jeu
+- [ ] Rendu 3D natif (la vraie scène 3D, pour D3D9 et RTX Remix), voir `ROADMAP.md`
 - [x] Musique et voix : flux ADX décodés (`src/audio/pc_adx.c`), testés sur des ADX synthétiques ; reste à valider sur le jeu
 - [x] Bruitages et ambiances : remplaçant du pilote IOP `TSNDDRV` qui joue les banques Sony HD/BD et les séquences SQ (adapté de recvx-vita), testé ; reste à valider sur le jeu
 - [x] Réverbération des pièces (`SdrSetRev`) : l'écho « Hall » du SPU2 refait en logiciel (`src/audio/pc_spu2rev.c`), testé ; reste à valider sur le jeu
@@ -68,6 +69,8 @@ relance le jeu :
 | `fullscreen = yes` | Démarrer en plein écran (F11 change toujours) |
 | `window = 1280x960` | Taille de la fenêtre au démarrage |
 | `filter = smooth` | Image lissée quand elle est agrandie (`sharp`, par défaut : pixels nets) |
+| `renderer = opengl` | Dessin par la carte graphique au lieu du processeur (il faut OpenGL 3.3, présent sur toute carte depuis 2010 ; sinon le jeu reprend le dessin par le processeur et le dit dans `cvx_log.txt`) |
+| `upscale = 2` | Avec `renderer = opengl` : résolution 2, 3 ou 4 fois celle de la PS2 (1 par défaut, l'image exacte de la PS2) |
 | `sound = no` | Pas de son |
 | `vibration = no` | Pas de vibration de la manette |
 | `key_cross = Space` | Touches du clavier, une ligne par bouton (`key_up`, `key_stick_left`, `key_l1`, `key_start`, `key_fast_forward`…, toutes listées dans le fichier). Plusieurs touches : `Space, Return` ; rien après le `=` : aucune touche |

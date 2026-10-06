@@ -120,6 +120,7 @@ add_library(cvx_host STATIC
     port/src/gs/gs.c
     port/src/gs/gs_mem.c
     port/src/gs/gs_threads.c
+    port/src/gs/gs_gpu.c
 )
 target_link_libraries(cvx_host PUBLIC m)
 if(NOT WIN32)
@@ -288,7 +289,7 @@ if(CVX_WITH_SDL)
 endif()
 
 add_executable(test_gs port/tests/test_gs.c)
-target_link_libraries(test_gs PRIVATE cvx_host)
+target_link_libraries(test_gs PRIVATE cvx_host ${CMAKE_DL_LIBS})
 add_test(NAME gs COMMAND test_gs)
 # The same checks with primitives drawn one by one, and gathered in batches
 # drawn by four threads (see "Batches" in port/src/gs/gs.c).
@@ -296,6 +297,19 @@ add_test(NAME gs_single_thread COMMAND test_gs)
 set_tests_properties(gs_single_thread PROPERTIES ENVIRONMENT CVX_GS_THREADS=1)
 add_test(NAME gs_four_threads COMMAND test_gs)
 set_tests_properties(gs_four_threads PROPERTIES ENVIRONMENT CVX_GS_THREADS=4)
+# The same checks on the GPU renderer, at the PS2's resolution and twice it
+# (skipped where there is no OpenGL without a window, see test_gs.c).
+add_test(NAME gs_gpu COMMAND test_gs)
+set_tests_properties(gs_gpu PROPERTIES ENVIRONMENT CVX_TEST_GPU=1 SKIP_RETURN_CODE 77)
+add_test(NAME gs_gpu_scaled COMMAND test_gs)
+set_tests_properties(gs_gpu_scaled PROPERTIES ENVIRONMENT CVX_TEST_GPU=2 SKIP_RETURN_CODE 77)
+
+add_executable(test_gs_gpu port/tests/test_gs_gpu.c)
+target_link_libraries(test_gs_gpu PRIVATE cvx_host ${CMAKE_DL_LIBS})
+add_test(NAME gs_gpu_compare COMMAND test_gs_gpu)
+set_tests_properties(gs_gpu_compare PROPERTIES SKIP_RETURN_CODE 77)
+add_test(NAME gs_gpu_compare_exact COMMAND test_gs_gpu)
+set_tests_properties(gs_gpu_compare_exact PROPERTIES ENVIRONMENT CVX_GPU_EXACT=1 SKIP_RETURN_CODE 77)
 
 # Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
 add_executable(gs_replay port/tools/gs_replay.c)
