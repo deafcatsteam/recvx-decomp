@@ -14,4 +14,7 @@ typedef void (*GsBandFn)(void *ctx, int y0, int y1);
  * number of threads (1 turns this off). */
 void gs_parallel(GsBandFn fn, void *ctx, int begin, int end, int work);
 
+/* Number of threads drawing (1 when the work is not split). */
+int gs_thread_count(void);
+
 #endif

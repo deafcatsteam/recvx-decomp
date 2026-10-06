@@ -61,6 +61,7 @@ Variables utiles :
 | `CVX_QUIET` | Pas de ligne d'état chaque seconde dans la console |
 | `CVX_NO_LOG` | Ne pas écrire `cvx_log.txt` |
 | `CVX_GS_THREADS` | Nombre de cœurs pour le dessin (par défaut : tous, 8 au plus) |
+| `CVX_GS_NO_BATCH` | Dessine chaque triangle à part au lieu de les regrouper (plus lent ; pour vérifier si un défaut d'image vient du dessin en parallèle) |
 | `CVX_NO_AUDIO` | Pas de son |
 | `CVX_MOVIES` | Dossier des vidéos de remplacement (par défaut `movies`, puis `MOVIE`) |
 | `CVX_SAVES` | Dossier de la carte mémoire (par défaut `saves`) |

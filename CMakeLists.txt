@@ -288,6 +288,12 @@ endif()
 add_executable(test_gs port/tests/test_gs.c)
 target_link_libraries(test_gs PRIVATE cvx_host)
 add_test(NAME gs COMMAND test_gs)
+# The same checks with primitives drawn one by one, and gathered in batches
+# drawn by four threads (see "Batches" in port/src/gs/gs.c).
+add_test(NAME gs_single_thread COMMAND test_gs)
+set_tests_properties(gs_single_thread PROPERTIES ENVIRONMENT CVX_GS_THREADS=1)
+add_test(NAME gs_four_threads COMMAND test_gs)
+set_tests_properties(gs_four_threads PROPERTIES ENVIRONMENT CVX_GS_THREADS=4)
 
 # Draws a GS frame dump from the game again (see port/tools/gs_replay.c).
 add_executable(gs_replay port/tools/gs_replay.c)

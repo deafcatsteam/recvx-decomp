@@ -64,6 +64,10 @@ static struct {
     int in_tag;
 } gif;
 
+/* Primitives waiting to be drawn (see "Batches"). */
+static int batch_touches(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, int reads);
+static void batch_flush(void);
+
 /* ---- Helpers ----------------------------------------------------------- */
 
 static int clamp255(int v)
@@ -123,6 +127,15 @@ static void load_clut(uint64_t tex0)
         return;
 
     clut_gen++; /* decoded indexed textures use the CLUT they were made with */
+    {
+        /* A CLUT drawn by primitives still waiting is read once they are. */
+        int cpsm_ = cpsm == 0 ? GS_PSMCT32 : cpsm;
+        uint32_t cbw = BITS(gs.texclut, 0, 6), cou = BITS(gs.texclut, 6, 6) * 16;
+        uint32_t cov = BITS(gs.texclut, 12, 10);
+        if (csm == 0 ? batch_touches(cpsm_, cbp, 1, 0, 0, 15, 15, 0)
+                     : batch_touches(cpsm_, cbp, cbw, cou, cov, cou + entries - 1, cov, 0))
+            batch_flush();
+    }
     if (csm == 0) {
         /* CSM1: 8x2 blocks of entries; for 256 colours, bits 3 and 4 of the
          * index are swapped in the 16x16 arrangement. */
@@ -136,14 +149,14 @@ static void load_clut(uint64_t tex0)
                 x = i & 7;
                 y = i >> 3;
             }
-            gs.clut[i] = gs_read_pixel(cpsm == 0 ? GS_PSMCT32 : cpsm, cbp, 1, x, y);
+            gs.clut[i] = gs_read_pixel_nosync(cpsm == 0 ? GS_PSMCT32 : cpsm, cbp, 1, x, y);
         }
     } else {
         /* CSM2: a plain row at TEXCLUT's offset. */
         uint32_t cbw = BITS(gs.texclut, 0, 6), cou = BITS(gs.texclut, 6, 6) * 16;
         uint32_t cov = BITS(gs.texclut, 12, 10);
         for (int i = 0; i < entries; i++)
-            gs.clut[i] = gs_read_pixel(cpsm == 0 ? GS_PSMCT32 : cpsm, cbp, cbw, cou + i, cov);
+            gs.clut[i] = gs_read_pixel_nosync(cpsm == 0 ? GS_PSMCT32 : cpsm, cbp, cbw, cou + i, cov);
     }
 }
 
@@ -159,6 +172,8 @@ static void trx_start(void)
     int dir = BITS(gs.trxdir, 0, 2);
 
     trx.active = 0;
+    if (dir != 0 && dir != 2)
+        batch_flush(); /* local -> host: reads what was drawn */
     if (dir == 0) {
         trx.active = 1;
         trx.psm = BITS(gs.bitbltbuf, 56, 6);
@@ -171,6 +186,12 @@ static void trx_start(void)
         trx.x = trx.y = 0;
         trx.pending_n = 0;
         gs_stats.uploads++;
+        /* Primitives still waiting that read or draw this memory are drawn
+         * before it changes. */
+        if (trx.x0 + trx.w > 2048 || trx.y0 + trx.h > 2048 ||
+            batch_touches(trx.psm, trx.bp, trx.bw, trx.x0, trx.y0, trx.x0 + trx.w - 1,
+                          trx.y0 + trx.h - 1, 1))
+            batch_flush();
     } else if (dir == 2) {
         /* Local -> local copy, through a temporary buffer. */
         int spsm = BITS(gs.bitbltbuf, 24, 6), dpsm = BITS(gs.bitbltbuf, 56, 6);
@@ -181,14 +202,19 @@ static void trx_start(void)
         int w = BITS(gs.trxreg, 0, 12), h = BITS(gs.trxreg, 32, 12);
         static uint32_t tmp[2048 * 64];
 
+        if (sx + w > 2048 || sy + h > 2048 || dx + w > 2048 || dy + h > 2048 ||
+            batch_touches(spsm, sbp, sbw, sx, sy, sx + w - 1, sy + h - 1, 0) ||
+            batch_touches(dpsm, dbp, dbw, dx, dy, dx + w - 1, dy + h - 1, 1))
+            batch_flush();
+
         for (int y0 = 0; y0 < h; y0 += 64) {
             int rows = h - y0 < 64 ? h - y0 : 64;
             for (int y = 0; y < rows; y++)
                 for (int x = 0; x < w && x < 2048; x++)
-                    tmp[y * 2048 + x] = gs_read_pixel(spsm, sbp, sbw, (sx + x) & 2047, (sy + y0 + y) & 2047);
+                    tmp[y * 2048 + x] = gs_read_pixel_nosync(spsm, sbp, sbw, (sx + x) & 2047, (sy + y0 + y) & 2047);
             for (int y = 0; y < rows; y++)
                 for (int x = 0; x < w && x < 2048; x++)
-                    gs_write_pixel(dpsm, dbp, dbw, (dx + x) & 2047, (dy + y0 + y) & 2047, tmp[y * 2048 + x]);
+                    gs_write_pixel_nosync(dpsm, dbp, dbw, (dx + x) & 2047, (dy + y0 + y) & 2047, tmp[y * 2048 + x]);
         }
     }
 }
@@ -197,7 +223,7 @@ static void trx_put(uint32_t v)
 {
     if (trx.y >= trx.h)
         return;
-    gs_write_pixel(trx.psm, trx.bp, trx.bw, (trx.x0 + trx.x) & 2047, (trx.y0 + trx.y) & 2047, v);
+    gs_write_pixel_nosync(trx.psm, trx.bp, trx.bw, (trx.x0 + trx.x) & 2047, (trx.y0 + trx.y) & 2047, v);
     if (++trx.x >= trx.w) {
         trx.x = 0;
         if (++trx.y >= trx.h)
@@ -280,6 +306,9 @@ typedef struct {
 
     int feedback; /* the texture overlaps the frame buffer */
     int key;      /* K_* flags of the specialised pixel loop to use */
+
+    struct TexEntry *tex;  /* decoded texture (NULL: read GS memory) */
+    const uint32_t *clut;  /* CLUT of indexed textures */
 } DrawState;
 
 /* The pixel loops are compiled once per combination of these settings, so
@@ -397,55 +426,55 @@ static inline int wrap_coord(int c, int size, int mode, int minv, int maxv)
 }
 
 /* A CT16 texel or CLUT entry with the TEXA alpha rules. */
-static inline uint32_t tex16(uint32_t c)
+static inline uint32_t tex16(const DrawState *s, uint32_t c)
 {
     uint32_t rgb = ((c & 31) << 3) | (((c >> 5) & 31) << 11) | (((c >> 10) & 31) << 19);
     int a;
 
     if (c & 0x8000)
-        a = ds.ta1;
+        a = s->ta1;
     else
-        a = (ds.aem && (c & 0x7fff) == 0) ? 0 : ds.ta0;
+        a = (s->aem && (c & 0x7fff) == 0) ? 0 : s->ta0;
     return rgb | ((uint32_t)a << 24);
 }
 
 /* Texel at wrapped coordinates (u, v), as RGBA. */
-static inline uint32_t texel_raw(int u, int v)
+static inline uint32_t texel_raw(const DrawState *s, int u, int v)
 {
     uint32_t c, idx;
 
-    switch (ds.tpsm) {
+    switch (s->tpsm) {
     case GS_PSMCT32:
-        return gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v));
+        return gs_rd32(gs_addr32(0, s->tbp, s->tbw, u, v));
     case GS_PSMCT24:
-        c = gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) & 0xffffff;
-        return c | ((uint32_t)((ds.aem && c == 0) ? 0 : ds.ta0) << 24);
+        c = gs_rd32(gs_addr32(0, s->tbp, s->tbw, u, v)) & 0xffffff;
+        return c | ((uint32_t)((s->aem && c == 0) ? 0 : s->ta0) << 24);
     case GS_PSMCT16:
-        return tex16(gs_rd16(gs_addr16(0, ds.tbp, ds.tbw, u, v)));
+        return tex16(s, gs_rd16(gs_addr16(0, s->tbp, s->tbw, u, v)));
     case GS_PSMCT16S:
-        return tex16(gs_rd16(gs_addr16(1, ds.tbp, ds.tbw, u, v)));
+        return tex16(s, gs_rd16(gs_addr16(1, s->tbp, s->tbw, u, v)));
     case GS_PSMT8:
-        idx = gs_vram[gs_addr8(ds.tbp, ds.tbw, u, v)];
+        idx = gs_vram[gs_addr8(s->tbp, s->tbw, u, v)];
         break;
     case GS_PSMT4: {
-        uint32_t n = gs_addr4(ds.tbp, ds.tbw, u, v);
-        idx = ((gs_vram[n >> 1] >> ((n & 1) * 4)) & 15) + ds.csa;
+        uint32_t n = gs_addr4(s->tbp, s->tbw, u, v);
+        idx = ((gs_vram[n >> 1] >> ((n & 1) * 4)) & 15) + s->csa;
         break;
     }
     case GS_PSMT8H:
-        idx = gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 24;
+        idx = gs_rd32(gs_addr32(0, s->tbp, s->tbw, u, v)) >> 24;
         break;
     case GS_PSMT4HL:
-        idx = ((gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 24) & 15) + ds.csa;
+        idx = ((gs_rd32(gs_addr32(0, s->tbp, s->tbw, u, v)) >> 24) & 15) + s->csa;
         break;
     case GS_PSMT4HH:
-        idx = (gs_rd32(gs_addr32(0, ds.tbp, ds.tbw, u, v)) >> 28) + ds.csa;
+        idx = (gs_rd32(gs_addr32(0, s->tbp, s->tbw, u, v)) >> 28) + s->csa;
         break;
     default:
-        return gs_read_pixel(ds.tpsm, ds.tbp, ds.tbw, u, v);
+        return gs_read_pixel_nosync(s->tpsm, s->tbp, s->tbw, u, v);
     }
-    c = gs.clut[idx & 511];
-    return ds.cpsm == 0 ? c : tex16(c);
+    c = s->clut[idx & 511];
+    return s->cpsm == 0 ? c : tex16(s, c);
 }
 
 /* Decoded textures. Each entry holds a texture as RGBA, decoded lazily by
@@ -457,7 +486,7 @@ static inline uint32_t texel_raw(int u, int v)
 #define TC_ENTRIES 48
 #define TC_MAX_TEXELS (1024 * 1024)
 
-typedef struct {
+typedef struct TexEntry {
     int used;
     uint64_t key, texa, clut;
     uint64_t stamp; /* gs_gen when the entry was (re)started */
@@ -466,17 +495,18 @@ typedef struct {
     uint32_t *texels;
     uint8_t *valid; /* per block */
     size_t cap;     /* texels allocated */
+    uint64_t batch; /* the batch of primitives that last used it */
+    uint32_t palette[512]; /* the CLUT it was made with */
 } TexEntry;
 
 static TexEntry tcache[TC_ENTRIES];
-static TexEntry *tcur; /* texture of the current primitive, or NULL */
 static uint64_t tc_clock;
 
 static void tc_flush(void)
 {
     for (int i = 0; i < TC_ENTRIES; i++)
         tcache[i].used = 0;
-    tcur = NULL;
+    ds.tex = NULL;
 }
 
 static void tc_restart(TexEntry *t)
@@ -486,6 +516,10 @@ static void tc_restart(TexEntry *t)
 }
 
 /* Picks the cache entry for the texture of the primitive being set up. */
+static int batch_uses(const TexEntry *t);
+static int batch_touches(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, int reads);
+static void batch_flush(void);
+
 static void tc_bind(void)
 {
     uint64_t tex0 = gs.tex0[ds.ctx], key, texa, clut;
@@ -494,10 +528,14 @@ static void tc_bind(void)
     int w = ds.tw < 8 ? 8 : ds.tw, h = ds.th < 8 ? 8 : ds.th;
     TexEntry *t = NULL, *lru = &tcache[0];
 
-    tcur = NULL;
+    ds.tex = NULL;
+    ds.clut = gs.clut;
     /* A texture read from the picture being drawn is read as it changes. */
     if (!ds.tme || ds.feedback || (size_t)w * h > TC_MAX_TEXELS)
         return;
+    /* Drawn by primitives still waiting: draw them before reading it. */
+    if (batch_touches(ds.tpsm, ds.tbp, ds.tbw, 0, 0, w - 1, h - 1, 0))
+        batch_flush();
     key = tex0 & ((1ull << 34) - 1);                 /* TBP, TBW, PSM, TW, TH */
     if (indexed)
         key |= tex0 & (0x3full << 51) & ~(1ull << 55); /* CPSM, CSA */
@@ -515,6 +553,8 @@ static void tc_bind(void)
     }
     if (t == NULL) {
         t = lru;
+        if (batch_uses(t))
+            batch_flush(); /* it is about to hold another texture */
         if (t->cap < (size_t)w * h) {
             free(t->texels);
             free(t->valid);
@@ -533,49 +573,54 @@ static void tc_bind(void)
         t->w = w;
         t->h = h;
         t->bw = w / 8;
+        if (indexed)
+            memcpy(t->palette, gs.clut, sizeof(t->palette));
         tc_restart(t);
     } else if (gs_pages_newer(ds.tpsm, ds.tbp, ds.tbw, 0, 0, w - 1, h - 1, t->stamp)) {
+        if (batch_uses(t))
+            batch_flush();
         tc_restart(t);
     }
     t->last_use = ++tc_clock;
-    tcur = t;
+    ds.tex = t;
+    ds.clut = t->palette;
 }
 
-static void tc_decode_block(TexEntry *t, int bx, int by)
+static void tc_decode_block(const DrawState *s, TexEntry *t, int bx, int by)
 {
     for (int y = by * 8; y < by * 8 + 8; y++) {
         uint32_t *row = t->texels + (size_t)y * t->w;
         for (int x = bx * 8; x < bx * 8 + 8; x++)
-            row[x] = texel_raw(x, y);
+            row[x] = texel_raw(s, x, y);
     }
     __atomic_store_n(&t->valid[by * t->bw + bx], 1, __ATOMIC_RELEASE);
 }
 
-static inline uint32_t fetch(int u, int v)
+static inline uint32_t fetch(const DrawState *s, int u, int v)
 {
-    const TexEntry *t = tcur;
+    const TexEntry *t = s->tex;
 
-    u = wrap_coord(u, ds.tw, ds.wms, ds.minu, ds.maxu) & 2047;
-    v = wrap_coord(v, ds.th, ds.wmt, ds.minv, ds.maxv) & 2047;
+    u = wrap_coord(u, s->tw, s->wms, s->minu, s->maxu) & 2047;
+    v = wrap_coord(v, s->th, s->wmt, s->minv, s->maxv) & 2047;
     if (t != NULL && u < t->w && v < t->h) {
         if (!__atomic_load_n(&t->valid[(v >> 3) * t->bw + (u >> 3)], __ATOMIC_ACQUIRE))
-            tc_decode_block((TexEntry *)t, u >> 3, v >> 3);
+            tc_decode_block(s, (TexEntry *)t, u >> 3, v >> 3);
         return t->texels[v * t->w + u];
     }
-    return texel_raw(u, v);
+    return texel_raw(s, u, v);
 }
 
-static ALWAYS_INLINE uint32_t sample(int k, int u16, int v16)
+static ALWAYS_INLINE uint32_t sample(const DrawState *s, int k, int u16, int v16)
 {
     if (!(k & K_BIL)) /* MMAG: nearest */
-        return fetch(u16 >> 4, v16 >> 4);
+        return fetch(s, u16 >> 4, v16 >> 4);
 
     /* Bilinear: texel centres are at +0.5. Red/blue and green/alpha are
      * weighted two at a time (the weights add up to 256). */
     int us = u16 - 8, vs = v16 - 8;
     int u0 = us >> 4, v0 = vs >> 4, fu = us & 15, fv = vs & 15;
-    uint32_t c00 = fetch(u0, v0), c10 = fetch(u0 + 1, v0);
-    uint32_t c01 = fetch(u0, v0 + 1), c11 = fetch(u0 + 1, v0 + 1);
+    uint32_t c00 = fetch(s, u0, v0), c10 = fetch(s, u0 + 1, v0);
+    uint32_t c01 = fetch(s, u0, v0 + 1), c11 = fetch(s, u0 + 1, v0 + 1);
     uint32_t w00 = (16 - fu) * (16 - fv), w10 = fu * (16 - fv), w01 = (16 - fu) * fv, w11 = fu * fv;
     uint32_t rb = (c00 & 0xff00ff) * w00 + (c10 & 0xff00ff) * w10 +
                   (c01 & 0xff00ff) * w01 + (c11 & 0xff00ff) * w11;
@@ -601,53 +646,53 @@ static inline int compare(int method, int a, int ref)
 }
 
 /* Frame buffer address of (x, y) and its value as RGBA. */
-static inline uint32_t frame_addr(int x, int y)
+static inline uint32_t frame_addr(const DrawState *s, int x, int y)
 {
-    switch (ds.fpsm) {
-    case GS_PSMCT16: return gs_addr16(0, ds.fbp, ds.fbw, x, y);
-    case GS_PSMCT16S: return gs_addr16(1, ds.fbp, ds.fbw, x, y);
-    case GS_PSMZ16: return gs_addr16(2, ds.fbp, ds.fbw, x, y);
-    case GS_PSMZ16S: return gs_addr16(3, ds.fbp, ds.fbw, x, y);
-    case GS_PSMZ32: case GS_PSMZ24: return gs_addr32(1, ds.fbp, ds.fbw, x, y);
-    default: return gs_addr32(0, ds.fbp, ds.fbw, x, y);
+    switch (s->fpsm) {
+    case GS_PSMCT16: return gs_addr16(0, s->fbp, s->fbw, x, y);
+    case GS_PSMCT16S: return gs_addr16(1, s->fbp, s->fbw, x, y);
+    case GS_PSMZ16: return gs_addr16(2, s->fbp, s->fbw, x, y);
+    case GS_PSMZ16S: return gs_addr16(3, s->fbp, s->fbw, x, y);
+    case GS_PSMZ32: case GS_PSMZ24: return gs_addr32(1, s->fbp, s->fbw, x, y);
+    default: return gs_addr32(0, s->fbp, s->fbw, x, y);
     }
 }
 
-static inline int frame_is16(void)
+static inline int frame_is16(const DrawState *s)
 {
-    return (ds.fpsm & 2) != 0; /* CT16, CT16S, Z16, Z16S */
+    return (s->fpsm & 2) != 0; /* CT16, CT16S, Z16, Z16S */
 }
 
-static inline uint32_t z_addr(int x, int y)
+static inline uint32_t z_addr(const DrawState *s, int x, int y)
 {
-    switch (ds.zpsm) {
-    case GS_PSMZ16: return gs_addr16(2, ds.zbp, ds.fbw, x, y);
-    case GS_PSMZ16S: return gs_addr16(3, ds.zbp, ds.fbw, x, y);
-    default: return gs_addr32(1, ds.zbp, ds.fbw, x, y);
+    switch (s->zpsm) {
+    case GS_PSMZ16: return gs_addr16(2, s->zbp, s->fbw, x, y);
+    case GS_PSMZ16S: return gs_addr16(3, s->zbp, s->fbw, x, y);
+    default: return gs_addr32(1, s->zbp, s->fbw, x, y);
     }
 }
 
 /* Shades and writes one pixel inside the scissor area, with the settings
  * of key k. Colour components are 0..255; u, v are texel coordinates in
  * 1/16. */
-static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, int b, int a,
+static ALWAYS_INLINE void shade(const DrawState *s, int k, int x, int y, uint32_t z, int r, int g, int b, int a,
                                 int f, int u, int v)
 {
-    int write_rgb = 1, write_a = 1, write_z = !ds.zmsk;
+    int write_rgb = 1, write_a = 1, write_z = !s->zmsk;
 
     /* Depth test first: a hidden pixel needs no texture lookup (the tests
      * only decide what is written, so their order does not matter). */
     uint32_t za = 0;
     if (k & K_ZTE) {
-        if (ds.ztst == 0)
+        if (s->ztst == 0)
             return;
-        if (z > ds.zmax)
-            z = ds.zmax;
-        za = z_addr(x, y);
-        if (ds.ztst >= 2) {
-            uint32_t zd = (ds.zpsm & 2) ? gs_rd16(za)
-                        : ds.zpsm == GS_PSMZ24 ? gs_rd32(za) & 0xffffff : gs_rd32(za);
-            if (ds.ztst == 2 ? z < zd : z <= zd)
+        if (z > s->zmax)
+            z = s->zmax;
+        za = z_addr(s, x, y);
+        if (s->ztst >= 2) {
+            uint32_t zd = (s->zpsm & 2) ? gs_rd16(za)
+                        : s->zpsm == GS_PSMZ24 ? gs_rd32(za) & 0xffffff : gs_rd32(za);
+            if (s->ztst == 2 ? z < zd : z <= zd)
                 return;
         }
     } else {
@@ -655,24 +700,24 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
     }
 
     if (k & K_TME) {
-        uint32_t t = sample(k, u, v);
+        uint32_t t = sample(s, k, u, v);
         int tr = t & 255, tg = (t >> 8) & 255, tb = (t >> 16) & 255, ta = t >> 24;
-        switch (ds.tfx) {
+        switch (s->tfx) {
         case 0: /* MODULATE */
             r = (tr * r) >> 7; g = (tg * g) >> 7; b = (tb * b) >> 7;
-            if (ds.tcc) a = (ta * a) >> 7;
+            if (s->tcc) a = (ta * a) >> 7;
             break;
         case 1: /* DECAL */
             r = tr; g = tg; b = tb;
-            if (ds.tcc) a = ta;
+            if (s->tcc) a = ta;
             break;
         case 2: /* HIGHLIGHT */
             r = ((tr * r) >> 7) + a; g = ((tg * g) >> 7) + a; b = ((tb * b) >> 7) + a;
-            if (ds.tcc) a = ta + a;
+            if (s->tcc) a = ta + a;
             break;
         default: /* HIGHLIGHT2 */
             r = ((tr * r) >> 7) + a; g = ((tg * g) >> 7) + a; b = ((tb * b) >> 7) + a;
-            if (ds.tcc) a = ta;
+            if (s->tcc) a = ta;
             break;
         }
         /* Every function above gives values >= 0. */
@@ -680,15 +725,15 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
         b = b > 255 ? 255 : b; a = a > 255 ? 255 : a;
     }
 
-    if (ds.fge) {
-        r = (f * r + (255 - f) * ds.fr) >> 8;
-        g = (f * g + (255 - f) * ds.fg) >> 8;
-        b = (f * b + (255 - f) * ds.fb_) >> 8;
+    if (s->fge) {
+        r = (f * r + (255 - f) * s->fr) >> 8;
+        g = (f * g + (255 - f) * s->fg) >> 8;
+        b = (f * b + (255 - f) * s->fb_) >> 8;
     }
 
     /* Alpha test */
-    if (ds.ate && !compare(ds.atst, a, ds.aref)) {
-        switch (ds.afail) {
+    if (s->ate && !compare(s->atst, a, s->aref)) {
+        switch (s->afail) {
         case 0: return;                            /* KEEP */
         case 1: write_z = 0; break;                /* FB_ONLY */
         case 2: write_rgb = write_a = 0; break;    /* ZB_ONLY */
@@ -696,43 +741,43 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
         }
     }
 
-    uint32_t fa = (k & K_CT32) ? gs_addr32(0, ds.fbp, ds.fbw, x, y) : frame_addr(x, y), raw, dst;
-    if (!(k & K_CT32) && frame_is16()) {
+    uint32_t fa = (k & K_CT32) ? gs_addr32(0, s->fbp, s->fbw, x, y) : frame_addr(s, x, y), raw, dst;
+    if (!(k & K_CT32) && frame_is16(s)) {
         raw = gs_rd16(fa);
         dst = ((raw & 31) << 3) | (((raw >> 5) & 31) << 11) | (((raw >> 10) & 31) << 19) |
               ((raw & 0x8000) ? 0x80000000u : 0);
     } else {
         raw = gs_rd32(fa);
-        dst = ds.fpsm == GS_PSMCT24 || ds.fpsm == GS_PSMZ24 ? raw | 0x80000000u : raw;
+        dst = s->fpsm == GS_PSMCT24 || s->fpsm == GS_PSMZ24 ? raw | 0x80000000u : raw;
     }
 
     /* Destination alpha test */
-    if (ds.date && (int)((dst >> 31) & 1) != ds.datm)
+    if (s->date && (int)((dst >> 31) & 1) != s->datm)
         return;
 
-    if ((k & K_ABE) && !(ds.pabe && a < 0x80)) {
+    if ((k & K_ABE) && !(s->pabe && a < 0x80)) {
         int dr = dst & 255, dg = (dst >> 8) & 255, db = (dst >> 16) & 255;
-        if (ds.blend_mix) {
+        if (s->blend_mix) {
             /* (Cs - Cd) * As + Cd, the usual transparency */
             r = (((r - dr) * a) >> 7) + dr;
             g = (((g - dg) * a) >> 7) + dg;
             b = (((b - db) * a) >> 7) + db;
         } else {
-            int c = ds.sc == 0 ? a : ds.sc == 1 ? (int)(dst >> 24) : ds.fix;
+            int c = s->sc == 0 ? a : s->sc == 1 ? (int)(dst >> 24) : s->fix;
             int col[3][3] = { { r, g, b }, { dr, dg, db }, { 0, 0, 0 } };
-            r = (((col[ds.sa][0] - col[ds.sb][0]) * c) >> 7) + col[ds.sd][0];
-            g = (((col[ds.sa][1] - col[ds.sb][1]) * c) >> 7) + col[ds.sd][1];
-            b = (((col[ds.sa][2] - col[ds.sb][2]) * c) >> 7) + col[ds.sd][2];
+            r = (((col[s->sa][0] - col[s->sb][0]) * c) >> 7) + col[s->sd][0];
+            g = (((col[s->sa][1] - col[s->sb][1]) * c) >> 7) + col[s->sd][1];
+            b = (((col[s->sa][2] - col[s->sb][2]) * c) >> 7) + col[s->sd][2];
         }
     }
 
-    if (ds.colclamp) {
+    if (s->colclamp) {
         r = clamp255(r); g = clamp255(g); b = clamp255(b);
     } else {
         r &= 255; g &= 255; b &= 255;
     }
     a &= 255;
-    if (ds.fba)
+    if (s->fba)
         a |= 0x80;
 
     uint32_t src = rgba(r, g, b, a);
@@ -742,21 +787,21 @@ static ALWAYS_INLINE void shade(int k, int x, int y, uint32_t z, int r, int g, i
         src = (src & 0x00ffffffu) | (dst & 0xff000000u);
 
     if (write_rgb || write_a) {
-        if (!(k & K_CT32) && frame_is16()) {
+        if (!(k & K_CT32) && frame_is16(s)) {
             uint32_t v16 = ((src >> 3) & 31) | (((src >> 11) & 31) << 5) |
                            (((src >> 19) & 31) << 10) | ((src >> 31) << 15);
-            gs_wr16(fa, (v16 & ~ds.fbmsk16) | (raw & ds.fbmsk16));
-        } else if (ds.fpsm == GS_PSMCT24 || ds.fpsm == GS_PSMZ24) {
-            uint32_t m = ds.fbmsk | 0xff000000u;
+            gs_wr16(fa, (v16 & ~s->fbmsk16) | (raw & s->fbmsk16));
+        } else if (s->fpsm == GS_PSMCT24 || s->fpsm == GS_PSMZ24) {
+            uint32_t m = s->fbmsk | 0xff000000u;
             gs_wr32(fa, (src & ~m) | (raw & m));
         } else {
-            gs_wr32(fa, (src & ~ds.fbmsk) | (raw & ds.fbmsk));
+            gs_wr32(fa, (src & ~s->fbmsk) | (raw & s->fbmsk));
         }
     }
     if (write_z) {
-        if (ds.zpsm & 2)
+        if (s->zpsm & 2)
             gs_wr16(za, z);
-        else if (ds.zpsm == GS_PSMZ24)
+        else if (s->zpsm == GS_PSMZ24)
             gs_wr32(za, (gs_rd32(za) & 0xff000000u) | (z & 0xffffff));
         else
             gs_wr32(za, z);
@@ -777,7 +822,7 @@ static void draw_pixel(int x, int y, uint32_t z, int r, int g, int b, int a, int
 {
     if (x < ds.scax0 || x > ds.scax1 || y < ds.scay0 || y > ds.scay1)
         return;
-    shade(ds.key, x, y, z, r, g, b, a, f, u, v);
+    shade(&ds, ds.key, x, y, z, r, g, b, a, f, u, v);
 }
 
 static void count_pixels(uint32_t n)
@@ -801,22 +846,31 @@ static void tex_coords(const Vertex *v, float *u, float *w)
     }
 }
 
+/* Primitives are drawn either at once (rows split between threads) or,
+ * when they can wait, gathered in a batch that the threads then draw by
+ * bands of the screen (see "Batches" below). Either way a job holds all
+ * that drawing needs, with the settings it was made with. */
+static void batch_add(int type, const void *job, int py0, int py1, int pixels);
+static int batch_ready(void);
+static void batch_flush(void);
+
 typedef struct {
-    const Vertex *b;
+    const DrawState *s;
+    uint32_t z;
+    int r, g, b, a, f; /* sprites take these from the second vertex */
     int x0, y0, px0, px1;
     float u0, v0, du, dv;
 } SpriteJob;
 
 static ALWAYS_INLINE void sprite_span(int k, const SpriteJob *j, int py0, int py1)
 {
-    const Vertex *b = j->b;
+    const DrawState *s = j->s;
 
-    /* Sprites take their colour, z and fog from the second vertex. */
     for (int py = py0; py < py1; py++) {
         int v = (int)(j->v0 + ((py << 4) - j->y0) * j->dv);
         for (int px = j->px0; px < j->px1; px++) {
             int u = (int)(j->u0 + ((px << 4) - j->x0) * j->du);
-            shade(k, px, py, b->z, b->r, b->g, b->b, b->a, b->f, u, v);
+            shade(s, k, px, py, j->z, j->r, j->g, j->b, j->a, j->f, u, v);
         }
     }
 }
@@ -825,12 +879,12 @@ static void sprite_rows(void *ctx, int py0, int py1)
 {
     const SpriteJob *j = ctx;
 
-    switch (ds.key) {
+    switch (j->s->key) {
 #define SPRITE_CASE(k) case k: sprite_span(k, j, py0, py1); break;
     KEY_CASES(SPRITE_CASE)
 #undef SPRITE_CASE
     }
-    if (j->px1 > j->px0)
+    if (j->px1 > j->px0 && py1 > py0)
         count_pixels((uint32_t)(py1 - py0) * (j->px1 - j->px0));
 }
 
@@ -856,7 +910,9 @@ static void draw_sprite(const Vertex *a, const Vertex *b)
     if (px1 <= px0 || py1 <= py0)
         return;
 
-    j.b = b;
+    j.s = &ds;
+    j.z = b->z;
+    j.r = b->r; j.g = b->g; j.b = b->b; j.a = b->a; j.f = b->f;
     j.x0 = x0;
     j.y0 = y0;
     j.px0 = px0;
@@ -865,7 +921,12 @@ static void draw_sprite(const Vertex *a, const Vertex *b)
     j.v0 = v0;
     j.du = x1 != x0 ? (u1 - u0) / (float)(x1 - x0) : 0.0f;
     j.dv = y1 != y0 ? (v1 - v0) / (float)(y1 - y0) : 0.0f;
-    gs_parallel(sprite_rows, &j, py0, py1, ds.feedback ? 0 : (px1 - px0) * (py1 - py0));
+    if (batch_ready()) {
+        batch_add(6, &j, py0, py1, (px1 - px0) * (py1 - py0));
+    } else {
+        batch_flush();
+        gs_parallel(sprite_rows, &j, py0, py1, ds.feedback ? 0 : (px1 - px0) * (py1 - py0));
+    }
     mark_drawn(px0, py0, px1 - 1, py1 - 1);
 }
 
@@ -879,7 +940,9 @@ static int64_t edge(int ax, int ay, int bx, int by, int px, int py)
 enum { A_R, A_G, A_B, A_A, A_F, A_U, A_V, A_Q, A_COUNT };
 
 typedef struct {
-    const Vertex *v[3], *last;
+    const DrawState *s;
+    int ex[3], ey[3]; /* vertex positions, in drawing order */
+    int lr, lg, lb, la; /* flat shading: the colour of the last vertex sent */
     int px0, px1;
     int bias[3]; /* 1 for edges whose pixels are left out (right, bottom) */
     int x0, y0;
@@ -889,7 +952,7 @@ typedef struct {
 
 static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0, int py1)
 {
-    const Vertex *const *v = j->v;
+    const DrawState *s = j->s;
     uint32_t drawn = 0;
 
     for (int py = py0; py < py1; py++) {
@@ -898,9 +961,9 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
         /* The pixels of this row inside all three edges: each edge function
          * changes by a constant step from one pixel to the next. */
         for (int e = 0; e < 3 && xs <= xe; e++) {
-            const Vertex *a = v[(e + 1) % 3], *b = v[(e + 2) % 3];
-            int64_t w = edge(a->x, a->y, b->x, b->y, j->px0 << 4, sy) - j->bias[e];
-            int64_t dw = -(int64_t)(b->y - a->y) * 16;
+            int a = (e + 1) % 3, b = (e + 2) % 3;
+            int64_t w = edge(j->ex[a], j->ey[a], j->ex[b], j->ey[b], j->px0 << 4, sy) - j->bias[e];
+            int64_t dw = -(int64_t)(j->ey[b] - j->ey[a]) * 16;
             if (dw == 0) {
                 if (w < 0)
                     xe = xs - 1;
@@ -937,11 +1000,11 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
             /* Rounding errors must not take a value below what all three
              * vertices hold: colours get a small bias, and depth (up to 32
              * bits, compared exactly) is interpolated in double. */
-            if (ds.iip) {
+            if (s->iip) {
                 r = (int)(at[A_R] + 0.01f); g = (int)(at[A_G] + 0.01f);
                 b = (int)(at[A_B] + 0.01f); a = (int)(at[A_A] + 0.01f);
             } else {
-                r = j->last->r; g = j->last->g; b = j->last->b; a = j->last->a;
+                r = j->lr; g = j->lg; b = j->lb; a = j->la;
             }
             int u = 0, tv = 0;
             if (k & K_TME) {
@@ -949,7 +1012,7 @@ static ALWAYS_INLINE uint32_t triangle_span(int k, const TriangleJob *j, int py0
                 u = (int)(at[A_U] / qq);
                 tv = (int)(at[A_V] / qq);
             }
-            shade(k, px, py, z <= 0.0 ? 0u : z >= 4294967295.0 ? 0xffffffffu : (uint32_t)z,
+            shade(s, k, px, py, z <= 0.0 ? 0u : z >= 4294967295.0 ? 0xffffffffu : (uint32_t)z,
                   r, g, b, a, (int)(at[A_F] + 0.01f), u, tv);
             for (int i = 0; i < A_COUNT; i++)
                 at[i] += step[i];
@@ -965,7 +1028,7 @@ static void triangle_rows(void *ctx, int py0, int py1)
     const TriangleJob *j = ctx;
     uint32_t drawn = 0;
 
-    switch (ds.key) {
+    switch (j->s->key) {
 #define TRIANGLE_CASE(k) case k: drawn = triangle_span(k, j, py0, py1); break;
     KEY_CASES(TRIANGLE_CASE)
 #undef TRIANGLE_CASE
@@ -976,14 +1039,11 @@ static void triangle_rows(void *ctx, int py0, int py1)
 static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
 {
     TriangleJob j;
-    const Vertex **v = j.v;
+    const Vertex *v[3] = { v0, v1, v2 };
     int64_t area = edge(v0->x, v0->y, v1->x, v1->y, v2->x, v2->y);
 
     if (area == 0)
         return;
-    v[0] = v0;
-    v[1] = v1;
-    v[2] = v2;
     if (area < 0) {
         const Vertex *t = v[1]; v[1] = v[2]; v[2] = t;
         area = -area;
@@ -999,6 +1059,8 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
         const Vertex *a = v[(i + 1) % 3], *b = v[(i + 2) % 3];
         int top_left = b->y < a->y || (b->y == a->y && b->x > a->x);
         j.bias[i] = top_left ? 0 : 1;
+        j.ex[i] = v[i]->x;
+        j.ey[i] = v[i]->y;
     }
 
     int minx = v[0]->x, maxx = v[0]->x, miny = v[0]->y, maxy = v[0]->y;
@@ -1055,10 +1117,198 @@ static void draw_triangle(const Vertex *v0, const Vertex *v1, const Vertex *v2)
     j.x0 = v[0]->x;
     j.y0 = v[0]->y;
     /* Flat shading uses the colour of the last vertex sent. */
-    j.last = v2;
-    gs_parallel(triangle_rows, &j, py0, py1 + 1,
-                ds.feedback ? 0 : (px1 - px0 + 1) * (py1 - py0 + 1) / 2);
+    j.lr = v2->r; j.lg = v2->g; j.lb = v2->b; j.la = v2->a;
+    j.s = &ds;
+    int work = (px1 - px0 + 1) * (py1 - py0 + 1) / 2;
+    if (batch_ready()) {
+        batch_add(3, &j, py0, py1 + 1, work);
+    } else {
+        batch_flush();
+        gs_parallel(triangle_rows, &j, py0, py1 + 1, ds.feedback ? 0 : work);
+    }
     mark_drawn(px0, py0, px1, py1);
+}
+
+/* ---- Batches -------------------------------------------------------------
+ *
+ * Small primitives are not worth splitting between threads one at a time,
+ * so they are gathered and drawn together: each thread takes bands of rows
+ * and draws, in order, the part of every primitive in its band. Pixels in
+ * different rows never share memory, so the result is the same as drawing
+ * the primitives one by one.
+ *
+ * A batch is drawn (flushed) before anything that must see its pixels or
+ * could change what it reads: a transfer into GS memory a primitive reads
+ * (a texture) or draws to, a texture or CLUT read from what it draws, a
+ * change of frame or depth buffer, a primitive drawn at once, and any read
+ * of GS memory from outside (the display, gs_read_pixel). Its textures are
+ * decoded entries of the cache (with their own copy of the CLUT), kept
+ * until it is drawn.
+ */
+#define BAND_ROWS 8
+#define BATCH_MAX 32768
+
+typedef struct {
+    int type, state;
+    int y0, y1; /* rows [y0, y1) */
+    union {
+        TriangleJob tri;
+        SpriteJob spr;
+    } j;
+} BatchCmd;
+
+static struct {
+    int enabled; /* -1: not decided yet */
+    BatchCmd *cmds;
+    int n, cap;
+    DrawState *states;
+    int ns, scap;
+    uint64_t id;
+    int64_t work;
+    int rows;
+    uint64_t reads[GS_PAGES / 64], writes[GS_PAGES / 64];
+    uint32_t fbp, fbw, zbp;
+    int fpsm, zpsm;
+} batch = { .enabled = -1, .id = 1 };
+
+static int batch_uses(const TexEntry *t)
+{
+    return batch.n > 0 && t->used && t->batch == batch.id;
+}
+
+static int masks_meet(const uint64_t *a, const uint64_t *b)
+{
+    for (int i = 0; i < GS_PAGES / 64; i++)
+        if (a[i] & b[i])
+            return 1;
+    return 0;
+}
+
+/* 1 if the pages of that rectangle are drawn to (writes) or also read
+ * (reads) by the batch waiting to be drawn. */
+static int batch_touches(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, int reads)
+{
+    uint64_t m[GS_PAGES / 64] = { 0 };
+
+    if (batch.n == 0)
+        return 0;
+    gs_page_mask(psm, bp, bw, x0, y0, x1, y1, m);
+    return masks_meet(m, batch.writes) || (reads && masks_meet(m, batch.reads));
+}
+
+static void batch_bands(void *ctx, int b0, int b1)
+{
+    (void)ctx;
+    for (int band = b0; band < b1; band++) {
+        int r0 = band * BAND_ROWS, r1 = r0 + BAND_ROWS;
+        for (int i = 0; i < batch.n; i++) {
+            BatchCmd *c = &batch.cmds[i];
+            int y0 = c->y0 > r0 ? c->y0 : r0, y1 = c->y1 < r1 ? c->y1 : r1;
+            if (y0 >= y1)
+                continue;
+            if (c->type == 3)
+                triangle_rows(&c->j.tri, y0, y1);
+            else
+                sprite_rows(&c->j.spr, y0, y1);
+        }
+    }
+}
+
+static void batch_flush(void)
+{
+    if (batch.n == 0)
+        return;
+    for (int i = 0; i < batch.n; i++) {
+        BatchCmd *c = &batch.cmds[i];
+        if (c->type == 3)
+            c->j.tri.s = &batch.states[c->state];
+        else
+            c->j.spr.s = &batch.states[c->state];
+    }
+    gs_parallel(batch_bands, NULL, 0, (batch.rows + BAND_ROWS - 1) / BAND_ROWS,
+                batch.work > 0x7fffffff ? 0x7fffffff : (int)batch.work);
+    batch.n = 0;
+    batch.ns = 0;
+    batch.work = 0;
+    batch.rows = 0;
+    memset(batch.reads, 0, sizeof(batch.reads));
+    memset(batch.writes, 0, sizeof(batch.writes));
+    batch.id++;
+}
+
+/* 1 if the primitive being set up can wait in the batch. */
+static int batch_ready(void)
+{
+    if (batch.enabled < 0)
+        batch.enabled = gs_thread_count() > 1 && getenv("CVX_GS_TRACE") == NULL &&
+                        getenv("CVX_GS_NO_BATCH") == NULL;
+    /* Textures read from GS memory as they draw (from the picture being
+     * drawn, or too large for the cache) are drawn at once. */
+    return batch.enabled && !ds.feedback && (!ds.tme || ds.tex != NULL);
+}
+
+static void batch_add(int type, const void *job, int py0, int py1, int pixels)
+{
+    BatchCmd *c;
+
+    gs_mem_sync = batch_flush; /* reads of GS memory from outside see it drawn */
+    /* One frame and depth buffer per batch. */
+    if (batch.n > 0 && (batch.fbp != ds.fbp || batch.fbw != ds.fbw || batch.fpsm != ds.fpsm ||
+                        batch.zbp != ds.zbp || batch.zpsm != ds.zpsm))
+        batch_flush();
+    if (batch.n == BATCH_MAX)
+        batch_flush();
+    if (batch.n == batch.cap) {
+        int cap = batch.cap ? batch.cap * 2 : 1024;
+        BatchCmd *p = realloc(batch.cmds, (size_t)cap * sizeof(*p));
+        if (p == NULL) {
+            batch_flush();
+            return; /* nothing to draw with: the primitive is lost */
+        }
+        batch.cmds = p;
+        batch.cap = cap;
+    }
+    if (batch.ns == 0 || memcmp(&batch.states[batch.ns - 1], &ds, sizeof(ds)) != 0) {
+        if (batch.ns == batch.scap) {
+            int cap = batch.scap ? batch.scap * 2 : 256;
+            DrawState *p = realloc(batch.states, (size_t)cap * sizeof(*p));
+            if (p == NULL) {
+                batch_flush();
+                return;
+            }
+            batch.states = p;
+            batch.scap = cap;
+        }
+        batch.states[batch.ns++] = ds;
+        /* What the primitives with these settings draw to and read. */
+        gs_page_mask(ds.fpsm, ds.fbp, ds.fbw, ds.scax0, ds.scay0, ds.scax1, ds.scay1, batch.writes);
+        if (!ds.zmsk || ds.zte)
+            gs_page_mask(ds.zpsm, ds.zbp, ds.fbw, ds.scax0, ds.scay0, ds.scax1, ds.scay1, batch.writes);
+        if (ds.tme)
+            gs_page_mask(ds.tpsm, ds.tbp, ds.tbw, 0, 0, ds.tex->w - 1, ds.tex->h - 1, batch.reads);
+    }
+    if (batch.n == 0) {
+        batch.fbp = ds.fbp;
+        batch.fbw = ds.fbw;
+        batch.fpsm = ds.fpsm;
+        batch.zbp = ds.zbp;
+        batch.zpsm = ds.zpsm;
+    }
+    if (ds.tex != NULL)
+        ds.tex->batch = batch.id;
+
+    c = &batch.cmds[batch.n++];
+    c->type = type;
+    c->state = batch.ns - 1;
+    c->y0 = py0;
+    c->y1 = py1;
+    if (type == 3)
+        c->j.tri = *(const TriangleJob *)job;
+    else
+        c->j.spr = *(const SpriteJob *)job;
+    if (py1 > batch.rows)
+        batch.rows = py1;
+    batch.work += pixels;
 }
 
 static void draw_line(const Vertex *a, const Vertex *b)
@@ -1152,11 +1402,12 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
         changes++;
         switch (type) {
         case 0:
+            batch_flush();
             draw_pixel(v.x >> 4, v.y >> 4, v.z, v.r, v.g, v.b, v.a, v.f, v.u, v.v);
             count_pixels(1);
             mark_drawn(v.x >> 4, v.y >> 4, v.x >> 4, v.y >> 4);
             break;
-        case 1: case 2: draw_line(&gs.queue[0], &gs.queue[1]); break;
+        case 1: case 2: batch_flush(); draw_line(&gs.queue[0], &gs.queue[1]); break;
         case 3: case 4: case 5: draw_triangle(&gs.queue[0], &gs.queue[1], &gs.queue[2]); break;
         case 6: draw_sprite(&gs.queue[0], &gs.queue[1]); break;
         }
@@ -1167,8 +1418,8 @@ static void vertex_kick(uint64_t xyz, int has_f, int draw)
             int x, y;
             if (px != NULL && sscanf(px, "%d,%d", &x, &y) == 2)
                 fprintf(stderr, "  pixel %d,%d = %08x z %08x\n", x, y,
-                        gs_read_pixel(ds.fpsm, ds.fbp, ds.fbw, x, y),
-                        gs_read_pixel(ds.zpsm, ds.zbp, ds.fbw, x, y));
+                        gs_read_pixel_nosync(ds.fpsm, ds.fbp, ds.fbw, x, y),
+                        gs_read_pixel_nosync(ds.zpsm, ds.zbp, ds.fbw, x, y));
         }
     }
 
@@ -1367,6 +1618,7 @@ void gs_dump_vblank(void)
 {
     /* Two V-blanks: the game may take two of them to draw a frame. */
     static int vblanks;
+    batch_flush();
     if (dump_file != NULL && ++vblanks < 2)
         return;
     vblanks = 0;
@@ -1398,9 +1650,12 @@ static void gif_write(const uint64_t *qwords, uint32_t count);
 
 int gs_replay(const char *path)
 {
-    FILE *f = fopen(path, "rb");
+    FILE *f;
     char magic[8];
     uint32_t sizes[3], type, count;
+
+    batch_flush();
+    f = fopen(path, "rb");
     uint64_t *buf = NULL;
     int ok = 0;
 
@@ -1558,6 +1813,7 @@ void gs_set_display(uint64_t dispfb, uint64_t display)
 
 int gs_read_display(uint32_t *dst, int *w, int *h)
 {
+    batch_flush();
     uint32_t fbp = BITS(gs.dispfb, 0, 9) * 32;
     uint32_t fbw = BITS(gs.dispfb, 9, 6);
     int psm = BITS(gs.dispfb, 15, 5);
@@ -1584,7 +1840,7 @@ int gs_read_display(uint32_t *dst, int *w, int *h)
     }
     for (int y = 0; y < height; y++) {
         for (int x = 0; x < width; x++) {
-            uint32_t c = gs_read_pixel(psm, fbp, fbw, x, y);
+            uint32_t c = gs_read_pixel_nosync(psm, fbp, fbw, x, y);
             if (psm == GS_PSMCT16 || psm == GS_PSMCT16S)
                 c = expand16(c, 0);
             dst[y * width + x] = c | 0xff000000u;
@@ -1595,6 +1851,7 @@ int gs_read_display(uint32_t *dst, int *w, int *h)
 
 void gs_reset(void)
 {
+    batch_flush();
     memset(gs_vram, 0, sizeof(gs_vram));
     memset(&gs, 0, sizeof(gs));
     memset(&trx, 0, sizeof(trx));
@@ -1617,7 +1874,7 @@ void gs_debug_status(char *buf, int size)
     memset(&gs_stats, 0, sizeof(gs_stats));
     for (int y = 0; y < 480; y += 4)
         for (int x = 0; x < 640; x += 4)
-            lit += (gs_read_pixel(psm, fbp * 32, fbw ? fbw : 10, x, y) & 0xffffff) != 0;
+            lit += (gs_read_pixel_nosync(psm, fbp * 32, fbw ? fbw : 10, x, y) & 0xffffff) != 0;
     snprintf(buf, size, "gs: %u ms, %u chains, %u uploads, %u prims, %u pixels | display page %u, "
              "width %u, %d%% non-black | draw page %u",
              (unsigned)(st.busy_ns / 1000000), st.chains, st.uploads, st.prims, st.pixels, fbp,

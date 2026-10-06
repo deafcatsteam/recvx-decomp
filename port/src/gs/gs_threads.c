@@ -126,6 +126,13 @@ static void start_threads(void)
     }
 }
 
+int gs_thread_count(void)
+{
+    if (nthreads < 0)
+        start_threads();
+    return nthreads;
+}
+
 void gs_parallel(GsBandFn fn, void *ctx, int begin, int end, int work)
 {
     int bands;

@@ -251,6 +251,67 @@ static void test_fill_rule(void)
     CHECK((fb(12, 10) & 0xffffff) == 0 && (fb(10, 12) & 0xffffff) == 0);
 }
 
+/* Primitives may wait to be drawn together (by bands of rows, on several
+ * threads): a texture replaced between two of them, or read from memory
+ * they draw to, must still give what drawing them one by one gives. */
+static void textured_sprite(uint32_t tbp, int x, int y)
+{
+    tag(6, 1, 0, 1, 0xe);
+    /* TEX0: CT32, 8x8 (TW = TH = 3), TBW 1, TCC, DECAL */
+    ad(0x06, (uint64_t)tbp | (1ull << 14) | (3ull << 26) | (3ull << 30) | (1ull << 34) | (1ull << 35));
+    ad(0x00, 6 | (1 << 4) | (1 << 8));                 /* sprite, textured, UV */
+    ad(0x03, 0);
+    ad(0x05, xyz(x, y));
+    ad(0x03, (8 << 4) | ((uint64_t)(8 << 4) << 16));
+    ad(0x05, xyz(x + 8, y + 8));
+    send();
+}
+
+static void test_batch_hazards(void)
+{
+    uint32_t img[64];
+
+    gs_reset();
+    setup_frame();
+    /* The same texture memory, uploaded again between two sprites. */
+    for (int i = 0; i < 64; i++)
+        img[i] = 0x800000ff;
+    upload(GS_PSMCT32, 2000, 1, 8, 8, img, sizeof(img));
+    textured_sprite(2000, 0, 0);
+    for (int i = 0; i < 64; i++)
+        img[i] = 0x8000ff00;
+    upload(GS_PSMCT32, 2000, 1, 8, 8, img, sizeof(img));
+    textured_sprite(2000, 8, 0);
+    CHECK(fb(1, 1) == 0x800000ff);
+    CHECK(fb(9, 1) == 0x8000ff00);
+
+    /* A texture read from the depth buffer that a sprite just filled. */
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x4e, 8);                                       /* ZBUF_1: page 8, Z32 */
+    ad(0x47, (1ull << 16) | (1ull << 17));             /* depth test ALWAYS */
+    ad(0x00, 6);
+    send();
+    tag(3, 1, 0, 1, 0xe);
+    ad(0x01, 0x80102030);
+    ad(0x05, xyz(0, 16) | (0x80ff0000ull << 32));
+    ad(0x05, xyz(64, 64) | (0x80ff0000ull << 32));
+    send();
+    tag(1, 1, 0, 1, 0xe);
+    ad(0x47, 0);                                       /* no depth test */
+    send();
+    /* The depth buffer's first page (rows 0-31) holds only that value now
+     * in rows 16-31; its rows 0-15 are still 0. Rows 16-23 as a texture: */
+    textured_sprite(8 * 32 + 0, 40, 40);
+    {
+        uint32_t c = fb(44, 44);
+        CHECK(c == 0x80ff0000 || c == 0);
+    }
+    /* A texture fully inside the filled area: page 9 (rows 32-63). */
+    textured_sprite(9 * 32, 48, 40);
+    CHECK(fb(50, 42) == 0x80ff0000);
+    CHECK(fb(20, 20) == 0x80102030);
+}
+
 static void test_dma_chain(void)
 {
     static uint64_t chain[64] __attribute__((aligned(16)));
@@ -350,6 +411,7 @@ int main(void)
     test_alpha_blend();
     test_triangle();
     test_fill_rule();
+    test_batch_hazards();
     test_dma_chain();
     test_equal_depth();
     test_dump_replay();

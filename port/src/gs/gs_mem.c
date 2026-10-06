@@ -140,7 +140,7 @@ __attribute__((constructor)) static void init_tables(void)
     build_tables();
 }
 
-uint32_t gs_read_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y)
+uint32_t gs_read_pixel_nosync(int psm, uint32_t bp, uint32_t bw, int x, int y)
 {
     switch (psm) {
     case GS_PSMCT32: return gs_rd32(gs_addr32(0, bp, bw, x, y));
@@ -252,6 +252,18 @@ static int for_pages(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, 
     return 0;
 }
 
+static int add_to_mask(uint32_t page, uint64_t mask)
+{
+    ((uint64_t *)(uintptr_t)mask)[page / 64] |= 1ull << (page % 64);
+    return 0;
+}
+
+void gs_page_mask(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1,
+                  uint64_t mask[GS_PAGES / 64])
+{
+    for_pages(psm, bp, bw, x0, y0, x1, y1, add_to_mask, (uint64_t)(uintptr_t)mask);
+}
+
 static int set_gen(uint32_t page, uint64_t gen)
 {
     gs_page_gen[page] = gen;
@@ -280,7 +292,7 @@ int gs_pages_newer(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, in
     return for_pages(psm, bp, bw, x0, y0, x1, y1, newer, gen);
 }
 
-void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
+void gs_write_pixel_nosync(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
 {
     int pw, ph;
     uint32_t row;
@@ -304,3 +316,19 @@ int main(void)
     return 0;
 }
 #endif
+
+void (*gs_mem_sync)(void);
+
+uint32_t gs_read_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y)
+{
+    if (gs_mem_sync != NULL)
+        gs_mem_sync();
+    return gs_read_pixel_nosync(psm, bp, bw, x, y);
+}
+
+void gs_write_pixel(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v)
+{
+    if (gs_mem_sync != NULL)
+        gs_mem_sync();
+    gs_write_pixel_nosync(psm, bp, bw, x, y, v);
+}

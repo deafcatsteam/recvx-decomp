@@ -89,8 +89,19 @@ extern uint64_t gs_gen;
 void gs_mark_pages(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1);
 void gs_mark_all(void);
 
+/* Adds the pages of that rectangle to a mask of GS_PAGES bits. */
+void gs_page_mask(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1,
+                  uint64_t mask[GS_PAGES / 64]);
+
 /* 1 if a page of that rectangle was written after generation gen. */
 int gs_pages_newer(int psm, uint32_t bp, uint32_t bw, int x0, int y0, int x1, int y1, uint64_t gen);
+
+/* Called by gs_read_pixel and gs_write_pixel before they touch memory, so
+ * that drawing still in progress is finished first (set by gs.c). The
+ * _nosync versions are for the GS itself. */
+extern void (*gs_mem_sync)(void);
+uint32_t gs_read_pixel_nosync(int psm, uint32_t bp, uint32_t bw, int x, int y);
+void gs_write_pixel_nosync(int psm, uint32_t bp, uint32_t bw, int x, int y, uint32_t v);
 
 /* Raw pixel value of format psm at (x, y) of the buffer at bp/bw. 24-bit
  * formats return the low 24 bits, the 4/8-bit "H" formats the index. */
