@@ -78,6 +78,8 @@ int main(int argc, char *argv[])
     pc_config_load(); /* may turn the log off */
     pc_log_start();
     pc_config_report();
+    if (!pc_launcher_run(argc, argv))
+        return 0; /* Quitter in the settings window */
 
     unprotect_image();
     pc_window_open();

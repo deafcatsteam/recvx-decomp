@@ -36,6 +36,7 @@ qui reproduit la carte graphique de la PS2. Les vidéos sont décodées avec FFm
 - [x] Moteur de son (`src/host/pc_sound.c`) : voix mélangées sur le fil audio, prêt pour le son 3D
 - [x] Carte mémoire : les sauvegardes vont dans le dossier `saves` à côté de l'exe, testé ; reste à valider sur le jeu
 - [x] Fichier de réglages `cvx.ini` (plein écran, taille de fenêtre, touches, chemins, son, vibration), testé
+- [x] Fenêtre de réglages avant le jeu (choix de l'ISO, image, son, manette, touches), enregistrée dans `cvx.ini` ; reste à valider sur Windows
 
 ## Lancer le jeu
 
@@ -52,14 +53,36 @@ set CVX_ISO=C:\Jeux\cvx.iso
 cvx_pc.exe
 ```
 (Windows, invite de commandes ; ou mets simplement l'ISO renommée `cvx.iso` à côté de l'exe,
-ou écris son chemin dans `cvx.ini`, voir plus bas.)
+ou choisis-la dans la fenêtre de réglages, voir plus bas.)
+
+## Fenêtre de réglages
+
+Avant le jeu, une fenêtre s'ouvre avec quatre pages :
+
+- **Général** : l'image du disque (bouton *Parcourir…*, ou glisse le `.iso`
+  sur la fenêtre), plein écran, taille de la fenêtre, et si cette fenêtre
+  doit s'ouvrir au démarrage ;
+- **Image** : dessin par le processeur ou par la carte graphique, finesse
+  (×1 à ×4), lissage ;
+- **Son et manette** : son, vibration, et les manettes branchées ;
+- **Touches** : clique sur une touche puis appuie sur la nouvelle (clic
+  droit : aucune touche), *Touches d'origine* pour tout remettre.
+
+*Jouer* lance le jeu, *Quitter* ferme tout ; dans les deux cas, les réglages
+sont enregistrés dans `cvx.ini`. Tout se fait aussi à la manette (croix
+directionnelle, A, LB / RB pour les pages, Start pour jouer).
+
+Si tu désactives la fenêtre, le jeu démarre directement ; pour la revoir,
+garde **Maj** enfoncée en lançant le jeu (ou lance `cvx_pc --config`). Elle
+s'ouvre toujours quand l'image du disque est introuvable.
 
 ## Réglages (`cvx.ini`)
 
 Au premier lancement, le jeu crée un fichier `cvx.ini` à côté de l'exe, avec
 tous les réglages désactivés (une ligne qui commence par `;` ne compte pas).
-Ouvre-le avec le Bloc-notes, enlève le `;` devant ce que tu veux changer, et
-relance le jeu :
+La fenêtre de réglages y écrit ce que tu changes ; tu peux aussi l'ouvrir
+avec le Bloc-notes, enlever le `;` devant ce que tu veux changer, et relancer
+le jeu :
 
 | Réglage | Effet |
 |---|---|
@@ -73,6 +96,7 @@ relance le jeu :
 | `upscale = 2` | Avec `renderer = opengl` : résolution 2, 3 ou 4 fois celle de la PS2 (1 par défaut, l'image exacte de la PS2) |
 | `sound = no` | Pas de son |
 | `vibration = no` | Pas de vibration de la manette |
+| `launcher = no` | Pas de fenêtre de réglages au démarrage (Maj enfoncée en lançant le jeu : elle s'ouvre quand même) |
 | `key_cross = Space` | Touches du clavier, une ligne par bouton (`key_up`, `key_stick_left`, `key_l1`, `key_start`, `key_fast_forward`…, toutes listées dans le fichier). Plusieurs touches : `Space, Return` ; rien après le `=` : aucune touche |
 
 Les variables du tableau suivant peuvent aussi y être écrites telles quelles

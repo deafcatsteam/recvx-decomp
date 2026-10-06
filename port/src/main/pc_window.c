@@ -102,6 +102,14 @@ static const struct {
     { "key_fast_forward", 0, FAST_FORWARD, "Tab" },
 };
 
+const char *pc_window_key_setting(int i, const char **keys)
+{
+    if (i < 0 || i >= (int)(sizeof(key_actions) / sizeof(key_actions[0])))
+        return NULL;
+    *keys = key_actions[i].keys;
+    return key_actions[i].setting;
+}
+
 #define MAX_BINDINGS 64
 static struct {
     SDL_Scancode key;

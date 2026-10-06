@@ -248,7 +248,7 @@ add_test(NAME ordering_table COMMAND test_ot)
 # The game's main() becomes cvx_main(), called by the port's entry point.
 set_source_files_properties(${GAME_DIR}/njloop.c PROPERTIES COMPILE_DEFINITIONS main=cvx_main)
 
-add_executable(cvx_pc port/src/main/pc_main.c port/src/main/pc_window.c)
+add_executable(cvx_pc port/src/main/pc_main.c port/src/main/pc_window.c port/src/main/pc_launcher.c)
 target_link_libraries(cvx_pc PRIVATE cvx_game m)
 if(NOT WIN32)
     set_target_properties(cvx_pc PROPERTIES ENABLE_EXPORTS ON) # names in stack traces
@@ -286,6 +286,14 @@ if(CVX_WITH_SDL)
         target_link_libraries(cvx_pc PRIVATE SDL2::SDL2)
     endif()
     target_compile_definitions(cvx_pc PRIVATE CVX_HAVE_SDL)
+    if(WIN32)
+        target_link_libraries(cvx_pc PRIVATE comdlg32) # file dialog of the settings window
+    endif()
+    # The settings window draws its pages without a screen (SDL's dummy
+    # video driver) and quits.
+    add_test(NAME launcher COMMAND cvx_pc)
+    set_tests_properties(launcher PROPERTIES ENVIRONMENT
+        "SDL_VIDEODRIVER=dummy;CVX_LAUNCHER_SHOTS=launcher_page;CVX_NO_LOG=1")
 endif()
 
 add_executable(test_gs port/tests/test_gs.c)

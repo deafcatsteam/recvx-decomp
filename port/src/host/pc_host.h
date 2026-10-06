@@ -41,6 +41,14 @@ const char *pc_config_get(const char *name);
 /* A yes/no setting, or otherwise when it is not set. */
 int pc_config_yes(const char *name, int otherwise);
 
+/* Changes a setting (value NULL: removes it, its default applies), with the
+ * environment variable it sets. */
+void pc_config_set(const char *name, const char *value);
+
+/* Writes the settings to path (cvx.ini), keeping the comments and the order
+ * of the file there or of the template. Returns 0 if it cannot be written. */
+int pc_config_save(const char *path);
+
 /* Copies the console output into cvx_log.txt and keeps the console open when
  * the program ends unexpectedly (see pc_log.c). Call first in main(). */
 void pc_log_start(void);
